@@ -1198,6 +1198,12 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         st.core.save_state()
         return m.to_dict()
 
+    # ---------- Keyboard keymap (P1 §34) ----------
+    @app.get("/keyboard/keymap")
+    def keyboard_keymap():
+        from yroll.core.keyboard import describe_keymap
+        return {"bindings": describe_keymap()}
+
     # ---------- Problem → Solution（产品灵魂） ----------
 
     @app.post("/problems")
