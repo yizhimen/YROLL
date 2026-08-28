@@ -129,3 +129,92 @@ def impact_preview(project: Project, clip_id: str, op: str) -> dict:
         "will_prompt": will_prompt,
         "untouched": untouched,
     }
+
+
+def preview_mutation(project: Project, selection: 'Selection',
+                     op: str, params: dict | None = None) -> dict:
+    """v0.2 §14: Mutation Preview — describe what an operation WOULD do,
+    without committing it. Selection-aware, Frame-aware.
+
+    Returns:
+        {
+          "op": ..., "params": {...},
+          "primary": [{clip_id, from, to}],
+          "secondary": [{clip_id, effect, reason}],
+          "untouched": [{clip_id, relation}],
+          "summary": {n_primary, n_secondary, n_untouched},
+        }
+    """
+    from yroll.core.selection import Selection as _Sel
+    if not isinstance(selection, _Sel):
+        selection = _Sel.from_clip_or_id(selection)
+
+    target_ids: list[str] = list(selection.clip_ids)
+    if not target_ids and selection.track_ids:
+        for t in project.timeline.tracks:
+            if t.track_id in selection.track_ids:
+                target_ids.extend([c for c in t.clip_ids if c in project.clips])
+
+    primary: list[dict] = []
+    for cid in target_ids:
+        c = project.clips.get(cid)
+        if c is None:
+            continue
+        to_state: dict = {"timeline_range": c.timeline_range.model_dump()}
+        if op == "move" and params:
+            delta = float(params.get("delta_seconds", 0.0))
+            to_state["timeline_range"] = {
+                "start": c.timeline_range.start + delta,
+                "end": c.timeline_range.end + delta,
+            }
+        elif op == "delete" and params:
+            to_state = {"removed": True}
+        primary.append({
+            "clip_id": cid,
+            "track_id": c.track_id,
+            "from": {"timeline_range": c.timeline_range.model_dump()},
+            "to": to_state,
+        })
+
+    secondary: list[dict] = []
+    untouched: list[dict] = []
+    if op in ("delete", "ripple_delete"):
+        related_ids: set[str] = set()
+        for cid in target_ids:
+            for r in project.relationships:
+                if r.relation != RelationStrength.STRONG:
+                    continue
+                if r.source == cid:
+                    related_ids.add(r.target)
+                elif r.target == cid:
+                    related_ids.add(r.source)
+        for rid in related_ids:
+            rc = project.clips.get(rid)
+            if rc is None:
+                continue
+            secondary.append({
+                "clip_id": rid, "track_id": rc.track_id,
+                "effect": "strong_link_propagate",
+                "reason": "ripple from primary delete",
+            })
+        for cid in target_ids:
+            for r in project.relationships:
+                if r.relation in (RelationStrength.STRONG, RelationStrength.MEDIUM):
+                    continue
+                other_id = r.target if r.source == cid else r.source
+                if other_id and other_id in project.clips:
+                    untouched.append({"clip_id": other_id,
+                                     "relation": r.relation.value})
+
+    return {
+        "op": op,
+        "params": params or {},
+        "primary": primary,
+        "secondary": secondary,
+        "untouched": untouched,
+        "summary": {
+            "n_primary": len(primary),
+            "n_secondary": len(secondary),
+            "n_untouched": len(untouched),
+        },
+    }

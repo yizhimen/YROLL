@@ -1114,6 +1114,26 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             raise HTTPException(404, f"clip 不存在: {clip_id}")
         return impact_preview(st.core.project, clip_id, op)
 
+    # ---------- Mutation Preview (P0-07 §14) ----------
+    # POST /mutation/preview  body: {selection: {...}, op: "move", params: {...}}
+    # Returns the projected primary/secondary effects WITHOUT committing.
+    @app.post("/mutation/preview")
+    def mutation_preview(req: dict):
+        from yroll.core.links import preview_mutation
+        from yroll.core.selection import Selection
+        op = req.get("op", "move")
+        params = req.get("params") or {}
+        sel_data = req.get("selection") or {}
+        # Accept {"clip_ids": [...]} / {"track_ids": [...]} / {"range": {...}}
+        sel = Selection(
+            clip_ids=sel_data.get("clip_ids", []) or [],
+            track_ids=sel_data.get("track_ids", []) or [],
+            range=None,  # FrameRange parsed if needed; current preview ignores it
+        )
+        if not sel.clip_ids and not sel.track_ids:
+            raise HTTPException(400, "selection must include clip_ids or track_ids")
+        return preview_mutation(st.core.project, sel, op, params)
+
     # ---------- Problem → Solution（产品灵魂） ----------
 
     @app.post("/problems")
