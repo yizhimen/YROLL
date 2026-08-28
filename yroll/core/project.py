@@ -353,6 +353,27 @@ class ProjectCore:
         elif op_type == "trim" and clip:
             clip.source_range = TimeRange(**before["source_range"])
             clip.timeline_range = TimeRange(**before["timeline_range"])
+        elif op_type == "slip" and clip:
+            # Slip only changes source_range; timeline unchanged.
+            if "source_range" in before:
+                clip.source_range = TimeRange(**before["source_range"])
+        elif op_type == "roll" and clip:
+            # roll records before.clip.timeline_range and before.neighbor.timeline_range.
+            clip.timeline_range = TimeRange(**before["clip"]["timeline_range"])
+            nb_id = (op.after or {}).get("neighbor_clip_id")
+            if nb_id:
+                nb = p.clips.get(nb_id)
+                if nb and "neighbor" in before:
+                    nb.timeline_range = TimeRange(
+                        **before["neighbor"]["timeline_range"])
+        elif op_type == "slide" and clip:
+            clip.timeline_range = TimeRange(**before["clip"]["timeline_range"])
+            nb_id = (op.after or {}).get("neighbor_clip_id")
+            if nb_id and "left" in before:
+                nb = p.clips.get(nb_id)
+                if nb:
+                    nb.timeline_range = TimeRange(
+                        **before["left"]["timeline_range"])
         elif op_type == "move" and clip:
             clip.timeline_range = TimeRange(**before["timeline_range"])
             if before.get("track_id") and before["track_id"] != clip.track_id:

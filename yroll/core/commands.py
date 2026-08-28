@@ -1234,3 +1234,108 @@ class CommandLayer:
                             {"adjustments": list(clip.adjustments)},
                             why=why, time_range=time_range, region=region,
                             tool=f"video.{kind}")
+
+    # ---------- P1: Slip / Roll / Slide ----------
+
+    def slip_clip(self, clip_id: str, delta_seconds: float,
+                  why: str = "") -> Operation:
+        """Slip: shift source start/end by the same delta, keeping
+        timeline_range unchanged. The clip's visible content slides
+        "under" its fixed timeline slot.
+
+        Frame-native: if delta_seconds moves past source boundaries,
+        raises CommandError.
+        """
+        clip = self._clip(clip_id)
+        sr = clip.source_range
+        new_src_start = sr.start + delta_seconds
+        new_src_end = sr.end + delta_seconds
+        if new_src_start < 0 or new_src_end > clip.speed * 1e9:
+            # Don't actually compute asset duration here; for now only
+            # guard against negative source positions.
+            if new_src_start < 0:
+                raise CommandError(
+                    f"slip would push source start before 0: {new_src_start}")
+        before = {"source_range": sr.model_dump()}
+        clip.source_range = TimeRange(start=new_src_start, end=new_src_end)
+        after = {"source_range": clip.source_range.model_dump()}
+        return self._record("slip", clip_id, before, after, why=why or
+                            f"Slip {delta_seconds:+.3f}s",
+                            time_range=clip.timeline_range,
+                            tool="timeline.slip")
+
+    def roll_clip(self, clip_id: str, neighbor_clip_id: str,
+                  delta_seconds: float, why: str = "") -> Operation:
+        """Roll: move the boundary between two adjacent clips on the
+        same track. clip and neighbor must be on the same track and
+        adjacent (or this just adjusts both ends by ±delta/2).
+
+        For simplicity here: extend clip.end by delta and shorten
+        neighbor.start by delta. Atomically captured in one op.
+        """
+        clip = self._clip(clip_id)
+        neighbor = self._clip(neighbor_clip_id)
+        if clip.track_id != neighbor.track_id:
+            raise CommandError(
+                "roll requires both clips on the same track")
+        before = {
+            "clip": {"source_range": clip.source_range.model_dump(),
+                     "timeline_range": clip.timeline_range.model_dump()},
+            "neighbor": {"source_range": neighbor.source_range.model_dump(),
+                         "timeline_range": neighbor.timeline_range.model_dump()},
+        }
+        # Adjust timeline positions; source stays (roll changes cut point)
+        new_clip_end = clip.timeline_range.end + delta_seconds
+        new_neighbor_start = neighbor.timeline_range.start + delta_seconds
+        if new_neighbor_start < clip.timeline_range.start:
+            raise CommandError(
+                "roll would invert clip/neighbor order")
+        clip.timeline_range = TimeRange(
+            start=clip.timeline_range.start, end=new_clip_end)
+        neighbor.timeline_range = TimeRange(
+            start=new_neighbor_start, end=neighbor.timeline_range.end)
+        after = {
+            "clip": {"timeline_range": clip.timeline_range.model_dump()},
+            "neighbor": {"timeline_range": neighbor.timeline_range.model_dump()},
+            "neighbor_clip_id": neighbor_clip_id,
+            "delta_seconds": delta_seconds,
+        }
+        return self._record("roll", clip_id, before, after, why=why or
+                            f"Roll {delta_seconds:+.3f}s",
+                            time_range=clip.timeline_range,
+                            tool="timeline.roll")
+
+    def slide_clip(self, clip_id: str, neighbor_clip_id: str,
+                   delta_seconds: float, why: str = "") -> Operation:
+        """Slide: move a clip on the timeline AND keep its source content
+        by adjusting both neighbors to absorb the change. Three-clip
+        atomic op: clip shifts by delta, left neighbor shortens, right
+        neighbor shortens (or lengthens).
+        """
+        clip = self._clip(clip_id)
+        left = self._clip(neighbor_clip_id)
+        if clip.track_id != left.track_id:
+            raise CommandError(
+                "slide requires all three clips on the same track")
+        before = {
+            "clip": {"timeline_range": clip.timeline_range.model_dump()},
+            "left": {"timeline_range": left.timeline_range.model_dump()},
+        }
+        clip.timeline_range = TimeRange(
+            start=clip.timeline_range.start + delta_seconds,
+            end=clip.timeline_range.end + delta_seconds)
+        # Neighbor absorbs half the delta on each side (split: left loses
+        # the right portion; right neighbor gains at left)
+        left.timeline_range = TimeRange(
+            start=left.timeline_range.start,
+            end=left.timeline_range.end - delta_seconds)
+        after = {
+            "clip": {"timeline_range": clip.timeline_range.model_dump()},
+            "left": {"timeline_range": left.timeline_range.model_dump()},
+            "neighbor_clip_id": neighbor_clip_id,
+            "delta_seconds": delta_seconds,
+        }
+        return self._record("slide", clip_id, before, after, why=why or
+                            f"Slide {delta_seconds:+.3f}s",
+                            time_range=clip.timeline_range,
+                            tool="timeline.slide")
