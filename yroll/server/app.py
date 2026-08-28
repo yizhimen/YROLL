@@ -1164,6 +1164,40 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             ],
         }
 
+    # ---------- Markers (P1 §38) ----------
+    @app.get("/markers")
+    def list_markers():
+        from yroll.core.markers import list_markers as _lm
+        return {"markers": [m.to_dict() for m in _lm(st.core.project)]}
+
+    @app.post("/markers")
+    def create_marker(timeline_frame: int, label: str,
+                       color: str = "#ffd400", note: str = ""):
+        from yroll.core.markers import add_marker
+        m = add_marker(st.core.project, timeline_frame, label,
+                       color=color, note=note)
+        st.core.save_state()
+        return m.to_dict()
+
+    @app.delete("/markers/{marker_id}")
+    def delete_marker(marker_id: str):
+        from yroll.core.markers import remove_marker
+        if not remove_marker(st.core.project, marker_id):
+            raise HTTPException(404, f"marker 不存在: {marker_id}")
+        st.core.save_state()
+        return {"ok": True}
+
+    @app.patch("/markers/{marker_id}")
+    def patch_marker(marker_id: str, label: str | None = None,
+                      color: str | None = None, note: str | None = None):
+        from yroll.core.markers import update_marker
+        m = update_marker(st.core.project, marker_id,
+                          label=label, color=color, note=note)
+        if m is None:
+            raise HTTPException(404, f"marker 不存在: {marker_id}")
+        st.core.save_state()
+        return m.to_dict()
+
     # ---------- Problem → Solution（产品灵魂） ----------
 
     @app.post("/problems")
