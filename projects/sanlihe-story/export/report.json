@@ -1,0 +1,55 @@
+{
+  "project": "sanlihe-story",
+  "exported_at": "2026-08-27T21:54:35.172204+00:00",
+  "files": {
+    "video": "video.mp4",
+    "cover": "cover.jpg",
+    "subtitles": "subtitles.srt",
+    "metadata": "metadata.json",
+    "report": "report.json"
+  },
+  "spec": {
+    "width": 720,
+    "fps": 24,
+    "burn_subtitles": true,
+    "duration_sec": 90.0,
+    "platform": "douyin"
+  },
+  "publishing": {
+    "title": "他们拿着一幅假画，去寻找4000年前的人",
+    "description": "三里河 · 高凤翰 · 1745-1959",
+    "tags": [
+      "陶鬶",
+      "龙山文化",
+      "三里河",
+      "高凤翰",
+      "考古"
+    ],
+    "subtitle_count": 18
+  },
+  "content": {
+    "clips": 38,
+    "tracks": 8,
+    "assets": 40,
+    "generated_assets": 0
+  },
+  "history": {
+    "operations": 91,
+    "versions": 0,
+    "by_who": {
+      "human": 91
+    },
+    "by_tool": {
+      "timeline.add_clip": 20,
+      "video.transform2d": 20,
+      "video.fade": 20,
+      "text.add_subtitle": 18,
+      "video.speed": 13
+    }
+  },
+  "cost": {
+    "total": 0.0,
+    "currency": "CNY",
+    "note": "L0/L1 免费；L2/L3 按 Solution 标价累计"
+  }
+}

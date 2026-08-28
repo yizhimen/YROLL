@@ -1,0 +1,47 @@
+{
+  "operation_id": "op00064",
+  "who": "human",
+  "at": "2026-08-25T07:40:07.352562",
+  "type": "trim",
+  "target": "c47e773",
+  "time_range": {
+    "start": 36.56666666666666,
+    "end": 44.055557250976555
+  },
+  "region": null,
+  "parameters": {
+    "source_range": {
+      "start": 1.9,
+      "end": 9.388890584309895
+    },
+    "timeline_range": {
+      "start": 36.56666666666666,
+      "end": 44.055557250976555
+    }
+  },
+  "before": {
+    "source_range": {
+      "start": 1.9,
+      "end": 2.0
+    },
+    "timeline_range": {
+      "start": 36.56666666666666,
+      "end": 36.666666666666664
+    }
+  },
+  "after": {
+    "source_range": {
+      "start": 1.9,
+      "end": 9.388890584309895
+    },
+    "timeline_range": {
+      "start": 36.56666666666666,
+      "end": 44.055557250976555
+    }
+  },
+  "why": "GUI 边缘拖拽裁剪",
+  "tool": "video.trim",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "human"
+}

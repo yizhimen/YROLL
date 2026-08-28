@@ -1,0 +1,32 @@
+{
+  "operation_id": "op00049",
+  "who": "ai",
+  "at": "2026-08-24T20:01:00.112210",
+  "type": "revert:generate_subtitles",
+  "target": "timeline",
+  "time_range": null,
+  "region": null,
+  "parameters": {},
+  "before": {
+    "created": [
+      "ca4ed88",
+      "ca92e9f",
+      "c8dec3c",
+      "c372aab",
+      "cf182bb",
+      "c64c84a",
+      "c756e2e",
+      "c5b1caf",
+      "c13d803",
+      "c3a1037",
+      "c3bfa1b"
+    ],
+    "count": 11
+  },
+  "after": {},
+  "why": "验证后还原",
+  "tool": null,
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "human"
+}

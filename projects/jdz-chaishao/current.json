@@ -1,0 +1,3499 @@
+{
+  "manifest_version": "0.1",
+  "project_id": "4eaf892d0fe6",
+  "name": "jdz-chaishao",
+  "created_at": "2026-08-24T00:52:31.940668",
+  "intent": {
+    "goal": "柴烧茶器种草短视频，30秒小红书"
+  },
+  "assets": [
+    {
+      "asset_id": "dcf18ce36f24",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信图片_20260807191334_84_3776.jpg",
+      "identity": {
+        "md5": "c57b98b9040c7b097ee8d42da06bea1f",
+        "size_bytes": 419441,
+        "duration_sec": null,
+        "width": 2560,
+        "height": 3834,
+        "created_at": "2026-08-18T12:07:57.374250"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "10b49bdcdd69",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信图片_20260807191658_85_3776.jpg",
+      "identity": {
+        "md5": "266d0c4888e4d768683cfd99cbc9901b",
+        "size_bytes": 54386,
+        "duration_sec": null,
+        "width": 810,
+        "height": 1080,
+        "created_at": "2026-08-18T12:08:01.473105"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "d3eeb13dda88",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信图片_20260807191703_86_3776.jpg",
+      "identity": {
+        "md5": "85f05c971f2dd75bf77980ff08f8ecab",
+        "size_bytes": 48002,
+        "duration_sec": null,
+        "width": 810,
+        "height": 1080,
+        "created_at": "2026-08-18T12:08:04.983103"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "f2681f435d07",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信图片_20260807191710_87_3776.jpg",
+      "identity": {
+        "md5": "3024306c301951a89384dbc927fdce70",
+        "size_bytes": 42109,
+        "duration_sec": null,
+        "width": 810,
+        "height": 1080,
+        "created_at": "2026-08-18T12:08:07.926644"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "b3b9aa4624ad",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信图片_20260807191714_88_3776.jpg",
+      "identity": {
+        "md5": "a8537be9dd38262e4d232ff9e3f3e354",
+        "size_bytes": 41013,
+        "duration_sec": null,
+        "width": 810,
+        "height": 1080,
+        "created_at": "2026-08-18T12:08:11.239510"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "0bfb96bb087a",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信图片_20260807191719_89_3776.jpg",
+      "identity": {
+        "md5": "ad364c6fad17887eabc1118954347b68",
+        "size_bytes": 63219,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1440,
+        "created_at": "2026-08-18T12:08:14.185000"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "2bfc156120ed",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信图片_20260807191724_90_3776.jpg",
+      "identity": {
+        "md5": "b96b7a82b0be1763b80614428cdf0243",
+        "size_bytes": 69234,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1440,
+        "created_at": "2026-08-18T12:08:17.959460"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "ce69f03d09d4",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信图片_20260807191729_91_3776.jpg",
+      "identity": {
+        "md5": "05b505d03ac3d82cb7c59e76743e01f6",
+        "size_bytes": 66943,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1440,
+        "created_at": "2026-08-18T12:08:21.438947"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "76b6ae2299ef",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信图片_20260807191733_92_3776.jpg",
+      "identity": {
+        "md5": "ae69e2819876de8410761c0fb8f864c6",
+        "size_bytes": 44736,
+        "duration_sec": null,
+        "width": 810,
+        "height": 1080,
+        "created_at": "2026-08-18T12:08:24.522926"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "74014056dde2",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信图片_20260807191740_93_3776.jpg",
+      "identity": {
+        "md5": "d2b67f96fb911a6153541080467d067b",
+        "size_bytes": 58083,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1440,
+        "created_at": "2026-08-18T12:08:27.407187"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "8e7ead3b2e8a",
+      "type": "video",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信视频2026-08-18_120648_502.mp4",
+      "identity": {
+        "md5": "a4abb813c2b2664308d5a51d11909404",
+        "size_bytes": 339452,
+        "duration_sec": 3.066667,
+        "width": 1280,
+        "height": 720,
+        "created_at": "2026-08-18T12:06:53.786645"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "c7d55a82dc17",
+      "type": "video",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信视频2026-08-18_120708_031.mp4",
+      "identity": {
+        "md5": "4487ace89ecf25958eab195befa6eebf",
+        "size_bytes": 1037303,
+        "duration_sec": 13.75,
+        "width": 720,
+        "height": 1280,
+        "created_at": "2026-08-18T12:07:05.544105"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "3ea00dbdc035",
+      "type": "video",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信视频2026-08-18_120727_585.mp4",
+      "identity": {
+        "md5": "38f193dc399c08583103e62b7accd535",
+        "size_bytes": 19632930,
+        "duration_sec": 21.546667,
+        "width": 720,
+        "height": 1280,
+        "created_at": "2026-08-18T12:07:26.032189"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "4ce9b796c4d9",
+      "type": "video",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信视频2026-08-18_120739_404.mp4",
+      "identity": {
+        "md5": "86f7057f4a8b3cfadadaf73f322f6641",
+        "size_bytes": 3587828,
+        "duration_sec": 6.4,
+        "width": 720,
+        "height": 1280,
+        "created_at": "2026-08-18T12:07:37.906198"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "53a1132af99c",
+      "type": "video",
+      "origin": "unknown",
+      "path": "D:\\cc\\产品定位\\景德镇柴烧窑变\\微信视频2026-08-18_120750_579.mp4",
+      "identity": {
+        "md5": "ab0d7ea0ca454a9f0a6f64f9b263bed5",
+        "size_bytes": 1030556,
+        "duration_sec": 15.333333,
+        "width": 720,
+        "height": 720,
+        "created_at": "2026-08-18T12:07:48.374906"
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    }
+  ],
+  "timeline": {
+    "timeline_id": "main",
+    "tracks": [
+      {
+        "track_id": "v1",
+        "kind": "video",
+        "clip_ids": [
+          "c8d5377",
+          "caf3a5a",
+          "c432650",
+          "cf7c849",
+          "cae68f5",
+          "c895d32",
+          "cc4322f",
+          "c1aadc3",
+          "c3859ee",
+          "c828e92",
+          "cadfeef",
+          "c752b35",
+          "c744768",
+          "cd55ef7"
+        ],
+        "muted": false,
+        "locked": false,
+        "hidden": true
+      },
+      {
+        "track_id": "t1",
+        "kind": "text",
+        "clip_ids": [
+          "c47e773",
+          "c39d8cf",
+          "ce8c434",
+          "c4962d0",
+          "c88eb09"
+        ],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "v2",
+        "kind": "video",
+        "clip_ids": [
+          "cdf7e27",
+          "cdbd5e8",
+          "c03d1fe",
+          "cd8caee"
+        ],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "v3",
+        "kind": "video",
+        "clip_ids": [
+          "c7510cc"
+        ],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "a1",
+        "kind": "audio",
+        "clip_ids": [],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "a2",
+        "kind": "audio",
+        "clip_ids": [
+          "cccd968"
+        ],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "a3",
+        "kind": "audio",
+        "clip_ids": [],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "t2",
+        "kind": "text",
+        "clip_ids": [],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      }
+    ]
+  },
+  "clips": {
+    "c8d5377": {
+      "clip_id": "c8d5377",
+      "asset_id": "8e7ead3b2e8a",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.066666666666667
+      },
+      "timeline_range": {
+        "start": 8.1,
+        "end": 10.655555555555555
+      },
+      "track_id": "v1",
+      "speed": 1.2,
+      "volume": 1.2,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "8cfe5b7e",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.3,
+            "scale": 0.7,
+            "rotation": 15,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "caf3a5a": {
+      "clip_id": "caf3a5a",
+      "asset_id": "c7d55a82dc17",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.373333
+      },
+      "timeline_range": {
+        "start": 11.166666666666666,
+        "end": 14.539999666666667
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c432650": {
+      "clip_id": "c432650",
+      "asset_id": "c7d55a82dc17",
+      "source_range": {
+        "start": 3.373333,
+        "end": 12.529261146728516
+      },
+      "timeline_range": {
+        "start": 4.539999666666667,
+        "end": 10.643951764485676
+      },
+      "track_id": "v1",
+      "speed": 1.5,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cf7c849": {
+      "clip_id": "cf7c849",
+      "asset_id": "c7d55a82dc17",
+      "source_range": {
+        "start": 9.936667,
+        "end": 13.75
+      },
+      "timeline_range": {
+        "start": 13.003333666666666,
+        "end": 16.816666666666666
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cae68f5": {
+      "clip_id": "cae68f5",
+      "asset_id": "4ce9b796c4d9",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.4
+      },
+      "timeline_range": {
+        "start": 16.816666666666666,
+        "end": 23.21666666666667
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c895d32": {
+      "clip_id": "c895d32",
+      "asset_id": "53a1132af99c",
+      "source_range": {
+        "start": 0.0,
+        "end": 10.580245971679688
+      },
+      "timeline_range": {
+        "start": 4.4,
+        "end": 14.980245971679684
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "be210b2a",
+          "kind": "color",
+          "params": {
+            "brightness": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c7510cc": {
+      "clip_id": "c7510cc",
+      "asset_id": "3ea00dbdc035",
+      "source_range": {
+        "start": 0.0,
+        "end": 21.533333333333335
+      },
+      "timeline_range": {
+        "start": 43.7,
+        "end": 65.23333333333333
+      },
+      "track_id": "v3",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "b947d673",
+          "kind": "crop",
+          "params": {
+            "left": 0.14,
+            "top": 0.0,
+            "right": 0.0,
+            "bottom": 0.0
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cc4322f": {
+      "clip_id": "cc4322f",
+      "asset_id": "c7d55a82dc17",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.5777811686197865
+      },
+      "timeline_range": {
+        "start": 56.3,
+        "end": 60.877781168619784
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c3859ee": {
+      "clip_id": "c3859ee",
+      "asset_id": "3ea00dbdc035",
+      "source_range": {
+        "start": 0.0,
+        "end": 21.546667
+      },
+      "timeline_range": {
+        "start": 113.5,
+        "end": 135.046667
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c47e773": {
+      "clip_id": "c47e773",
+      "asset_id": "",
+      "source_range": {
+        "start": 1.9,
+        "end": 9.388890584309895
+      },
+      "timeline_range": {
+        "start": 36.8,
+        "end": 44.2888905843099
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "打发的"
+      },
+      "version_ids": []
+    },
+    "c828e92": {
+      "clip_id": "c828e92",
+      "asset_id": "c7d55a82dc17",
+      "source_range": {
+        "start": 0.0,
+        "end": 13.75
+      },
+      "timeline_range": {
+        "start": 38.03333333333333,
+        "end": 51.78333333333333
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cadfeef": {
+      "clip_id": "cadfeef",
+      "asset_id": "c7d55a82dc17",
+      "source_range": {
+        "start": 0.0,
+        "end": 13.75
+      },
+      "timeline_range": {
+        "start": 104.89999999999999,
+        "end": 118.64999999999999
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cccd968": {
+      "clip_id": "cccd968",
+      "asset_id": "dcf18ce36f24",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 5.0,
+        "end": 10.0
+      },
+      "track_id": "a2",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cdf7e27": {
+      "clip_id": "cdf7e27",
+      "asset_id": "8e7ead3b2e8a",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.0
+      },
+      "timeline_range": {
+        "start": 27.6,
+        "end": 30.6
+      },
+      "track_id": "v2",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cdbd5e8": {
+      "clip_id": "cdbd5e8",
+      "asset_id": "dcf18ce36f24",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 20.0,
+        "end": 25.0
+      },
+      "track_id": "v2",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c03d1fe": {
+      "clip_id": "c03d1fe",
+      "asset_id": "dcf18ce36f24",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 8.1,
+        "end": 13.1
+      },
+      "track_id": "v2",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cd8caee": {
+      "clip_id": "cd8caee",
+      "asset_id": "8e7ead3b2e8a",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.0
+      },
+      "timeline_range": {
+        "start": 15.0,
+        "end": 18.0
+      },
+      "track_id": "v2",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c752b35": {
+      "clip_id": "c752b35",
+      "asset_id": "f2681f435d07",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 24.5,
+        "end": 29.5
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c744768": {
+      "clip_id": "c744768",
+      "asset_id": "f2681f435d07",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.166666666666667
+      },
+      "timeline_range": {
+        "start": 38.3,
+        "end": 42.46666666666667
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cd55ef7": {
+      "clip_id": "cd55ef7",
+      "asset_id": "c7d55a82dc17",
+      "source_range": {
+        "start": 0.0,
+        "end": 13.75
+      },
+      "timeline_range": {
+        "start": 29.5,
+        "end": 43.25
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c1aadc3": {
+      "clip_id": "c1aadc3",
+      "asset_id": "c7d55a82dc17",
+      "source_range": {
+        "start": 4.5777811686197865,
+        "end": 13.75
+      },
+      "timeline_range": {
+        "start": 33.87778116861979,
+        "end": 43.05
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c39d8cf": {
+      "clip_id": "c39d8cf",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.242424011230469
+      },
+      "timeline_range": {
+        "start": 15.0,
+        "end": 21.24242401123047
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "花木成畦手自栽花木成畦手自栽 "
+      },
+      "version_ids": []
+    },
+    "ce8c434": {
+      "clip_id": "ce8c434",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 2.6329566240310665
+      },
+      "timeline_range": {
+        "start": 8.1,
+        "end": 10.732956624031067
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "test_hello"
+      },
+      "version_ids": []
+    },
+    "c4962d0": {
+      "clip_id": "c4962d0",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 2.0
+      },
+      "timeline_range": {
+        "start": 12.0,
+        "end": 14.0
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "after_fix"
+      },
+      "version_ids": []
+    },
+    "c88eb09": {
+      "clip_id": "c88eb09",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 12.277778625488281
+      },
+      "timeline_range": {
+        "start": 24.5,
+        "end": 36.77777862548828
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "爱你的我信用报告表盒仴佣兵克林霉素枯",
+        "style": {
+          "font_size": 38,
+          "color": "white",
+          "bold": true,
+          "position": "bottom",
+          "align": "center",
+          "outline_color": "black",
+          "outline_width": 2
+        }
+      },
+      "version_ids": []
+    }
+  },
+  "relationships": [
+    {
+      "relation_id": "r8846e6",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "ra2b6ed",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r3ecbb2",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rc3573e",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "radb6a8",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r2b7764",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rb97cc6",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r95969b",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r852752",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rc51bbb",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "ra79ef3",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rbd974c",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r9ff10f",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r38a982",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rf59c80",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r8d2b99",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r4c5783",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r1acedb",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r40adbc",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r64ad2e",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r02fc37",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r2513cc",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rfe7624",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r34d4e1",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rff359a",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rea0642",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r808007",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r6185b4",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rf4d9ec",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r5ac39b",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r0aa08d",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r09ef9a",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r586d06",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r9fb9dc",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r63eada",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rca3e4e",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r62fb12",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r1353e1",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r7ca363",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r8fc316",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r0c863a",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rf965e2",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rca0b61",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rfa184b",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r739a4e",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r9d9bdc",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rd3cc7e",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r085bdd",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rec06ee",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r740e42",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r89c310",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rd58c3e",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r25d214",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r84516c",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rcabedc",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r9a8436",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r0ea8ab",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r630273",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r2b3b31",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r840d37",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "racacae",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r760dd5",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r6949c2",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r3ddf17",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "ra58fe4",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "ra2ab6d",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rfab822",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "ree8e2a",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r9bd347",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rf75a96",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r54d377",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rb38a62",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r3ddc4a",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r4a07b5",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rc0fe42",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r4950c3",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r613abc",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rcc529c",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rba2778",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r2347b2",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r876923",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rad232f",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r65a2a4",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r5435f9",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r0559e3",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rff5752",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r1873e0",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r8a212c",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "re19394",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r633d1b",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r4b6730",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r2d3372",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rfde757",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rc24fa2",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r361cf5",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rbb67bd",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rb57e77",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rae6ce6",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r0f7845",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r15fd9d",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r17c42a",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r46d5c6",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r09d6c4",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r110ab3",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r5c7c84",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rc574e1",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r10e8e2",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rac62d1",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rbd467a",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r315bad",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "ra2cdd9",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r6ec22f",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r78b05b",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r772738",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r63b600",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r3aa2f1",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r069fed",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r45dcd8",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r6213e9",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r665495",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r3f8692",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rb7e0bf",
+      "source": "cccd968",
+      "target": "c45dc08",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r645b51",
+      "source": "cccd968",
+      "target": "c11d13a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r063145",
+      "source": "cccd968",
+      "target": "c75d590",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r9a54a0",
+      "source": "cccd968",
+      "target": "cdbd5e8",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r2573cd",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r737e58",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r4b41ec",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rfda388",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "re955d8",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r10284c",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r0f8df1",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r1890ab",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rafff3e",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r886c09",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r993199",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r2dcc81",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r851ad5",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rbb3de5",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "raad6ed",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r527db6",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rddf18d",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "re7a358",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r2925d0",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rfe6f1d",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rb64a55",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r4c7b4d",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r3994b6",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r268bd2",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rfb67f2",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r9c80c9",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r4cc22a",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "ra22767",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r33d5e4",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r74057f",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r49b147",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r3cf79a",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rc93141",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "reb996e",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rf57ac0",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r42d68b",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rf4c6c6",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r780ee4",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rbb5d92",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "raae51f",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r9cca86",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rede81b",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rcfeed3",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r2b4c3e",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r0f1f23",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rff47d1",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r1c1685",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r5da563",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r7fc5a1",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rf30570",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r33b7c9",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "ra4f85d",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r1956b6",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rbe2716",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r117649",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r81b1f8",
+      "source": "cccd968",
+      "target": "caf3a5a",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r6748de",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r675524",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rdc0f30",
+      "source": "cccd968",
+      "target": "c03d1fe",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rd60afc",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rb991a8",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r5d1a2b",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rd8e4be",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rba79af",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r25a38a",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r432ec5",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r32c7ac",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r695094",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r223174",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r3d6f2a",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r8d03dd",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r796a02",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "ra6aafa",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r59fabc",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r5f189a",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "ra27b4e",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rb4c41c",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r6bb5fd",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r22d5a7",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r80d896",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r6933e3",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r6339a2",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r327aee",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r080225",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r539073",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "reedfde",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r1a1d2c",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r9fd790",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rd7ceed",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rb2a33f",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r2cc38b",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r4482be",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r8bcb4b",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "redf4a1",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "ra02a45",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r14fd3c",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rbc397d",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r9160d7",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r190e57",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rd64809",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r42ae19",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r803cdd",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "r84209e",
+      "source": "c47e773",
+      "target": "c1aadc3",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.83,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r4bf7b0",
+      "source": "c47e773",
+      "target": "c828e92",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.84,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r8d16dd",
+      "source": "c47e773",
+      "target": "c744768",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.56,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "rba5c16",
+      "source": "c47e773",
+      "target": "cd55ef7",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.86,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r483cf1",
+      "source": "c39d8cf",
+      "target": "cae68f5",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.71,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "rf53e13",
+      "source": "c39d8cf",
+      "target": "cd8caee",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.48,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r65a9f9",
+      "source": "ce8c434",
+      "target": "c8d5377",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.97,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r94a8a6",
+      "source": "ce8c434",
+      "target": "c432650",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.97,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r261a96",
+      "source": "ce8c434",
+      "target": "c895d32",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 1.0,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r454d9e",
+      "source": "ce8c434",
+      "target": "c03d1fe",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 1.0,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r3ba147",
+      "source": "c4962d0",
+      "target": "caf3a5a",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 1.0,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r9e13b1",
+      "source": "c4962d0",
+      "target": "c895d32",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 1.0,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "rfa2972",
+      "source": "c4962d0",
+      "target": "c03d1fe",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.55,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r784148",
+      "source": "c88eb09",
+      "target": "c752b35",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.41,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r7ef4a4",
+      "source": "c88eb09",
+      "target": "cd55ef7",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.59,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "rac465a",
+      "source": "cccd968",
+      "target": "c8d5377",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rf4e4fe",
+      "source": "cccd968",
+      "target": "c432650",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rdc9b15",
+      "source": "cccd968",
+      "target": "c895d32",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    },
+    {
+      "relation_id": "rd507d5",
+      "source": "cccd968",
+      "target": "cdf7e27",
+      "relation": "independent",
+      "kind": "bgm_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "音频横跨多个片段，视为 BGM（不随单片段变动）"
+    }
+  ],
+  "problems": [
+    {
+      "problem_id": "p0b1f0b",
+      "target_clip": "c432650",
+      "time_range": null,
+      "region": null,
+      "category": "spatial_object",
+      "description": "这个壶太大，挡住画面主体",
+      "source": "human",
+      "severity": 1,
+      "confidence": 1.0
+    },
+    {
+      "problem_id": "p637781",
+      "target_clip": "c432650",
+      "time_range": null,
+      "region": null,
+      "category": "temporal",
+      "description": "片段中间存在多处长停顿，说话节奏拖沓，需要剪辑掉无效停顿或调整整体速度",
+      "source": "human",
+      "severity": 1,
+      "confidence": 1.0
+    }
+  ],
+  "solutions": [
+    {
+      "solution_id": "s53efd2",
+      "problem_id": "p0b1f0b",
+      "route": "L0_transform",
+      "tool": "object.transform",
+      "params": {},
+      "cost": 0.0,
+      "duration_ms": 100,
+      "risk": "low",
+      "reversible": true,
+      "selected": false
+    },
+    {
+      "solution_id": "sa24632",
+      "problem_id": "p0b1f0b",
+      "route": "L1_local_ai",
+      "tool": "object.remove",
+      "params": {},
+      "cost": 0.0,
+      "duration_ms": 40000,
+      "risk": "medium",
+      "reversible": true,
+      "selected": false
+    },
+    {
+      "solution_id": "sf3dcb5",
+      "problem_id": "p0b1f0b",
+      "route": "L2_cloud_ai",
+      "tool": "video.inpaint",
+      "params": {},
+      "cost": 0.18,
+      "duration_ms": 40000,
+      "risk": "medium",
+      "reversible": true,
+      "selected": false
+    },
+    {
+      "solution_id": "s4217b4",
+      "problem_id": "p0b1f0b",
+      "route": "L3_regenerate",
+      "tool": "video.generate",
+      "params": {},
+      "cost": 1.2,
+      "duration_ms": 120000,
+      "risk": "high",
+      "reversible": true,
+      "selected": false
+    },
+    {
+      "solution_id": "s640f6f",
+      "problem_id": "p637781",
+      "route": "L0_transform",
+      "tool": "video.trim",
+      "params": {},
+      "cost": 0.0,
+      "duration_ms": 50,
+      "risk": "low",
+      "reversible": true,
+      "selected": false
+    },
+    {
+      "solution_id": "s889f3d",
+      "problem_id": "p637781",
+      "route": "L0_transform",
+      "tool": "video.speed",
+      "params": {
+        "speed": 1.5
+      },
+      "cost": 0.0,
+      "duration_ms": 50,
+      "risk": "low",
+      "reversible": true,
+      "selected": false
+    },
+    {
+      "solution_id": "sc81309",
+      "problem_id": "p637781",
+      "route": "L1_local_ai",
+      "tool": "audio.silence_remove",
+      "params": {},
+      "cost": 0.0,
+      "duration_ms": 30000,
+      "risk": "medium",
+      "reversible": true,
+      "selected": true
+    },
+    {
+      "solution_id": "s1c38d8",
+      "problem_id": "p637781",
+      "route": "L3_regenerate",
+      "tool": "video.generate",
+      "params": {},
+      "cost": 1.2,
+      "duration_ms": 120000,
+      "risk": "high",
+      "reversible": true,
+      "selected": false
+    }
+  ],
+  "generations": [],
+  "publishing": {
+    "video_versions": [],
+    "cover": {},
+    "title": "",
+    "description": "",
+    "tags": [],
+    "platform_copy": {},
+    "cost_report": {}
+  },
+  "extensions": {
+    "memory": {
+      "root": "D:\\cc\\产品定位\\景德镇柴烧窑变",
+      "name": "jdz-chaishao"
+    }
+  }
+}

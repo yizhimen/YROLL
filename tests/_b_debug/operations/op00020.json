@@ -1,0 +1,53 @@
+{
+  "operation_id": "op00020",
+  "who": "human",
+  "at": "2026-08-24T11:24:36.184510",
+  "type": "add_clip",
+  "target": "c3859ee",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "clip_id": "c3859ee",
+    "asset_id": "3ea00dbdc035",
+    "source_range": {
+      "start": 0.0,
+      "end": 21.546667
+    },
+    "timeline_range": {
+      "start": 73.83333333333334,
+      "end": 95.38000033333334
+    },
+    "track_id": "v1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {},
+    "version_ids": []
+  },
+  "before": {},
+  "after": {
+    "clip_id": "c3859ee",
+    "asset_id": "3ea00dbdc035",
+    "source_range": {
+      "start": 0.0,
+      "end": 21.546667
+    },
+    "timeline_range": {
+      "start": 73.83333333333334,
+      "end": 95.38000033333334
+    },
+    "track_id": "v1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {},
+    "version_ids": []
+  },
+  "why": "素材库加入",
+  "tool": "timeline.add_clip",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "human"
+}

@@ -1,0 +1,35 @@
+{
+  "operation_id": "op00010",
+  "who": "ai",
+  "at": "2026-08-24T05:52:40.778451",
+  "type": "report_problem",
+  "target": "p637781",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "description": "片段中间存在多处长停顿，说话节奏拖沓，需要剪辑掉无效停顿或调整整体速度",
+    "category": "temporal",
+    "solutions": [
+      "s640f6f",
+      "s889f3d",
+      "sc81309",
+      "s1c38d8"
+    ]
+  },
+  "before": {},
+  "after": {
+    "description": "片段中间存在多处长停顿，说话节奏拖沓，需要剪辑掉无效停顿或调整整体速度",
+    "category": "temporal",
+    "solutions": [
+      "s640f6f",
+      "s889f3d",
+      "sc81309",
+      "s1c38d8"
+    ]
+  },
+  "why": "片段中间存在多处长停顿，说话节奏拖沓，需要剪辑掉无效停顿或调整整体速度",
+  "tool": "ai.report_problem",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}

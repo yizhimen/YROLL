@@ -1,0 +1,1309 @@
+import { useEffect, useRef, useState } from "react";
+import { api, Clip, Project } from "./api";
+import Timeline from "./components/Timeline";
+import ChatPanel from "./components/ChatPanel";
+import ClipWorkspace from "./components/ClipWorkspace";
+import MenuBar from "./components/MenuBar";
+import AssetPanel from "./components/AssetPanel";
+import OpsPanel from "./components/OpsPanel";
+import PreviewPlayer, { AspectRatio } from "./components/PreviewPlayer";
+import VisualAdjustPanel from "./components/VisualAdjustPanel";
+import SubtitleEditor from "./components/SubtitleEditor";
+import ExportPanel from "./components/ExportPanel";
+import ResizeHandle from "./components/ResizeHandle";
+
+interface Region { x: number; y: number; w: number; h: number }
+
+export default function App() {
+  const [project, setProject] = useState<Project | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [selectedSet, setSelectedSet] = useState<Set<string>>(new Set());
+  const [workspaceClip, setWorkspaceClip] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{
+    clipId: string;
+    impact: Awaited<ReturnType<typeof api.impact>>;
+  } | null>(null);
+  const [playhead, setPlayhead] = useState(0);
+  const [pxPerSec, setPxPerSec] = useState(12);
+  const [status, setStatus] = useState<{ ok: boolean; text: string }>({ ok: true, text: "加载中…" });
+  const [previewVersion, setPreviewVersion] = useState(0);
+  // Preview 框选（去水印）：框选模式 + 归一化坐标草稿
+  const [regionMode, setRegionMode] = useState(false);
+  const [regionDraft, setRegionDraft] = useState<Region | null>(null);
+  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  // 时间范围选择（蓝图 §2.4）+ 操作历史刷新 + Inspector 页签
+  const [selRange, setSelRange] = useState<[number, number] | null>(null);
+  const [rangeVolume, setRangeVolume] = useState(0.3);
+  const [opsKey, setOpsKey] = useState(0);
+  const [inspectorTab, setInspectorTab] = useState<"props" | "history">("props");
+  const [burnSubs, setBurnSubs] = useState(false);  // 渲染时烧录字幕（分发成片用）
+  // 视窗比例 / 字幕编辑器 / 导出面板 / Presets
+  const [aspect, setAspect] = useState<AspectRatio>("16:9");
+  const [subtitleEdit, setSubtitleEdit] = useState<{
+    clipId: string; text: string;
+    style: Record<string, unknown>; start: number; end: number;
+    track_id?: string;
+  } | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [presets, setPresets] = useState<Awaited<ReturnType<typeof api.presets>> | null>(null);
+  // 面板宽度（可拖动分界线）
+  const [assetW, setAssetW] = useState(260);
+  const [snapMode, setSnapMode] = useState<"always" | "alt" | "off">("always");
+  const [highlightRel, setHighlightRel] = useState(false);
+  const [inspectorW, setInspectorW] = useState(260);
+  const [timelineH, setTimelineH] = useState(280);  // 时间线高度
+  // 台词搜索定位
+  const [searchQ, setSearchQ] = useState("");
+  const [searchHits, setSearchHits] = useState<Array<{ clip_id: string; timeline: number; text: string }>>([]);
+  // 渲染进度（后台任务轮询）
+  const [renderJob, setRenderJob] = useState<{ status: string; step: string; done: number; total: number; error: string; preview: string } | null>(null);
+  const pollRender = (onDone: (preview: string) => void) => {
+    const timer = setInterval(async () => {
+      try {
+        const job = await api.renderStatus();
+        setRenderJob(job);
+        if (job.status === "done") {
+          clearInterval(timer);
+          setRenderJob(null);
+          onDone(job.preview);
+        } else if (job.status === "error") {
+          clearInterval(timer);
+          setRenderJob(null);
+          setStatus({ ok: false, text: `渲染失败：${job.error}` });
+        }
+      } catch { /* 网络抖动忽略，下轮再试 */ }
+    }, 500);
+  };
+  const startRender = () =>
+    run(async () => {
+      await api.render(burnSubs);
+      pollRender(() => {
+        setPreviewVersion((v) => v + 1);
+        setStatus({ ok: true, text: "渲染完成" });
+      });
+    }, "渲染已开始");
+
+  // 加载 Presets（字体/字幕样式/转场/滤镜/音效/导出/视窗比例）
+  useEffect(() => {
+    api.presets().then(setPresets).catch((e) =>
+      console.warn("加载 presets 失败", e));
+  }, []);
+
+  const [showHelp, setShowHelp] = useState(false);
+  // 素材点击预览（覆盖预览窗，看完返回时间轴）
+  const [previewAsset, setPreviewAsset] = useState<{ url: string; isImage: boolean; label: string } | null>(null);
+  // I/O 点（选区导出）
+  const [inPoint, setInPoint] = useState<number | null>(null);
+  const [outPoint, setOutPoint] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!searchQ.trim()) { setSearchHits([]); return; }
+    const timer = setTimeout(() => {
+      api.searchTranscripts(searchQ.trim())
+        .then((r) => setSearchHits(r.results))
+        .catch(() => setSearchHits([]));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQ]);
+
+  const refresh = async () => {
+    try {
+      setProject(await api.project());
+      setOpsKey((k) => k + 1);  // 操作历史跟着工程状态走
+      setStatus({ ok: true, text: "已连接 YROLL Server" });
+    } catch (e) {
+      setStatus({ ok: false, text: `连接失败：${e}` });
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  // 时间轴 seek → 预览跟随（PreviewPlayer 按模式映射源时间/成片时间）
+  const seek = (t: number) => {
+    setPlayhead(Math.max(0, t));
+  };
+
+  // 走带控制（PreviewPlayer 注入）+ 剪贴板
+  const transportRef = useRef<{ toggle?: () => void } | null>(null);
+  const clipboard = useRef<Clip | null>(null);
+
+  // 撤销/重做（语义撤销：revert 的 revert = redo）
+  const undoLast = async () => {
+    const ops = await api.operations();
+    const last = [...ops].reverse().find(
+      (o) => !o.type.startsWith("revert:") && o.type !== "analyze_loudness");
+    if (last) {
+      await run(() => api.revert(last.operation_id, "GUI Ctrl+Z"), `已撤销 ${last.type}`);
+    } else {
+      setStatus({ ok: false, text: "没有可撤销的操作" });
+    }
+  };
+  const redoLast = async () => {
+    const ops = await api.operations();
+    const lastRevert = [...ops].reverse().find((o) => o.type.startsWith("revert:"));
+    if (lastRevert) {
+      await run(() => api.revert(lastRevert.operation_id, "GUI Redo"), `已重做 ${lastRevert.type}`);
+    } else {
+      setStatus({ ok: false, text: "没有可重做的操作" });
+    }
+  };
+
+  // 剪辑点导航（↑/↓ 跳上一个/下一个边界）
+  const jumpBoundary = (dir: 1 | -1) => {
+    if (!project) return;
+    const pts = new Set<number>([0]);
+    for (const c of Object.values(project.clips)) {
+      pts.add(c.timeline_range.start);
+      pts.add(c.timeline_range.end);
+    }
+    const sorted = [...pts].sort((a, b) => a - b);
+    const t = dir === 1
+      ? sorted.find((p) => p > playhead + 0.05)
+      : [...sorted].reverse().find((p) => p < playhead - 0.05);
+    if (t !== undefined) seek(t);
+  };
+
+  // 键盘快捷键（NLE 标准手感）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && (e.key === "z" || e.key === "Z")) {
+        e.preventDefault();
+        if (e.shiftKey) redoLast(); else undoLast();
+      } else if (ctrl && (e.key === "y" || e.key === "Y")) {
+        e.preventDefault();
+        redoLast();
+      } else if (ctrl && (e.key === "c" || e.key === "C")) {
+        if (clip) clipboard.current = clip;
+      } else if (ctrl && (e.key === "v" || e.key === "V")) {
+        const c = clipboard.current;
+        if (!c) return;
+        e.preventDefault();
+        if (c.asset_id === "") {
+          const dur = c.timeline_range.end - c.timeline_range.start;
+          run(() => api.addSubtitle(c.context?.text ?? "", playhead, playhead + dur, "GUI 粘贴字幕"), "已粘贴");
+        } else {
+          run(() => api.addClip(c.asset_id, c.source_range.start, c.source_range.end,
+            playhead, c.track_id, "GUI 粘贴"), "已粘贴到播放头");
+        }
+      } else if (ctrl && (e.key === "d" || e.key === "D")) {
+        if (!clip) return;
+        e.preventDefault();
+        if (clip.asset_id === "") {
+          const dur = clip.timeline_range.end - clip.timeline_range.start;
+          run(() => api.addSubtitle(clip.context?.text ?? "", clip.timeline_range.end,
+            clip.timeline_range.end + dur, "GUI 复制字幕"), "已复制");
+        } else {
+          run(() => api.addClip(clip.asset_id, clip.source_range.start, clip.source_range.end,
+            clip.timeline_range.end, clip.track_id, "GUI 复制"), "已复制到原 clip 之后");
+        }
+      } else if (ctrl && (e.key === "a" || e.key === "A")) {
+        e.preventDefault();
+        if (project) setSelectedSet(new Set(Object.keys(project.clips)));
+      } else if (e.key === " ") {
+        e.preventDefault();
+        transportRef.current?.toggle?.();
+      } else if (e.key === "j" || e.key === "J") {
+        // J = 反向 5 秒（CapCut 风格，简化版；Premiere 标准是反向播放）
+        seek(playhead - 5);
+      } else if (e.key === "k" || e.key === "K") {
+        transportRef.current?.toggle?.();
+      } else if (e.key === "l" || e.key === "L") {
+        // L = 正向 5 秒（CapCut 风格，简化版）
+        seek(playhead + 5);
+      } else if (e.key === "ArrowLeft") {
+        seek(playhead - (e.shiftKey ? 1 : 0.1));
+      } else if (e.key === "ArrowRight") {
+        seek(playhead + (e.shiftKey ? 1 : 0.1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        jumpBoundary(-1);
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        jumpBoundary(1);
+      } else if (e.key === "s" || e.key === "S") {
+        if (clip) splitAtPlayhead();
+      } else if ((e.key === "z" || e.key === "Z") && e.shiftKey) {
+        // Shift+Z 缩放到适配（全时间轴入屏）
+        if (project) {
+          const dur = Math.max(10, ...Object.values(project.clips).map((c) => c.timeline_range.end));
+          const paneW = window.innerWidth - 80;
+          setPxPerSec(Math.min(60, Math.max(4, paneW / dur)));
+        }
+      } else if (e.key === "m" || e.key === "M") {
+        // 静音开关（多选时批量）
+        const ids = selectedSet.size > 0 ? [...selectedSet] : (clip ? [clip.clip_id] : []);
+        if (ids.length && project) {
+          const anyUnmuted = ids.some((id) => !project.clips[id]?.context?.muted);
+          run(async () => {
+            for (const id of ids) await api.setMuted(id, anyUnmuted, "GUI M 键");
+          }, anyUnmuted ? `已静音 ${ids.length} 个 clip` : "已取消静音");
+        }
+      } else if (e.key === "i" || e.key === "I") {
+        setInPoint(playhead);
+        setStatus({ ok: true, text: `入点 ${playhead.toFixed(1)}s` });
+      } else if (e.key === "o" || e.key === "O") {
+        setOutPoint(playhead);
+        setStatus({ ok: true, text: `出点 ${playhead.toFixed(1)}s` });
+      } else if (e.key === "Delete" && clip) {
+        if (e.shiftKey) {
+          // Shift+Delete：Ripple 删除（收拢）
+          run(() => api.removeClip(clip.clip_id, "GUI Ripple 删除", true).then(() => setSelected(null)),
+            "已删除并收拢");
+        } else {
+          document.getElementById("btn-delete-clip")?.click();
+        }
+      } else if (e.key === "Escape") {
+        setSelRange(null);
+        setRegionMode(false);
+        setRegionDraft(null);
+        setInPoint(null);
+        setOutPoint(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const run = async (fn: () => Promise<unknown>, ok: string) => {
+    try {
+      await fn();
+      await refresh();
+      setStatus({ ok: true, text: ok });
+    } catch (e) {
+      setStatus({ ok: false, text: String(e) });
+    }
+  };
+
+  const clip = project && selected ? project.clips[selected] : null;
+
+  // 拖动只改本地视图，松手才真正提交（避免每次 mousemove 都打 API）
+  const [dragPreview, setDragPreview] = useState<Record<string, number>>({});
+  const onDragMove = (clipId: string, newStart: number) => {
+    // 吸附：clip 边缘 / 播放头 / 0 点，阈值 0.25s
+    if (project) {
+      const c = project.clips[clipId];
+      if (c) {
+        const len = c.timeline_range.end - c.timeline_range.start;
+        const candidates = [0, playhead];
+        for (const other of Object.values(project.clips)) {
+          if (other.clip_id === clipId) continue;
+          candidates.push(other.timeline_range.start, other.timeline_range.end);
+        }
+        for (const cand of candidates) {
+          if (Math.abs(newStart - cand) < 0.25) { newStart = cand; break; }
+          if (Math.abs(newStart + len - cand) < 0.25) { newStart = cand - len; break; }
+        }
+      }
+    }
+    setDragPreview((p) => ({ ...p, [clipId]: newStart }));
+  };
+
+  const commitDrag = async () => {
+    const entries = Object.entries(dragPreview);
+    if (!entries.length || !project) return;
+    setDragPreview({});
+    for (const [cid, start] of entries) {
+      const c = project.clips[cid];
+      if (c && Math.abs(c.timeline_range.start - start) > 0.05) {
+        await api.move(cid, Math.round(start * 10) / 10, "GUI 拖动");
+      }
+    }
+    await refresh();
+  };
+
+  useEffect(() => {
+    window.addEventListener("pointerup", commitDrag);
+    return () => window.removeEventListener("pointerup", commitDrag);
+  });
+
+  if (!project) {
+    return <div className="app"><div className="statusbar err">{status.text}</div></div>;
+  }
+
+  const displayProject: Project = {
+    ...project,
+    clips: Object.fromEntries(
+      Object.entries(project.clips).map(([id, c]) => {
+        const s = dragPreview[id];
+        if (s === undefined) return [id, c];
+        const len = c.timeline_range.end - c.timeline_range.start;
+        return [id, { ...c, timeline_range: { start: s, end: s + len } }];
+      })
+    ),
+  };
+
+  const splitAtPlayhead = () => {
+    if (!clip) return;
+    // 播放头（timeline 时间）→ 源时间换算
+    const tr = clip.timeline_range;
+    if (playhead <= tr.start || playhead >= tr.end) {
+      setStatus({ ok: false, text: "播放头不在选中 clip 范围内" });
+      return;
+    }
+    const ratio = (playhead - tr.start) / (tr.end - tr.start);
+    const atSource =
+      clip.source_range.start + (clip.source_range.end - clip.source_range.start) * ratio;
+    run(() => api.split(clip.clip_id, atSource, "GUI 在播放头处切分"), "已切分");
+  };
+
+  return (
+    <div className="app">
+      <div className="topbar">
+        <span className="title">YROLL AI</span>
+        <span>{project.name}</span>
+        {project.intent?.goal && <span className="goal">目标：{project.intent.goal}</span>}
+        <span style={{ flex: 1 }} />
+        <span style={{ position: "relative" }}>
+          <input
+            value={searchQ}
+            placeholder="🔍 台词搜索…"
+            onChange={(e) => setSearchQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") { setSearchQ(""); setSearchHits([]); }
+            }}
+            style={{ width: 160, background: "#222", border: "1px solid #3a3a3a", borderRadius: 4, color: "#ddd", padding: "3px 8px", fontSize: 12 }}
+          />
+          {searchHits.length > 0 && (
+            <div className="search-drop">
+              {searchHits.map((h, i) => (
+                <div
+                  key={i}
+                  className="search-hit"
+                  onClick={() => {
+                    seek(h.timeline);
+                    setSelected(h.clip_id);
+                    setSelectedSet(new Set([h.clip_id]));
+                    setSearchHits([]);
+                    setSearchQ("");
+                  }}
+                >
+                  <span className="search-time">{h.timeline.toFixed(1)}s</span>
+                  {h.text}
+                </div>
+              ))}
+            </div>
+          )}
+        </span>
+        <label style={{ color: "#888" }}>缩放</label>
+        <input
+          type="range" min={4} max={60} step={1} value={pxPerSec}
+          onChange={(e) => setPxPerSec(Number(e.target.value))}
+          style={{ width: 100 }}
+        />
+        <button onClick={startRender} disabled={!!renderJob}>
+          {renderJob ? "渲染中…" : "渲染预览"}
+        </button>
+        <label style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 3 }}
+               title="勾选后字幕烧进画面（分发成片）；不勾是软字幕（可开关）">
+          <input type="checkbox" checked={burnSubs} onChange={(e) => setBurnSubs(e.target.checked)} />
+          烧录字幕
+        </label>
+        <label style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 3 }}
+               title="磁吸模式：总是 = 拖动时自动磁吸；Alt = 按住 Alt 才磁吸；关 = 不磁吸">
+          磁吸：
+          <select value={snapMode} onChange={(e) => setSnapMode(e.target.value as any)}
+                  style={{ background: "#222", border: "1px solid #444", color: "#ccc", padding: "2px 4px", borderRadius: 3 }}>
+            <option value="always">总是</option>
+            <option value="alt">Alt+拖动</option>
+            <option value="off">关</option>
+          </select>
+        </label>
+        <label style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 3 }}
+               title="高亮所有跨轨关联的 clip（Semantic Link）">
+          <input type="checkbox" checked={highlightRel} onChange={(e) => setHighlightRel(e.target.checked)} />
+          高亮关联
+        </label>
+        <button
+          disabled={previewVersion === 0}
+          style={regionMode ? { background: "#7ec97e", color: "#141414" } : undefined}
+          onClick={() => { setRegionMode((m) => !m); setRegionDraft(null); }}
+        >
+          {regionMode ? "框选中…" : "框选去水印"}
+        </button>
+        <button onClick={() => run(() => api.commit("GUI 手动存档"), "已存版本")}>存版本</button>
+      </div>
+
+      <MenuBar
+        hasClip={!!clip}
+        onOpenProject={() => {
+          const path = window.prompt("工程目录路径（含 current.json）：");
+          if (!path) return;
+          run(async () => {
+            const r = await api.openProject(path);
+            setPreviewVersion(0);
+            setSelected(null);
+            setSelectedSet(new Set());
+            setStatus({ ok: true, text: `已打开工程：${r.project}` });
+          }, "工程已切换");
+        }}
+        onNewProject={() => {
+          const root = window.prompt("工程存放目录（会在其下建 <名字>/ 工程目录）：", "projects");
+          if (!root) return;
+          const name = window.prompt("工程名字：");
+          if (!name) return;
+          const goal = window.prompt("目标（可空）：") || "";
+          run(async () => {
+            const r = await api.newProject(root, name, goal);
+            setPreviewVersion(0);
+            setSelected(null);
+            setSelectedSet(new Set());
+            setStatus({ ok: true, text: `已创建并打开工程：${r.project}` });
+          }, "工程已创建");
+        }}
+        onShowHelp={() => setShowHelp(true)}
+        regionMode={regionMode}
+        onImportJianying={() => {
+          const dir = window.prompt("剪映草稿目录（含 draft_content.json）：");
+          if (!dir) return;
+          run(async () => {
+            const r = await api.importJianying(dir);
+            setStatus({ ok: true, text: `剪映导入：${r.tracks} 轨 ${r.clips} clip ${r.assets} 素材（跳过 ${r.skipped}）` });
+          }, "剪映工程已导入");
+        }}
+        onImport={(files) =>
+          run(async () => {
+            let n = 0;
+            for (const f of Array.from(files)) {
+              const r = await api.importAsset(f);
+              if (!r.deduped) n++;
+            }
+          }, `已导入 ${files.length} 个素材（去重自动跳过）`)
+        }
+        onRender={startRender}
+        onExportPackage={() => setExportOpen(true)}
+        onExportRange={() => {
+          if (inPoint === null || outPoint === null || outPoint <= inPoint) {
+            setStatus({ ok: false, text: "先用 I/O 键标记入点和出点" });
+            return;
+          }
+          const name = window.prompt("选区导出文件名", "clip-range.mp4") || "clip-range.mp4";
+          const [i, o] = [inPoint, outPoint];
+          run(async () => {
+            await api.renderRange(i, o, burnSubs, 1080, name);
+            pollRender((preview) =>
+              setStatus({ ok: true, text: `已导出选区 ${i.toFixed(1)}-${o.toFixed(1)}s：${preview}` }));
+          }, "选区导出已开始");
+        }}
+        onExport={() => {
+          const w = window.prompt("导出宽度（像素，如 720 / 1080 / 1920 / 3840）", "1080");
+          if (!w) return;
+          const name = window.prompt("文件名", "export.mp4") || "export.mp4";
+          run(async () => {
+            await api.render(burnSubs, Number(w) || 1080, name);
+            pollRender((preview) => setStatus({ ok: true, text: `已导出：${preview}` }));
+          }, "导出已开始");
+        }}
+        onCommit={() => run(() => api.commit("GUI 手动存档"), "已存版本")}
+        onSplit={splitAtPlayhead}
+        onTrimHead={() => clip && run(() => api.trim(clip.clip_id, clip.source_range.start + 0.5), "头部裁掉 0.5s")}
+        onTrimTail={() => clip && run(() => api.trim(clip.clip_id, undefined, clip.source_range.end - 0.5), "尾部裁掉 0.5s")}
+        onSilenceRemove={() => clip && run(() => api.silenceRemove(clip.clip_id, "GUI 去停顿"), "已去停顿")}
+        onDenoise={() => clip && run(() => api.denoise(clip.clip_id, 12, "GUI 降噪"), "已加降噪（重渲染后生效）")}
+        onLoudness={() => clip && run(
+          async () => {
+            const r = await api.loudness(clip.clip_id);
+            setStatus({ ok: true, text: `响度：mean ${r.after.mean_db}dB / max ${r.after.max_db}dB` });
+          }, "响度分析完成")}
+        onAddSubtitle={() => {
+          // 优先编辑已有字幕（如果 playhead 在某字幕 clip 上），否则新建
+          const selClip = project.clips[selected ?? ""];
+          if (selClip && project.timeline.tracks.find((t) => t.track_id === selClip.track_id)?.kind === "text"
+              && playhead >= selClip.timeline_range.start && playhead < selClip.timeline_range.end) {
+            setSubtitleEdit({
+              clipId: selClip.clip_id,
+              text: selClip.context?.text ?? "",
+              style: (selClip.context?.style ?? {}) as unknown as Record<string, unknown>,
+              start: selClip.timeline_range.start,
+              end: selClip.timeline_range.end,
+              track_id: selClip.track_id,
+            });
+          } else {
+            // 新建空白字幕
+            const [s, e] = selRange ?? [playhead, playhead + 2];
+            setSubtitleEdit({
+              clipId: "",
+              text: "",
+              style: {} as unknown as Record<string, unknown>,
+              start: s,
+              end: e,
+              track_id: (project.timeline.tracks.find((t) => t.kind === "text") ?? { track_id: "t1" }).track_id,
+            });
+          }
+          setSelRange(null);
+        }}
+        onGenerateSubtitles={() =>
+          run(async () => {
+            const r = await fetch("/subtitles/generate?why=GUI 自动字幕", { method: "POST" });
+            if (!r.ok) throw new Error(await r.text());
+            const op = await r.json();
+            setStatus({ ok: true, text: `已生成 ${op.after?.count ?? 0} 条字幕（重渲染后可见）` });
+          }, "自动字幕完成")}
+        onRegionMode={() => { setRegionMode((m) => !m); setRegionDraft(null); }}
+      />
+
+      <div className="main">
+        <div className="asset-pane" style={{ width: assetW }}>
+          <AssetPanel project={project} onChanged={refresh} onStatus={(ok, text) => setStatus({ ok, text })}
+            onPreview={(assetId) => {
+              const a = project.assets.find((x) => x.asset_id === assetId);
+              if (!a) return;
+              setPreviewAsset({
+                url: `/assets/${assetId}/file`,
+                isImage: a.type === "image",
+                label: a.path.split(/[\/]/).pop() || assetId,
+              });
+            }} />
+        </div>
+        <ResizeHandle direction="vertical"
+          onDelta={(d) => setAssetW((w) => Math.max(180, Math.min(500, w + d)))} />
+
+        <div className="preview-pane" ref={previewRef} style={{ position: "relative" }}>
+          <PreviewPlayer
+            project={project}
+            playhead={playhead}
+            durationHint={Math.max(90, ...Object.values(project.clips).map((c) => c.timeline_range.end))}
+            renderedUrl={previewVersion > 0 ? `/preview.mp4?v=${previewVersion}` : null}
+            onPlayhead={setPlayhead}
+            onStatus={(ok, text) => setStatus({ ok, text })}
+            overrideSrc={previewAsset}
+            onClearOverride={() => setPreviewAsset(null)}
+            aspect={aspect}
+            onAspect={setAspect}
+          />
+          {previewVersion > 0 && clip && project.timeline.tracks
+            .filter((t) => t.kind === "video").slice(1)
+            .some((t) => t.clip_ids.includes(clip.clip_id)) && (
+            <div
+              className="pip-drag-box"
+              style={{
+                left: `${Number(clip.transform?.x ?? 0.68) * 100}%`,
+                top: `${Number(clip.transform?.y ?? 0.68) * 100}%`,
+                width: `${Number(clip.transform?.scale ?? 0.3) * 100}%`,
+                aspectRatio: "16/9",
+              }}
+              title="拖动调整 PiP 位置"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                const pane = previewRef.current;
+                if (!pane) return;
+                const rect = pane.getBoundingClientRect();
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const origX = Number(clip.transform?.x ?? 0.68);
+                const origY = Number(clip.transform?.y ?? 0.68);
+                const box = e.currentTarget as HTMLElement;
+                const move = (ev: PointerEvent) => {
+                  const nx = Math.min(0.95, Math.max(0, origX + (ev.clientX - startX) / rect.width));
+                  const ny = Math.min(0.95, Math.max(0, origY + (ev.clientY - startY) / rect.height));
+                  box.style.left = `${nx * 100}%`;
+                  box.style.top = `${ny * 100}%`;
+                  box.dataset.nx = String(nx);
+                  box.dataset.ny = String(ny);
+                };
+                const up = () => {
+                  window.removeEventListener("pointermove", move);
+                  window.removeEventListener("pointerup", up);
+                  const nx = Number(box.dataset.nx ?? origX);
+                  const ny = Number(box.dataset.ny ?? origY);
+                  if (Math.abs(nx - origX) > 0.005 || Math.abs(ny - origY) > 0.005) {
+                    run(() => api.setTransform(clip.clip_id,
+                      { x: nx, y: ny, scale: Number(clip.transform?.scale ?? 0.3) },
+                      "GUI 拖 PiP"), "PiP 位置已改（重渲染后生效）");
+                  }
+                };
+                window.addEventListener("pointermove", move);
+                window.addEventListener("pointerup", up);
+              }}
+            />
+          )}
+          {renderJob && (
+            <div className="render-progress">
+              渲染中：{renderJob.step}（{renderJob.done}/{renderJob.total}）
+              <div className="bar">
+                <div style={{ width: `${Math.min(100, (renderJob.done / Math.max(1, renderJob.total)) * 100)}%` }} />
+              </div>
+            </div>
+          )}
+          {regionMode && previewVersion > 0 && (
+            <div
+              style={{
+                position: "absolute", inset: 0, cursor: "crosshair", zIndex: 5,
+                background: "rgba(0,0,0,0.05)",
+              }}
+              onPointerDown={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                dragStart.current = {
+                  x: (e.clientX - r.left) / r.width,
+                  y: (e.clientY - r.top) / r.height,
+                };
+                setRegionDraft(null);
+              }}
+              onPointerMove={(e) => {
+                if (!dragStart.current) return;
+                const r = e.currentTarget.getBoundingClientRect();
+                const cx = (e.clientX - r.left) / r.width;
+                const cy = (e.clientY - r.top) / r.height;
+                const s = dragStart.current;
+                setRegionDraft({
+                  x: Math.max(0, Math.min(s.x, cx)),
+                  y: Math.max(0, Math.min(s.y, cy)),
+                  w: Math.min(1, Math.abs(cx - s.x)),
+                  h: Math.min(1, Math.abs(cy - s.y)),
+                });
+              }}
+              onPointerUp={() => { dragStart.current = null; }}
+            >
+              {regionDraft && (
+                <div style={{
+                  position: "absolute",
+                  left: `${regionDraft.x * 100}%`, top: `${regionDraft.y * 100}%`,
+                  width: `${regionDraft.w * 100}%`, height: `${regionDraft.h * 100}%`,
+                  border: "2px dashed #7ec97e", background: "rgba(126,201,126,0.15)",
+                }} />
+              )}
+            </div>
+          )}
+          {regionDraft && (
+            <div style={{
+              position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)",
+              zIndex: 6, display: "flex", gap: 8, background: "#222", padding: "6px 10px",
+              borderRadius: 6, border: "1px solid #444",
+            }}>
+              <button
+                onClick={() => {
+                  // 目标 = 播放头所在的主视频轨 clip（框的就是眼前这段）
+                  const vtrack = project.timeline.tracks.find((t) => t.kind === "video");
+                  const target = vtrack?.clip_ids
+                    .map((id) => project.clips[id])
+                    .find((c) => c && playhead >= c.timeline_range.start && playhead <= c.timeline_range.end);
+                  if (!target) {
+                    setStatus({ ok: false, text: "播放头下没有视频 clip" });
+                    return;
+                  }
+                  const region = regionDraft;
+                  setRegionDraft(null);
+                  setRegionMode(false);
+                  run(() => api.delogo(target.clip_id, region, "GUI 框选去水印"), "已加去水印（重渲染后生效）");
+                }}
+              >
+                对此区域去水印
+              </button>
+              <button onClick={() => { setRegionDraft(null); }}>重选</button>
+              <button onClick={() => { setRegionDraft(null); setRegionMode(false); }}>取消</button>
+            </div>
+          )}
+        </div>
+
+        <ResizeHandle direction="vertical"
+          onDelta={(d) => setInspectorW((w) => Math.max(200, Math.min(500, w - d)))} />
+        <div className="inspector" style={{ width: inspectorW }}>
+          <div className="inspector-tabs">
+            <button
+              className={inspectorTab === "props" ? "tab active" : "tab"}
+              onClick={() => setInspectorTab("props")}
+            >
+              属性
+            </button>
+            <button
+              className={inspectorTab === "history" ? "tab active" : "tab"}
+              onClick={() => setInspectorTab("history")}
+            >
+              历史
+            </button>
+          </div>
+          {inspectorTab === "history" ? (
+            <OpsPanel refreshKey={opsKey} onChanged={refresh}
+                      onStatus={(ok, text) => setStatus({ ok, text })} />
+          ) : (
+          <>
+          {selectedSet.size > 1 && (
+            <div className="batch-panel">
+              <h3>已选 {selectedSet.size} 个 clip</h3>
+              <div className="row">
+                <label>统一音量</label>
+                {[0.5, 1, 1.5].map((v) => (
+                  <button key={v} onClick={() =>
+                    run(async () => {
+                      for (const id of selectedSet) {
+                        await api.volume(id, v, "GUI 批量音量");
+                      }
+                    }, `已对 ${selectedSet.size} 个 clip 设音量 ${v}`)}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <div className="row">
+                <label>统一速度</label>
+                {[1, 1.5, 2].map((v) => (
+                  <button key={v} onClick={() =>
+                    run(async () => {
+                      for (const id of selectedSet) {
+                        await api.speed(id, v, "GUI 批量速度");
+                      }
+                    }, `已对 ${selectedSet.size} 个 clip 设速度 ${v}x`)}>
+                    {v}x
+                  </button>
+                ))}
+              </div>
+              <div className="row">
+                <button
+                  className="danger"
+                  onClick={() => {
+                    if (!window.confirm(`删除选中的 ${selectedSet.size} 个 clip？（可逐条撤销）`)) return;
+                    run(async () => {
+                      for (const id of selectedSet) {
+                        await api.removeClip(id, "GUI 批量删除");
+                      }
+                      setSelectedSet(new Set());
+                      setSelected(null);
+                    }, `已删除 ${selectedSet.size} 个 clip`);
+                  }}
+                >
+                  全部删除
+                </button>
+                <button onClick={() => setSelectedSet(selected ? new Set([selected]) : new Set())}>
+                  取消多选
+                </button>
+              </div>
+            </div>
+          )}
+          {selectedSet.size <= 1 && (
+          <>
+          <h3>{clip ? `Clip ${clip.clip_id}` : "未选中 Clip"}</h3>{clip && (
+            <>
+              <div className="meta">
+                素材：{clip.asset_id}
+                <br />
+                源：{clip.source_range.start.toFixed(1)}–{clip.source_range.end.toFixed(1)}s
+                <br />
+                时间轴：{clip.timeline_range.start.toFixed(1)}–{clip.timeline_range.end.toFixed(1)}s
+              </div>
+              <div className="row">
+                <label>音量</label>
+                <input
+                  type="range" min={0} max={2} step={0.05} value={clip.volume}
+                  onChange={(e) =>
+                    run(() => api.volume(clip.clip_id, Number(e.target.value), "GUI 调音量"), "音量已改")
+                  }
+                />
+                <span>{clip.volume.toFixed(2)}</span>
+              </div>
+              <div className="row">
+                <label>速度</label>
+                <input
+                  type="range" min={0.5} max={3} step={0.25} value={clip.speed}
+                  onChange={(e) =>
+                    run(() => api.speed(clip.clip_id, Number(e.target.value), "GUI 调速"), "速度已改")
+                  }
+                />
+                <span>{clip.speed}x</span>
+              </div>
+              {project.timeline.tracks
+                .filter((t) => t.kind === "video").slice(1)
+                .some((t) => t.clip_ids.includes(clip.clip_id)) && (
+                <>
+                  <div className="meta">叠加轨（PiP）位置/尺寸：</div>
+                  {(["x", "y", "scale"] as const).map((key) => {
+                    const def = key === "scale" ? 0.3 : 0.68;
+                    const val = Number(clip.transform?.[key] ?? def);
+                    return (
+                      <div className="row" key={key}>
+                        <label>{{ x: "水平", y: "垂直", scale: "尺寸" }[key]}</label>
+                        <input
+                          type="range" min={0} max={1} step={0.02} value={val}
+                          onChange={(e) =>
+                            run(() => api.setTransform(
+                              clip.clip_id,
+                              { x: 0.68, y: 0.68, scale: 0.3, ...clip.transform, [key]: Number(e.target.value) },
+                              "GUI 调 PiP"), "位置已改（重渲染后生效）")
+                          }
+                        />
+                        <span>{val.toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+              <div className="row">
+                <button onClick={() => run(() => api.trim(clip.clip_id, clip.source_range.start + 0.5), "头部裁掉 0.5s")}>
+                  头裁 0.5s
+                </button>
+                <button onClick={() => run(() => api.trim(clip.clip_id, undefined, clip.source_range.end - 0.5), "尾部裁掉 0.5s")}>
+                  尾裁 0.5s
+                </button>
+              </div>
+              <div className="row">
+                <label>淡入/淡出</label>
+                {[0.5, 1].map((s) => (
+                  <button
+                    key={s}
+                    onClick={() =>
+                      run(() => api.setFade(clip.clip_id, s, s, "GUI 淡入淡出"),
+                        `淡入淡出 ${s}s（重渲染后生效）`)}
+                  >
+                    {s}s
+                  </button>
+                ))}
+                <label style={{ marginLeft: 8 }}>叠化</label>
+                {([["fade", "溶解"], ["wipeleft", "左擦"], ["slideleft", "左滑"]] as const).map(([kind, label2]) => (
+                  <button
+                    key={kind}
+                    title={`与前一个 clip ${label2}（成片比重叠部分短）`}
+                    onClick={() =>
+                      run(() => api.setDissolve(clip.clip_id, 0.5, kind, "GUI 叠化"),
+                        `与前段${label2} 0.5s（重渲染后生效）`)}
+                  >
+                    {label2}
+                  </button>
+                ))}
+              </div>
+              {clip.asset_id !== "" && (
+                <div className="row">
+                  <button
+                    title="这句说错了不用重拍：输入正确台词，AI 合成语音替换（原声静音，可撤销）"
+                    onClick={() => {
+                      const text = window.prompt("正确的台词（将合成语音替换原声）：");
+                      if (!text) return;
+                      run(() => api.voiceReplace(clip.clip_id, text, "GUI 语音重配"),
+                        "已合成重配（原声已静音，重渲染后生效）");
+                    }}
+                  >
+                    🎙 重配这句
+                  </button>
+                </div>
+              )}
+              <div className="row">
+                <button onClick={splitAtPlayhead}>在播放头切分</button>
+                <button
+                  id="btn-delete-clip"
+                  className="danger"
+                  onClick={async () => {
+                    // Impact Preview：删除前先看影响（蓝图 §43.2）
+                    const imp = await api.impact(clip.clip_id, "remove");
+                    if (imp.will_sync.length === 0 && imp.will_prompt.length === 0) {
+                      await run(() => api.removeClip(clip.clip_id, "GUI 删除").then(() => setSelected(null)), "已删除");
+                    } else {
+                      setPendingDelete({ clipId: clip.clip_id, impact: imp });
+                    }
+                  }}
+                >
+                  删除
+                </button>
+                <button
+                  title="删除并把后面的 clip 前移收拢（Shift+Delete）"
+                  onClick={() =>
+                    run(() => api.removeClip(clip.clip_id, "GUI Ripple 删除", true).then(() => setSelected(null)),
+                      "已删除并收拢")}
+                >
+                  Ripple
+                </button>
+              </div>
+              {clip.asset_id !== "" && (
+                <VisualAdjustPanel clip={clip} run={run} />
+              )}
+              {clip.asset_id === "" && (
+                <div className="subtitle-editor">
+                  <label>字幕文字</label>
+                  <textarea
+                    key={clip.clip_id}
+                    defaultValue={clip.context?.text ?? ""}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                        run(() => api.editSubtitle(
+                          clip.clip_id,
+                          (e.target as HTMLTextAreaElement).value,
+                          "GUI 改字幕"), `字幕已更新 → ${clip.track_id} ${clip.timeline_range.start.toFixed(1)}-${clip.timeline_range.end.toFixed(1)}s（重渲染后可见）`);
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={(e) => {
+                      const ta = (e.currentTarget.previousSibling as HTMLTextAreaElement);
+                      run(() => api.editSubtitle(clip.clip_id, ta.value, "GUI 改字幕"),
+                        `字幕已更新 → ${clip.track_id} ${clip.timeline_range.start.toFixed(1)}-${clip.timeline_range.end.toFixed(1)}s（重渲染后可见）`);
+                    }}
+                  >
+                    保存字幕（Ctrl+Enter）
+                  </button>
+                  <div className="row" style={{ marginTop: 6 }}>
+                    <label>字号</label>
+                    <select
+                      value={Number((clip.context?.style as unknown as Record<string, unknown> | undefined)?.size ?? 38)}
+                      onChange={(e) =>
+                        run(() => api.setSubtitleStyle(clip.clip_id, { size: Number(e.target.value) }, "GUI 字幕字号"), "样式已改（烧录生效）")}
+                    >
+                      {[24, 38, 56].map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <label>位置</label>
+                    <select
+                      value={String((clip.context?.style as unknown as Record<string, unknown> | undefined)?.position ?? "bottom")}
+                      onChange={(e) =>
+                        run(() => api.setSubtitleStyle(clip.clip_id, { position: e.target.value }, "GUI 字幕位置"), "样式已改（烧录生效）")}
+                    >
+                      <option value="bottom">底部</option>
+                      <option value="top">顶部</option>
+                    </select>
+                    <label>颜色</label>
+                    <select
+                      value={String((clip.context?.style as unknown as Record<string, unknown> | undefined)?.color ?? "white")}
+                      onChange={(e) =>
+                        run(() => api.setSubtitleStyle(clip.clip_id, { color: e.target.value }, "GUI 字幕颜色"), "样式已改（烧录生效）")}
+                    >
+                      <option value="white">白</option>
+                      <option value="yellow">黄</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+              {clip.adjustments.length > 0 && (
+                <div className="adj-list">
+                  <label>调整图层（{clip.adjustments.length}）</label>
+                  {clip.adjustments.map((a) => (
+                    <div key={String(a.id)} className="adj-item">
+                      <span>
+                        {String(a.kind)}
+                        {a.kind === "delogo" && "（去水印）"}
+                        {a.kind === "denoise" && `（降噪 nr=${(a.params as { nr?: number })?.nr ?? 12}）`}
+                        {a.kind === "volume_range" && `（范围音量 ×${(a.params as { volume?: number })?.volume}）`}
+                      </span>
+                      <button
+                        className="adj-remove"
+                        onClick={() =>
+                          run(() => api.removeAdjustment(clip.clip_id, String(a.id), "GUI 移除调整图层"), "已移除")}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+          </>
+          )}
+          <hr style={{ borderColor: "#333" }} />
+          <ChatPanel
+            selectedClip={selected}
+            playhead={playhead}
+            onChanged={refresh}
+            onStatus={(ok, text) => setStatus({ ok, text })}
+          />
+          </>
+          )}
+        </div>
+      </div>
+
+      {selRange && (
+        <div className="range-bar">
+          <span>
+            已选 {selRange[0].toFixed(1)}–{selRange[1].toFixed(1)}s
+          </span>
+          <label>范围内音量</label>
+          <input
+            type="range" min={0} max={2} step={0.05} value={rangeVolume}
+            onChange={(e) => setRangeVolume(Number(e.target.value))}
+            style={{ width: 80 }}
+          />
+          <span>{rangeVolume.toFixed(2)}</span>
+          <button
+            onClick={() => {
+              // 范围音量作用于播放头下/选中的 clip（不必先 Split，蓝图 §2.4）
+              const target = clip ?? project.timeline.tracks
+                .find((t) => t.kind === "video")?.clip_ids
+                .map((id) => project.clips[id])
+                .find((c) => c && selRange[0] < c.timeline_range.end && selRange[1] > c.timeline_range.start);
+              if (!target) {
+                setStatus({ ok: false, text: "范围内没有 clip" });
+                return;
+              }
+              const [s, e] = selRange;
+              setSelRange(null);
+              run(() => api.volumeRange(target.clip_id, rangeVolume, s, e, "GUI 范围音量"),
+                "已加范围音量（重渲染后生效）");
+            }}
+          >
+            应用
+          </button>
+          <button
+            onClick={() => {
+              const desc = window.prompt("这段有什么问题？（登记后 AI 给候选方案）");
+              if (!desc) return;
+              const [s, e] = selRange;
+              setSelRange(null);
+              run(() => api.reportProblem(desc, "temporal", selected,
+                { start: s, end: e }), "问题已登记，见 Clip Workspace 方案");
+            }}
+          >
+            登记问题
+          </button>
+          <button onClick={() => setSelRange(null)}>取消</button>
+        </div>
+      )}
+
+      <ResizeHandle direction="horizontal"
+        onDelta={(d) => setTimelineH((h) => Math.max(150, Math.min(700, h - d)))} />
+      <Timeline
+        project={displayProject}
+        height={timelineH}
+        snapMode={snapMode}
+        highlightRel={highlightRel}
+        selectedIds={selectedSet}
+        playhead={playhead}
+        pxPerSec={pxPerSec}
+        selRange={selRange}
+        inPoint={inPoint}
+        outPoint={outPoint}
+        onSeek={seek}
+        onSelect={(id, viaAi, ctrl) => {
+          if (viaAi) {
+            setSelected(id);
+            setSelectedSet(new Set([id]));
+            setWorkspaceClip(id);  // 上 1/3 AI 区 → 打开 Clip Workspace（Y 轴）
+            return;
+          }
+          if (ctrl) {
+            // Ctrl+点击：多选切换
+            setSelectedSet((prev) => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id); else next.add(id);
+              return next;
+            });
+          } else {
+            setSelectedSet(new Set([id]));
+          }
+          setSelected(id);
+        }}
+        onDragMove={onDragMove}
+        onZoomPx={setPxPerSec}
+        onRangeSelect={setSelRange}
+        onTrimCommit={(clipId, newStart, newEnd) =>
+          run(() => api.trim(clipId, newStart ?? undefined, newEnd ?? undefined, "GUI 边缘拖拽裁剪"), "已裁剪")}
+        onAssetDrop={(assetId, trackId, t) => {
+          const a = project.assets.find((x) => x.asset_id === assetId);
+          if (!a) return;
+          // 图片默认 5 秒（CapCut 行为：单帧当静帧用，可加 Ken Burns）
+          const DEFAULT_IMG_DUR = 5;
+          const isVideo = a.type === "video" || a.type === "audio";
+          const dur = a.identity.duration_sec ?? (isVideo ? 0 : DEFAULT_IMG_DUR);
+          if (!dur) {
+            setStatus({ ok: false, text: "该素材无时长，不能上时间轴" });
+            return;
+          }
+          // 类型校验：图片只能上 V 轨，音频只能上 A 轨，字幕只能上 T 轨
+          const track = project.timeline.tracks.find((x) => x.track_id === trackId);
+          if (track) {
+            if (a.type === "image" && track.kind !== "video") {
+              setStatus({ ok: false, text: "图片只能放到视频轨（V1/V2/V3）" });
+              return;
+            }
+            if ((a.type === "audio") && track.kind !== "audio") {
+              setStatus({ ok: false, text: "音频只能放到音频轨（A1/A2/A3）" });
+              return;
+            }
+          }
+          // 找最近的空隙（剪映/Premiere 行为：落点冲突就推到最近可用空隙）
+          const otherClips = track ? project.clips : null;
+          let placement = t;
+          if (otherClips) {
+            const occupied = track!.clip_ids
+              .map((cid) => project.clips[cid])
+              .filter(Boolean)
+              .map((c) => ({ start: c.timeline_range.start, end: c.timeline_range.end }))
+              .sort((a, b) => a.start - b.start);
+            const findFree = (want: number) => {
+              let cur = Math.max(0, want);
+              for (const r of occupied) {
+                if (cur + dur <= r.start) return cur;            // 落在 r 之前
+                if (cur < r.end) cur = r.end;                     // 推到 r 之后
+              }
+              return cur;
+            };
+            placement = findFree(t);
+          }
+          run(() => api.addClip(assetId, 0, dur, placement, trackId, "GUI 拖入时间轴"),
+            `${a.path.split(/[\/]/).pop()} 已放到 ${placement.toFixed(1)}s（${dur.toFixed(1)}s）`);
+        }}
+        onTrackLock={(trackId, locked) =>
+          run(() => api.setTrackLocked(trackId, locked, "GUI 轨道锁"),
+            locked ? `轨道 ${trackId} 已锁定` : `轨道 ${trackId} 已解锁`)}
+        onTrackHide={(trackId, hidden) =>
+          run(() => api.setTrackHidden(trackId, hidden, "GUI 轨道隐藏"),
+            hidden ? `轨道 ${trackId} 已隐藏` : `轨道 ${trackId} 已显示`)}
+        onTrackMute={(trackId, muted) =>
+          run(() => api.setTrackMuted(trackId, muted, "GUI 轨道静音"),
+            muted ? `轨道 ${trackId} 已静音` : `轨道 ${trackId} 已取消静音`)}
+        onDropOnTrack={(clipId, trackId) => {
+          const c = project.clips[clipId];
+          if (!c) return;
+          run(() => api.move(clipId, c.timeline_range.start, "GUI 竖向拖轨", trackId),
+            `已移到轨道 ${trackId}`);
+        }}
+      />
+
+      {workspaceClip && project.clips[workspaceClip] && (
+        <ClipWorkspace
+          clip={project.clips[workspaceClip]}
+          assetPath={project.assets.find((a) => a.asset_id === project.clips[workspaceClip].asset_id)?.path}
+          assetOrigin={project.assets.find((a) => a.asset_id === project.clips[workspaceClip].asset_id)?.origin}
+          assetGen={(project.assets.find((a) => a.asset_id === project.clips[workspaceClip].asset_id) as { gen?: Record<string, unknown> } | undefined)?.gen}
+          onClose={() => setWorkspaceClip(null)}
+          onChanged={refresh}
+        />
+      )}
+
+      {pendingDelete && (
+        <div className="workspace-overlay" onClick={() => setPendingDelete(null)}>
+          <div className="workspace" style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ws-header">
+              <span className="ws-title">即将删除 {pendingDelete.clipId}，影响范围：</span>
+            </div>
+            <div className="ws-body">
+              {pendingDelete.impact.will_sync.length > 0 && (
+                <div className="ws-meta">
+                  ✓ 强关联将同步删除：{pendingDelete.impact.will_sync.map((d) => `${d.text}（${d.kind}）`).join("、")}
+                </div>
+              )}
+              {pendingDelete.impact.will_prompt.length > 0 && (
+                <div className="ws-meta">
+                  ◇ 建议检查：{pendingDelete.impact.will_prompt.map((d) => d.text).join("、")}
+                </div>
+              )}
+              {pendingDelete.impact.untouched.length > 0 && (
+                <div className="ws-meta">
+                  × 不受影响：{pendingDelete.impact.untouched.map((d) => d.text).join("、")}
+                </div>
+              )}
+              <div className="row" style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button
+                  onClick={async () => {
+                    const { clipId, impact } = pendingDelete;
+                    setPendingDelete(null);
+                    await run(async () => {
+                      for (const d of impact.will_sync) {
+                        await api.removeClip(d.clip_id, `随 ${clipId} 强关联同步删除`);
+                      }
+                      await api.removeClip(clipId, "GUI 删除（含强关联）");
+                      setSelected(null);
+                    }, "已删除（含强关联项）");
+                  }}
+                >
+                  全部删除（含强关联）
+                </button>
+                <button
+                  onClick={async () => {
+                    const { clipId } = pendingDelete;
+                    setPendingDelete(null);
+                    await run(() => api.removeClip(clipId, "GUI 删除（仅本片段）").then(() => setSelected(null)), "已删除（仅本片段）");
+                  }}
+                >
+                  只删本片段
+                </button>
+                <button onClick={() => setPendingDelete(null)}>取消</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showHelp && (
+        <div className="workspace-overlay" onClick={() => setShowHelp(false)}>
+          <div className="workspace" style={{ width: 520 }} onClick={(e) => e.stopPropagation()}>
+            <div className="ws-header">
+              <span className="ws-title">快捷键清单</span>
+              <button onClick={() => setShowHelp(false)}>✕</button>
+            </div>
+            <div className="ws-body" style={{ fontSize: 13, lineHeight: 1.9, color: "#ccc" }}>
+              <b>走带</b>：空格/K 播放暂停 · J/L ±5s · ←/→ ±0.1s（Shift ±1s）· ↑/↓ 跳剪辑点<br />
+              <b>编辑</b>：S 切分 · Delete 删除 · Shift+Delete Ripple 收拢删除 · M 静音<br />
+              <b>剪贴板</b>：Ctrl+C/V 复制粘贴 · Ctrl+D 复制到后方 · Ctrl+A 全选<br />
+              <b>历史</b>：Ctrl+Z 撤销 · Ctrl+Shift+Z / Ctrl+Y 重做<br />
+              <b>视图</b>：滚轮 缩放（鼠标锚点）· Shift+Z 缩放到适配 · 标尺拖拽=范围选择<br />
+              <b>标记</b>：I/O 入点出点 · Esc 清除标记/选区<br />
+              <b>多选</b>：Ctrl+点击 · 批量音量/速度/删除<br />
+              <b>其他</b>：顶栏台词搜索 · 迷你地图点击跳转 · 拖到别的轨道=换轨
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="statusbar">
+        <span className={status.ok ? "ok" : "err"}>{status.text}</span>
+        <span>播放头 {playhead.toFixed(1)}s</span>
+        <span>{Object.keys(project.clips).length} clips</span>
+      </div>
+
+      {subtitleEdit && (
+        <div className="modal-overlay" onClick={() => setSubtitleEdit(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <SubtitleEditor
+              initialText={subtitleEdit.text}
+              initialStyle={subtitleEdit.style}
+              start={subtitleEdit.start}
+              end={subtitleEdit.end}
+              presets={presets ?? undefined}
+              onCancel={() => setSubtitleEdit(null)}
+              onSave={async (text, style) => {
+                const edit = subtitleEdit!;
+                if (edit.clipId) {
+                  // 编辑现有字幕
+                  await api.editSubtitle(edit.clipId, text, "GUI 改字幕");
+                  await api.setSubtitleStyle(edit.clipId, style as Record<string, unknown>, "GUI 改字幕样式");
+                  setStatus({ ok: true, text: `字幕已更新 → ${edit.track_id ?? edit.clipId} ${edit.start.toFixed(1)}-${edit.end.toFixed(1)}s（重渲染后可见）` });
+                } else {
+                  // 新建字幕
+                  await api.addSubtitle(text, edit.start, edit.end, "GUI 加字幕");
+                  // 找到刚加的字幕（最新创建的 text 轨 clip）并应用样式
+                  const proj = await api.project();
+                  const textClips = proj.timeline.tracks
+                    .filter((t) => t.kind === "text")
+                    .flatMap((t) => t.clip_ids.map((id) => proj.clips[id]))
+                    .filter(Boolean)
+                    .filter((c) => Math.abs(c.timeline_range.start - edit.start) < 0.1);
+                  const newest = textClips[textClips.length - 1];
+                  if (newest) {
+                    await api.setSubtitleStyle(newest.clip_id, style as Record<string, unknown>, "GUI 字幕样式");
+                  }
+                  setStatus({ ok: true, text: `字幕已加 → ${newest ? newest.track_id : "t1"} ${edit.start.toFixed(1)}-${edit.end.toFixed(1)}s（重渲染后可见）` });
+                }
+                setSubtitleEdit(null);
+                refresh();
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {exportOpen && (
+        <div className="modal-overlay" onClick={() => setExportOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <ExportPanel
+              presets={presets?.export_presets ?? []}
+              initial={{
+                title: (project as any).publishing?.title ?? "",
+                description: (project as any).publishing?.description ?? "",
+                tags: ((project as any).publishing?.tags ?? []).join(","),
+                burn_subtitles: burnSubs,
+              }}
+              onCancel={() => setExportOpen(false)}
+              onExport={(cfg) => {
+                run(async () => {
+                  await api.exportPackage(cfg);
+                  pollRender((preview) =>
+                    setStatus({ ok: true,
+                      text: `发布包已导出（mp4+cover+srt+metadata+report）：${preview}` }));
+                  setExportOpen(false);
+                }, "导出已开始");
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

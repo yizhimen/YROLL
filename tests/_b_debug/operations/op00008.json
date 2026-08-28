@@ -1,0 +1,53 @@
+{
+  "operation_id": "op00008",
+  "who": "ai",
+  "at": "2026-08-24T00:52:31.946926",
+  "type": "add_clip",
+  "target": "c7510cc",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "clip_id": "c7510cc",
+    "asset_id": "3ea00dbdc035",
+    "source_range": {
+      "start": 0.0,
+      "end": 21.533333333333335
+    },
+    "timeline_range": {
+      "start": 38.550000000000004,
+      "end": 60.08333333333334
+    },
+    "track_id": "v1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {},
+    "version_ids": []
+  },
+  "before": {},
+  "after": {
+    "clip_id": "c7510cc",
+    "asset_id": "3ea00dbdc035",
+    "source_range": {
+      "start": 0.0,
+      "end": 21.533333333333335
+    },
+    "timeline_range": {
+      "start": 38.550000000000004,
+      "end": 60.08333333333334
+    },
+    "track_id": "v1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {},
+    "version_ids": []
+  },
+  "why": "[ending] 诗意落幕余韵",
+  "tool": "timeline.add_clip",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}

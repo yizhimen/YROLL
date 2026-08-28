@@ -1,0 +1,25 @@
+{
+  "operation_id": "op00036",
+  "who": "ai",
+  "at": "2026-08-24T20:00:59.983917",
+  "type": "add_track",
+  "target": "t1",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "track_id": "t1",
+    "kind": "text",
+    "clip_ids": []
+  },
+  "before": {},
+  "after": {
+    "track_id": "t1",
+    "kind": "text",
+    "clip_ids": []
+  },
+  "why": "",
+  "tool": "timeline.add_track",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}

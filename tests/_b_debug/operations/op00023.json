@@ -1,0 +1,38 @@
+{
+  "operation_id": "op00023",
+  "who": "human",
+  "at": "2026-08-24T17:04:59.751223",
+  "type": "move",
+  "target": "c7510cc",
+  "time_range": {
+    "start": 39.7,
+    "end": 61.23333333333334
+  },
+  "region": null,
+  "parameters": {
+    "timeline_range": {
+      "start": 39.7,
+      "end": 61.23333333333334
+    },
+    "track_id": "v1"
+  },
+  "before": {
+    "timeline_range": {
+      "start": 38.550000000000004,
+      "end": 60.08333333333334
+    },
+    "track_id": "v1"
+  },
+  "after": {
+    "timeline_range": {
+      "start": 39.7,
+      "end": 61.23333333333334
+    },
+    "track_id": "v1"
+  },
+  "why": "GUI 拖动",
+  "tool": "video.move",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "human"
+}

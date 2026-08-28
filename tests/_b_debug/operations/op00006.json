@@ -1,0 +1,53 @@
+{
+  "operation_id": "op00006",
+  "who": "ai",
+  "at": "2026-08-24T00:52:31.945925",
+  "type": "add_clip",
+  "target": "cae68f5",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "clip_id": "cae68f5",
+    "asset_id": "4ce9b796c4d9",
+    "source_range": {
+      "start": 0.0,
+      "end": 6.4
+    },
+    "timeline_range": {
+      "start": 16.816666666666666,
+      "end": 23.21666666666667
+    },
+    "track_id": "v1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {},
+    "version_ids": []
+  },
+  "before": {},
+  "after": {
+    "clip_id": "cae68f5",
+    "asset_id": "4ce9b796c4d9",
+    "source_range": {
+      "start": 0.0,
+      "end": 6.4
+    },
+    "timeline_range": {
+      "start": 16.816666666666666,
+      "end": 23.21666666666667
+    },
+    "track_id": "v1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {},
+    "version_ids": []
+  },
+  "why": "[climax] 专属情感升华",
+  "tool": "timeline.add_clip",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}

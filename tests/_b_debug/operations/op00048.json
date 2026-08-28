@@ -1,0 +1,47 @@
+{
+  "operation_id": "op00048",
+  "who": "ai",
+  "at": "2026-08-24T20:00:59.994358",
+  "type": "generate_subtitles",
+  "target": "timeline",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "created": [
+      "ca4ed88",
+      "ca92e9f",
+      "c8dec3c",
+      "c372aab",
+      "cf182bb",
+      "c64c84a",
+      "c756e2e",
+      "c5b1caf",
+      "c13d803",
+      "c3a1037",
+      "c3bfa1b"
+    ],
+    "count": 11
+  },
+  "before": {},
+  "after": {
+    "created": [
+      "ca4ed88",
+      "ca92e9f",
+      "c8dec3c",
+      "c372aab",
+      "cf182bb",
+      "c64c84a",
+      "c756e2e",
+      "c5b1caf",
+      "c13d803",
+      "c3a1037",
+      "c3bfa1b"
+    ],
+    "count": 11
+  },
+  "why": "真实工程验证：自动字幕",
+  "tool": "text.generate_subtitles",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}

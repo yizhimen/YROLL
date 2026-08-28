@@ -1,0 +1,53 @@
+{
+  "operation_id": "op00005",
+  "who": "ai",
+  "at": "2026-08-24T00:52:31.944926",
+  "type": "add_clip",
+  "target": "cf7c849",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "clip_id": "cf7c849",
+    "asset_id": "c7d55a82dc17",
+    "source_range": {
+      "start": 9.936667,
+      "end": 13.75
+    },
+    "timeline_range": {
+      "start": 13.003333666666666,
+      "end": 16.816666666666666
+    },
+    "track_id": "v1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {},
+    "version_ids": []
+  },
+  "before": {},
+  "after": {
+    "clip_id": "cf7c849",
+    "asset_id": "c7d55a82dc17",
+    "source_range": {
+      "start": 9.936667,
+      "end": 13.75
+    },
+    "timeline_range": {
+      "start": 13.003333666666666,
+      "end": 16.816666666666666
+    },
+    "track_id": "v1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {},
+    "version_ids": []
+  },
+  "why": "[body] 器物细节巡礼",
+  "tool": "timeline.add_clip",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}

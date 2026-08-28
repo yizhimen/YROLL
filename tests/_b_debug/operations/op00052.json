@@ -1,0 +1,49 @@
+{
+  "operation_id": "op00052",
+  "who": "human",
+  "at": "2026-08-25T07:26:40.914416",
+  "type": "adjust",
+  "target": "c7510cc",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "adjustments": [
+      {
+        "id": "b947d673",
+        "kind": "crop",
+        "params": {
+          "left": 0.14,
+          "top": 0.0,
+          "right": 0.0,
+          "bottom": 0.0
+        },
+        "time_range": null,
+        "region": null
+      }
+    ]
+  },
+  "before": {
+    "adjustments": []
+  },
+  "after": {
+    "adjustments": [
+      {
+        "id": "b947d673",
+        "kind": "crop",
+        "params": {
+          "left": 0.14,
+          "top": 0.0,
+          "right": 0.0,
+          "bottom": 0.0
+        },
+        "time_range": null,
+        "region": null
+      }
+    ]
+  },
+  "why": "GUI 画面裁剪",
+  "tool": "video.crop",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "human"
+}

@@ -1,0 +1,67 @@
+{
+  "operation_id": "op00016",
+  "who": "ai",
+  "at": "2026-08-24T08:31:02.031256",
+  "type": "adjust",
+  "target": "c8d5377",
+  "time_range": null,
+  "region": {
+    "x": 0.85,
+    "y": 0.03,
+    "w": 0.13,
+    "h": 0.08,
+    "feather": 20.0
+  },
+  "parameters": {
+    "adjustments": [
+      {
+        "id": "2c750140",
+        "kind": "delogo",
+        "params": {
+          "x": 0.85,
+          "y": 0.03,
+          "w": 0.13,
+          "h": 0.08
+        },
+        "time_range": null,
+        "region": {
+          "x": 0.85,
+          "y": 0.03,
+          "w": 0.13,
+          "h": 0.08,
+          "feather": 20.0
+        }
+      }
+    ]
+  },
+  "before": {
+    "adjustments": []
+  },
+  "after": {
+    "adjustments": [
+      {
+        "id": "2c750140",
+        "kind": "delogo",
+        "params": {
+          "x": 0.85,
+          "y": 0.03,
+          "w": 0.13,
+          "h": 0.08
+        },
+        "time_range": null,
+        "region": {
+          "x": 0.85,
+          "y": 0.03,
+          "w": 0.13,
+          "h": 0.08,
+          "feather": 20.0
+        }
+      }
+    ]
+  },
+  "why": "联调：真实素材 delogo",
+  "tool": "video.delogo",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}

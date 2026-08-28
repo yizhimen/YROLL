@@ -1,0 +1,57 @@
+{
+  "operation_id": "op00062",
+  "who": "human",
+  "at": "2026-08-25T07:39:58.029700",
+  "type": "add_clip",
+  "target": "c47e773",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "clip_id": "c47e773",
+    "asset_id": "",
+    "source_range": {
+      "start": 0.0,
+      "end": 2.0
+    },
+    "timeline_range": {
+      "start": 34.666666666666664,
+      "end": 36.666666666666664
+    },
+    "track_id": "t1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {
+      "text": "打发的"
+    },
+    "version_ids": []
+  },
+  "before": {},
+  "after": {
+    "clip_id": "c47e773",
+    "asset_id": "",
+    "source_range": {
+      "start": 0.0,
+      "end": 2.0
+    },
+    "timeline_range": {
+      "start": 34.666666666666664,
+      "end": 36.666666666666664
+    },
+    "track_id": "t1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {
+      "text": "打发的"
+    },
+    "version_ids": []
+  },
+  "why": "GUI 加字幕",
+  "tool": "text.add_subtitle",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "human"
+}

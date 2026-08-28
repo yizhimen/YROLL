@@ -1,0 +1,57 @@
+{
+  "operation_id": "op00040",
+  "who": "ai",
+  "at": "2026-08-24T20:00:59.988152",
+  "type": "add_clip",
+  "target": "c372aab",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "clip_id": "c372aab",
+    "asset_id": "",
+    "source_range": {
+      "start": 0.0,
+      "end": 0.1599999999999966
+    },
+    "timeline_range": {
+      "start": 48.21,
+      "end": 48.37
+    },
+    "track_id": "t1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {
+      "text": "好盡我這一生 足不到而跑開"
+    },
+    "version_ids": []
+  },
+  "before": {},
+  "after": {
+    "clip_id": "c372aab",
+    "asset_id": "",
+    "source_range": {
+      "start": 0.0,
+      "end": 0.1599999999999966
+    },
+    "timeline_range": {
+      "start": 48.21,
+      "end": 48.37
+    },
+    "track_id": "t1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {
+      "text": "好盡我這一生 足不到而跑開"
+    },
+    "version_ids": []
+  },
+  "why": "真实工程验证：自动字幕",
+  "tool": "text.add_subtitle",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}

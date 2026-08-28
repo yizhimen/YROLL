@@ -1,0 +1,53 @@
+{
+  "operation_id": "op00002",
+  "who": "ai",
+  "at": "2026-08-24T00:52:31.942674",
+  "type": "add_clip",
+  "target": "c8d5377",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "clip_id": "c8d5377",
+    "asset_id": "8e7ead3b2e8a",
+    "source_range": {
+      "start": 0.0,
+      "end": 3.066666666666667
+    },
+    "timeline_range": {
+      "start": 0.0,
+      "end": 3.066666666666667
+    },
+    "track_id": "v1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {},
+    "version_ids": []
+  },
+  "before": {},
+  "after": {
+    "clip_id": "c8d5377",
+    "asset_id": "8e7ead3b2e8a",
+    "source_range": {
+      "start": 0.0,
+      "end": 3.066666666666667
+    },
+    "timeline_range": {
+      "start": 0.0,
+      "end": 3.066666666666667
+    },
+    "track_id": "v1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {},
+    "version_ids": []
+  },
+  "why": "[hook] 开篇视觉冲击",
+  "tool": "timeline.add_clip",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}

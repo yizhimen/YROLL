@@ -1,0 +1,2029 @@
+{
+  "manifest_version": "0.1",
+  "project_id": "701ad627a1f1",
+  "name": "sanlihe-story",
+  "created_at": "2026-08-27T22:44:46.496182",
+  "intent": {
+    "goal": "假画寻4000年前的人"
+  },
+  "assets": [
+    {
+      "asset_id": "aa080ae",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\0c34d48af0214df8994ac61b3b11e954.png",
+      "identity": {
+        "md5": "705a822f6fcd8d0b19ca2a9d960aea20",
+        "size_bytes": 1078884,
+        "duration_sec": null,
+        "width": 618,
+        "height": 904,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "afd8f49",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\0yyfzo1qqczimage.jpeg",
+      "identity": {
+        "md5": "962a3b3b3cfe60b0618a6d927e239a28",
+        "size_bytes": 77160,
+        "duration_sec": null,
+        "width": 882,
+        "height": 563,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a4608b0",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\101610316_1_x.webp",
+      "identity": {
+        "md5": "e09fabdcbd3c7652139c3004ecbc5fbd",
+        "size_bytes": 72044,
+        "duration_sec": null,
+        "width": 600,
+        "height": 600,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a6aebc7",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\1742652773k1vg0gry8rjimage.jpeg",
+      "identity": {
+        "md5": "cd2551d4930a0e0422a51ec92754a84d",
+        "size_bytes": 75215,
+        "duration_sec": null,
+        "width": 497,
+        "height": 1290,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "adf6755",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\1742652790yyfzo1qqczimage (2).jpeg",
+      "identity": {
+        "md5": "e28383ee777f7391aa4c8c9c8990bd40",
+        "size_bytes": 49506,
+        "duration_sec": null,
+        "width": 882,
+        "height": 542,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a2629cb",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\20231020161537493182_616f73a5b93cd0aa4a26a30c52f71568.jpg",
+      "identity": {
+        "md5": "325a671ac19a31e03621907346b255da",
+        "size_bytes": 30645,
+        "duration_sec": null,
+        "width": 450,
+        "height": 600,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "aaf4a3a",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\24780[1024].jpg",
+      "identity": {
+        "md5": "2739e468b2e46019f34c44ef9dcf1982",
+        "size_bytes": 48066,
+        "duration_sec": null,
+        "width": 1024,
+        "height": 768,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "abd4e81",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\319bf52db5d44cd0a50a2bfdb3e6c054.png",
+      "identity": {
+        "md5": "ff27a1a1c2958f4ecb5a4411238de107",
+        "size_bytes": 99760,
+        "duration_sec": null,
+        "width": 501,
+        "height": 517,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "af91f28",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\4FEEEC32C25CDEAA6C5B856BCF494B4C.png",
+      "identity": {
+        "md5": "4feeec32c25cdeaa6c5b856bcf494b4c",
+        "size_bytes": 1074468,
+        "duration_sec": null,
+        "width": 885,
+        "height": 948,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "afdc981",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\843B7B3CA9DF0BEBB3F23AFFE2BE8484.png",
+      "identity": {
+        "md5": "843b7b3ca9df0bebb3f23affe2be8484",
+        "size_bytes": 503769,
+        "duration_sec": null,
+        "width": 842,
+        "height": 1024,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "ac76ced",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\99cb4c29d098486891fe71f1bed78ed9.jpg",
+      "identity": {
+        "md5": "cb26ac2fdbedc18778fe1951863bcc2a",
+        "size_bytes": 16143,
+        "duration_sec": null,
+        "width": 517,
+        "height": 573,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "acd3ad9",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\afe2caa0c3bb48478cc21636805a1acd.png",
+      "identity": {
+        "md5": "9fc9b749e3beef94da20e8aaaf718db9",
+        "size_bytes": 712604,
+        "duration_sec": null,
+        "width": 616,
+        "height": 923,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a65a261",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\arch_book_cover.jpg",
+      "identity": {
+        "md5": "75225f73ad9bb80717c0d2d591f2b91a",
+        "size_bytes": 86308,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a18399a",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\art5156870796.jpg",
+      "identity": {
+        "md5": "8bea8884b07e67a9f0321e21cf34eb1a",
+        "size_bytes": 245133,
+        "duration_sec": null,
+        "width": 1918,
+        "height": 2000,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "af899f8",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\d70883732da848d09ea2ef40b78cee10.png",
+      "identity": {
+        "md5": "db2c557474a148159b44c8dc3a5697fc",
+        "size_bytes": 898217,
+        "duration_sec": null,
+        "width": 574,
+        "height": 871,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a95cba2",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\D7914173E854FDA33ADD092E5D1F3C12.png",
+      "identity": {
+        "md5": "d7914173e854fda33add092e5d1f3c12",
+        "size_bytes": 2211808,
+        "duration_sec": null,
+        "width": 2048,
+        "height": 2048,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a1ff130",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\DP-12552-002.jpg",
+      "identity": {
+        "md5": "223ec6ef2e6eb2c6d5bdd4cf555ffb6c",
+        "size_bytes": 1669411,
+        "duration_sec": null,
+        "width": 2696,
+        "height": 4000,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a5a60bf",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\evidence_bones_shells.jpg",
+      "identity": {
+        "md5": "12bcd486de8a1488303a91b45cfcbfb6",
+        "size_bytes": 126476,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a5be2a8",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\evidence_cave_section.jpg",
+      "identity": {
+        "md5": "c6126627dd1a97da4554292191136d0c",
+        "size_bytes": 134077,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a7633de",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\evidence_pig_burial.jpg",
+      "identity": {
+        "md5": "9cff2d68499e159c594654e1d9ede3f8",
+        "size_bytes": 167996,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "ac0d4b3",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\F07EA062764452BB592F5AFBF8A415C1.jpg",
+      "identity": {
+        "md5": "1ac660c02fe97229122d4162c2c44705",
+        "size_bytes": 336603,
+        "duration_sec": null,
+        "width": 1920,
+        "height": 1309,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a0ebd3b",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\OIP (1).webp",
+      "identity": {
+        "md5": "27a26cf72a0b7b3de0f7c15fd06ad426",
+        "size_bytes": 3982,
+        "duration_sec": null,
+        "width": 474,
+        "height": 315,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a115786",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\OIP.webp",
+      "identity": {
+        "md5": "3398cc5a293ca3ed662e0ad3d8c87e29",
+        "size_bytes": 21422,
+        "duration_sec": null,
+        "width": 474,
+        "height": 297,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "af965c3",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\oracle_feng_01.jpg",
+      "identity": {
+        "md5": "2503a495a7a210113d81e7f6b8dfa3ea",
+        "size_bytes": 45189,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a02bf66",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\oracle_feng_02.jpg",
+      "identity": {
+        "md5": "413fc6f50d0731b8ef4a09d91433ba51",
+        "size_bytes": 182490,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a91fbf0",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\page_14.jpg",
+      "identity": {
+        "md5": "b1deac6149d10824e26c55ae62c07ebd",
+        "size_bytes": 156276,
+        "duration_sec": null,
+        "width": 397,
+        "height": 584,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "ae2da17",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\painting_gaofenghan_hd.jpg",
+      "identity": {
+        "md5": "4f4c202ea282d49ea66a7b14c6dc8a04",
+        "size_bytes": 232877,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a444f54",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_birdshaped.jpg",
+      "identity": {
+        "md5": "6a0930b7034de8477be9f36c5391669c",
+        "size_bytes": 146230,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a37ea76",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_black_stemcup_alt.jpg",
+      "identity": {
+        "md5": "dbddb1ad2ea1d389498ede5c148b76ef",
+        "size_bytes": 129477,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a8553d8",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_black_stemcup_short.jpg",
+      "identity": {
+        "md5": "5b36a3ec5e6c85e992d2aebbb67b1b87",
+        "size_bytes": 117877,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "ab8f17b",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_dawenkou_brown.jpg",
+      "identity": {
+        "md5": "55385f63ea278d44ef0299dec47b3968",
+        "size_bytes": 115669,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1608,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a122604",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_dawenkou_grey.jpg",
+      "identity": {
+        "md5": "11e8d3747cf4acaacf63bd6eef3451f9",
+        "size_bytes": 82847,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a10ec6b",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_longshan_red.jpg",
+      "identity": {
+        "md5": "5a6678d2388a1a7e19081dcd78609596",
+        "size_bytes": 112548,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1612,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a55bc2b",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_white_3leg.jpg",
+      "identity": {
+        "md5": "6c968f0b853c6c17920bd0830c00e40e",
+        "size_bytes": 52371,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "abacbb5",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\QQ20260827-200332.jpg",
+      "identity": {
+        "md5": "f8211859417e56dec2175e848af91a61",
+        "size_bytes": 1745413,
+        "duration_sec": null,
+        "width": 984,
+        "height": 1311,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "ae661cc",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\R (1).jpg",
+      "identity": {
+        "md5": "5b98cf5fa4faf4170cc6e10df1dda6fa",
+        "size_bytes": 46248,
+        "duration_sec": null,
+        "width": 842,
+        "height": 1024,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a414317",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\R (2).jpg",
+      "identity": {
+        "md5": "404db4f799a7972bf048214b8890648b",
+        "size_bytes": 224018,
+        "duration_sec": null,
+        "width": 600,
+        "height": 800,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "afff67c",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\R.jpg",
+      "identity": {
+        "md5": "56c1602049fd665ce4aff580b8924457",
+        "size_bytes": 61090,
+        "duration_sec": null,
+        "width": 640,
+        "height": 1160,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a23219e",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\scholars_1959_color.jpg",
+      "identity": {
+        "md5": "c366f34bc8413c7ee6e14d166ae4e4bf",
+        "size_bytes": 139271,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    },
+    {
+      "asset_id": "a826bb7",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\scholars_1959_photo.jpg",
+      "identity": {
+        "md5": "5e1451f9ec88fad44055d8344e7e858a",
+        "size_bytes": 146595,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null
+    }
+  ],
+  "timeline": {
+    "timeline_id": "main",
+    "tracks": [
+      {
+        "track_id": "v1",
+        "kind": "video",
+        "clip_ids": [
+          "c8441b5",
+          "cdf32ba",
+          "c79ab49",
+          "c6aa0e1",
+          "cfbac82",
+          "c2a517f",
+          "c3cb733",
+          "cab4277",
+          "cfbe5bf",
+          "c613a77",
+          "cfcb5bf",
+          "c7b49ad",
+          "c65bf1e",
+          "cc8cf66",
+          "cff760b",
+          "c5b4387",
+          "c94d61b",
+          "c162833",
+          "c511ab5",
+          "cf00fbf"
+        ],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "v2",
+        "kind": "video",
+        "clip_ids": [],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "v3",
+        "kind": "video",
+        "clip_ids": [],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "a1",
+        "kind": "audio",
+        "clip_ids": [],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "a2",
+        "kind": "audio",
+        "clip_ids": [],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "a3",
+        "kind": "audio",
+        "clip_ids": [],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "t1",
+        "kind": "text",
+        "clip_ids": [
+          "c845ab5",
+          "cd1dc70",
+          "c3d0714",
+          "c17e273",
+          "c28dadc",
+          "c89f535",
+          "cc20e81",
+          "c3287fd",
+          "c366eb3",
+          "c93e081",
+          "cd71376",
+          "c062ce3",
+          "c6f38cd",
+          "ce87aab",
+          "c0a637a",
+          "ce2377a",
+          "cd3d9d1",
+          "cac9a07"
+        ],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      },
+      {
+        "track_id": "t2",
+        "kind": "text",
+        "clip_ids": [],
+        "muted": false,
+        "locked": false,
+        "hidden": false
+      }
+    ]
+  },
+  "clips": {
+    "c8441b5": {
+      "clip_id": "c8441b5",
+      "asset_id": "ae2da17",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "82950f46",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.05,
+            "y": 0.0,
+            "scale": 1.0,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "64f86d17",
+          "kind": "fade",
+          "params": {
+            "in": 0.5,
+            "out": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c845ab5": {
+      "clip_id": "c845ab5",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.0
+      },
+      "timeline_range": {
+        "start": 1.5,
+        "end": 4.5
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "1959年，有几个人拿着一幅假画，去找4000年前的人。"
+      },
+      "version_ids": []
+    },
+    "cdf32ba": {
+      "clip_id": "cdf32ba",
+      "asset_id": "af965c3",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 5.0,
+        "end": 10.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "c3de60ea",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": 0.05,
+            "scale": 1.05,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "3e5a57a0",
+          "kind": "fade",
+          "params": {
+            "in": 0.5,
+            "out": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cd1dc70": {
+      "clip_id": "cd1dc70",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 2.5
+      },
+      "timeline_range": {
+        "start": 5.5,
+        "end": 8.0
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "两百多年前，一个农人在地里干活。"
+      },
+      "version_ids": []
+    },
+    "c79ab49": {
+      "clip_id": "c79ab49",
+      "asset_id": "a55bc2b",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 10.0,
+        "end": 15.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "b92aab42",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": -0.1,
+            "scale": 1.15,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "28f340ce",
+          "kind": "fade",
+          "params": {
+            "in": 0.5,
+            "out": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c3d0714": {
+      "clip_id": "c3d0714",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.0
+      },
+      "timeline_range": {
+        "start": 11.0,
+        "end": 14.0
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "不知道从哪里，挖出了一件奇怪的陶器。"
+      },
+      "version_ids": []
+    },
+    "c6aa0e1": {
+      "clip_id": "c6aa0e1",
+      "asset_id": "a55bc2b",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 15.0,
+        "end": 19.0
+      },
+      "track_id": "v1",
+      "speed": 1.25,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "b89b944f",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "c3fece2a",
+          "kind": "fade",
+          "params": {
+            "in": 0.5,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cfbac82": {
+      "clip_id": "cfbac82",
+      "asset_id": "ae2da17",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 19.0,
+        "end": 25.0
+      },
+      "track_id": "v1",
+      "speed": 0.8333333333333334,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "826e4607",
+          "kind": "transform2d",
+          "params": {
+            "x": -0.05,
+            "scale": 1.08,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "f412c5ee",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c17e273": {
+      "clip_id": "c17e273",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 17.0,
+        "end": 21.0
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "「介子城边老瓦窑，田夫掘出说前朝」"
+      },
+      "version_ids": []
+    },
+    "c28dadc": {
+      "clip_id": "c28dadc",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.5
+      },
+      "timeline_range": {
+        "start": 21.0,
+        "end": 24.5
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "他根本不知道它有多古，只是觉得，拿来插莲花挺好。"
+      },
+      "version_ids": []
+    },
+    "c2a517f": {
+      "clip_id": "c2a517f",
+      "asset_id": "a826bb7",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 25.0,
+        "end": 29.0
+      },
+      "track_id": "v1",
+      "speed": 1.25,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "12068dc6",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.0,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "25224c82",
+          "kind": "fade",
+          "params": {
+            "in": 0.5,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c3cb733": {
+      "clip_id": "c3cb733",
+      "asset_id": "a02bf66",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 29.0,
+        "end": 35.0
+      },
+      "track_id": "v1",
+      "speed": 0.8333333333333334,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "f357cd9a",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": -0.05,
+            "scale": 1.2,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "bcc80be2",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c89f535": {
+      "clip_id": "c89f535",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.0
+      },
+      "timeline_range": {
+        "start": 27.0,
+        "end": 30.0
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "200多年过去，有人在文物收藏中，又看到了这段文字。"
+      },
+      "version_ids": []
+    },
+    "cc20e81": {
+      "clip_id": "cc20e81",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 2.5
+      },
+      "timeline_range": {
+        "start": 32.0,
+        "end": 34.5
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "介子城。这是第一条真正的线索。"
+      },
+      "version_ids": []
+    },
+    "cab4277": {
+      "clip_id": "cab4277",
+      "asset_id": "afff67c",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 35.0,
+        "end": 39.5
+      },
+      "track_id": "v1",
+      "speed": 1.1111111111111112,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "4ce8be15",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.0,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "77613970",
+          "kind": "fade",
+          "params": {
+            "in": 0.5,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cfbe5bf": {
+      "clip_id": "cfbe5bf",
+      "asset_id": "ae661cc",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 39.5,
+        "end": 44.0
+      },
+      "track_id": "v1",
+      "speed": 1.1111111111111112,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "25132cb5",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.1,
+            "y": 0.0,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "5659d48f",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c613a77": {
+      "clip_id": "c613a77",
+      "asset_id": "a414317",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 44.0,
+        "end": 48.0
+      },
+      "track_id": "v1",
+      "speed": 1.25,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "9cbf8d32",
+          "kind": "transform2d",
+          "params": {
+            "x": -0.1,
+            "y": 0.0,
+            "scale": 1.15,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "8f1bf19e",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c3287fd": {
+      "clip_id": "c3287fd",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 2.5
+      },
+      "timeline_range": {
+        "start": 36.5,
+        "end": 39.0
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "「余家介子城下。」"
+      },
+      "version_ids": []
+    },
+    "c366eb3": {
+      "clip_id": "c366eb3",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 40.0,
+        "end": 45.0
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "1959年，刘敦愿他们顺着这条线索，去找了。"
+      },
+      "version_ids": []
+    },
+    "cfcb5bf": {
+      "clip_id": "cfcb5bf",
+      "asset_id": "a5be2a8",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 48.0,
+        "end": 53.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "1cbb7ccc",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "155e6d09",
+          "kind": "fade",
+          "params": {
+            "in": 0.5,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c7b49ad": {
+      "clip_id": "c7b49ad",
+      "asset_id": "a18399a",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 53.0,
+        "end": 58.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "13749979",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": -0.05,
+            "scale": 1.05,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "0e9ba8b7",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c93e081": {
+      "clip_id": "c93e081",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.0
+      },
+      "timeline_range": {
+        "start": 50.0,
+        "end": 53.0
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "他们真的去了，但第一站——错了。"
+      },
+      "version_ids": []
+    },
+    "cd71376": {
+      "clip_id": "cd71376",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 2.5
+      },
+      "timeline_range": {
+        "start": 55.0,
+        "end": 57.5
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "没有找到龙山文化遗物。"
+      },
+      "version_ids": []
+    },
+    "c65bf1e": {
+      "clip_id": "c65bf1e",
+      "asset_id": "a7633de",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 58.0,
+        "end": 63.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "bb7014a0",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.15,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "135521eb",
+          "kind": "fade",
+          "params": {
+            "in": 0.5,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cc8cf66": {
+      "clip_id": "cc8cf66",
+      "asset_id": "a91fbf0",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 63.0,
+        "end": 68.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "cb7ce231",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "721f3d76",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c062ce3": {
+      "clip_id": "c062ce3",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 2.0
+      },
+      "timeline_range": {
+        "start": 60.0,
+        "end": 62.0
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "这一次，他们找到了。"
+      },
+      "version_ids": []
+    },
+    "c6f38cd": {
+      "clip_id": "c6f38cd",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.5
+      },
+      "timeline_range": {
+        "start": 64.0,
+        "end": 67.5
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "这里真的有龙山文化遗存。三里河遗址。"
+      },
+      "version_ids": []
+    },
+    "cff760b": {
+      "clip_id": "cff760b",
+      "asset_id": "a5a60bf",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 68.0,
+        "end": 72.0
+      },
+      "track_id": "v1",
+      "speed": 1.25,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "2a26f8a5",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "bf9cfe56",
+          "kind": "fade",
+          "params": {
+            "in": 0.5,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c5b4387": {
+      "clip_id": "c5b4387",
+      "asset_id": "a10ec6b",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 72.0,
+        "end": 75.0
+      },
+      "track_id": "v1",
+      "speed": 1.6666666666666667,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "2b40ea67",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.08,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "340390e8",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c94d61b": {
+      "clip_id": "c94d61b",
+      "asset_id": "ab8f17b",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 75.0,
+        "end": 78.0
+      },
+      "track_id": "v1",
+      "speed": 1.6666666666666667,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "ee49cda7",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.08,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "7b81e8e3",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "ce87aab": {
+      "clip_id": "ce87aab",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 2.5
+      },
+      "timeline_range": {
+        "start": 69.0,
+        "end": 71.5
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "4000多年前，这里有人生活。"
+      },
+      "version_ids": []
+    },
+    "c0a637a": {
+      "clip_id": "c0a637a",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.5
+      },
+      "timeline_range": {
+        "start": 73.0,
+        "end": 77.5
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "种粮、养猪、做陶器、吃饭、长大、老去。"
+      },
+      "version_ids": []
+    },
+    "c162833": {
+      "clip_id": "c162833",
+      "asset_id": "a55bc2b",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 78.0,
+        "end": 82.0
+      },
+      "track_id": "v1",
+      "speed": 1.25,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "d1e19e78",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "99c07742",
+          "kind": "fade",
+          "params": {
+            "in": 0.5,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c511ab5": {
+      "clip_id": "c511ab5",
+      "asset_id": "a8553d8",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 82.0,
+        "end": 88.0
+      },
+      "track_id": "v1",
+      "speed": 0.8333333333333334,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "5971ea5e",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": -0.05,
+            "scale": 1.15,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "a44126d1",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "ce2377a": {
+      "clip_id": "ce2377a",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.0
+      },
+      "timeline_range": {
+        "start": 80.0,
+        "end": 83.0
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "我们把这个古老的器形，重新做成了茶壶。"
+      },
+      "version_ids": []
+    },
+    "cd3d9d1": {
+      "clip_id": "cd3d9d1",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.5
+      },
+      "timeline_range": {
+        "start": 84.0,
+        "end": 87.5
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "它已经不是原来的东西，但我们觉得——"
+      },
+      "version_ids": []
+    },
+    "cf00fbf": {
+      "clip_id": "cf00fbf",
+      "asset_id": "a444f54",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 88.0,
+        "end": 90.0
+      },
+      "track_id": "v1",
+      "speed": 2.5,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "5c4b9654",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "98b2c4e1",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.0
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cac9a07": {
+      "clip_id": "cac9a07",
+      "asset_id": "",
+      "source_range": {
+        "start": 0.0,
+        "end": 1.2999999999999972
+      },
+      "timeline_range": {
+        "start": 88.5,
+        "end": 89.8
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "他们看到的是自己的日子。"
+      },
+      "version_ids": []
+    }
+  },
+  "relationships": [],
+  "problems": [],
+  "solutions": [],
+  "generations": [],
+  "publishing": {
+    "video_versions": [],
+    "cover": {},
+    "title": "他们拿着一幅假画，去寻找4000年前的人",
+    "description": "三里河 · 高凤翰 · 1745-1959",
+    "tags": [
+      "陶鬶",
+      "龙山文化",
+      "三里河",
+      "高凤翰",
+      "考古"
+    ],
+    "platform_copy": {
+      "douyin": "三里河 · 高凤翰 · 1745-1959"
+    },
+    "cost_report": {}
+  },
+  "extensions": {}
+}

@@ -1,0 +1,23 @@
+{
+  "operation_id": "op00014",
+  "who": "ai",
+  "at": "2026-08-24T07:58:02.468249",
+  "type": "volume",
+  "target": "c8d5377",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "volume": 1.2
+  },
+  "before": {
+    "volume": 0.9
+  },
+  "after": {
+    "volume": 1.2
+  },
+  "why": "AI 任务",
+  "tool": "audio.gain",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}

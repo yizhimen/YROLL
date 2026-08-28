@@ -1,0 +1,16 @@
+{
+  "version_id": "v1",
+  "parent": null,
+  "operation_ids": [
+    "op00001",
+    "op00002",
+    "op00003",
+    "op00004",
+    "op00005",
+    "op00006",
+    "op00007",
+    "op00008"
+  ],
+  "note": "AI 初剪：按故事线搭建 Timeline",
+  "created_at": "2026-08-24T00:52:32.022141"
+}

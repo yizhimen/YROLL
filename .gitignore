@@ -54,3 +54,10 @@ projects/*/*.jpg
 
 # GUI build output (会重新生成，1500+ 文件太大)
 gui/dist/
+
+
+# AI 模型权重（下载脚本重新拉）
+models/
+
+# Tauri 编译产物
+gui/src-tauri/target/

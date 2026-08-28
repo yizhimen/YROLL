@@ -1,0 +1,23 @@
+{
+  "operation_id": "op00015",
+  "who": "ai",
+  "at": "2026-08-24T08:31:02.031256",
+  "type": "analyze_loudness",
+  "target": "c8d5377",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "mean_db": -40.4,
+    "max_db": -24.3
+  },
+  "before": {},
+  "after": {
+    "mean_db": -40.4,
+    "max_db": -24.3
+  },
+  "why": "联调：真实素材响度",
+  "tool": "audio.loudness",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}

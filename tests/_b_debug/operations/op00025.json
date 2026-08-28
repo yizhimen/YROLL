@@ -1,0 +1,38 @@
+{
+  "operation_id": "op00025",
+  "who": "human",
+  "at": "2026-08-24T17:06:03.755966",
+  "type": "move",
+  "target": "c3859ee",
+  "time_range": {
+    "start": 66.5,
+    "end": 88.046667
+  },
+  "region": null,
+  "parameters": {
+    "timeline_range": {
+      "start": 66.5,
+      "end": 88.046667
+    },
+    "track_id": "v1"
+  },
+  "before": {
+    "timeline_range": {
+      "start": 73.83333333333334,
+      "end": 95.38000033333334
+    },
+    "track_id": "v1"
+  },
+  "after": {
+    "timeline_range": {
+      "start": 66.5,
+      "end": 88.046667
+    },
+    "track_id": "v1"
+  },
+  "why": "GUI 拖动",
+  "tool": "video.move",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "human"
+}

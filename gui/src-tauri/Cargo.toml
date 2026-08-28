@@ -1,0 +1,15 @@
+[package]
+name = "yroll"
+version = "0.1.0"
+description = "YROLL AI 桌面壳：内嵌后端进程 + 加载本地服务"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+opt-level = "s"
+# 不开 LTO：windows crate 体量大，lto 编译会撞本机 commit limit（0xc0000409 崩溃）

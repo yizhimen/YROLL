@@ -1,0 +1,38 @@
+{
+  "operation_id": "op00012",
+  "who": "ai",
+  "at": "2026-08-24T07:53:53.312811",
+  "type": "speed",
+  "target": "c8d5377",
+  "time_range": {
+    "start": 0.0,
+    "end": 2.555555555555556
+  },
+  "region": null,
+  "parameters": {
+    "speed": 1.2,
+    "timeline_range": {
+      "start": 0.0,
+      "end": 2.555555555555556
+    }
+  },
+  "before": {
+    "speed": 1.0,
+    "timeline_range": {
+      "start": 0.0,
+      "end": 3.066666666666667
+    }
+  },
+  "after": {
+    "speed": 1.2,
+    "timeline_range": {
+      "start": 0.0,
+      "end": 2.555555555555556
+    }
+  },
+  "why": "AI 任务",
+  "tool": "video.speed",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}

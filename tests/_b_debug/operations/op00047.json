@@ -1,0 +1,57 @@
+{
+  "operation_id": "op00047",
+  "who": "ai",
+  "at": "2026-08-24T20:00:59.993358",
+  "type": "add_clip",
+  "target": "c3bfa1b",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "clip_id": "c3bfa1b",
+    "asset_id": "",
+    "source_range": {
+      "start": 0.0,
+      "end": 1.3299999999999983
+    },
+    "timeline_range": {
+      "start": 95.77000000000001,
+      "end": 97.10000000000001
+    },
+    "track_id": "t1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {
+      "text": "生何靠 擺網裡永遠看不透"
+    },
+    "version_ids": []
+  },
+  "before": {},
+  "after": {
+    "clip_id": "c3bfa1b",
+    "asset_id": "",
+    "source_range": {
+      "start": 0.0,
+      "end": 1.3299999999999983
+    },
+    "timeline_range": {
+      "start": 95.77000000000001,
+      "end": 97.10000000000001
+    },
+    "track_id": "t1",
+    "speed": 1.0,
+    "volume": 1.0,
+    "transform": {},
+    "adjustments": [],
+    "context": {
+      "text": "生何靠 擺網裡永遠看不透"
+    },
+    "version_ids": []
+  },
+  "why": "真实工程验证：自动字幕",
+  "tool": "text.add_subtitle",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "ai"
+}
