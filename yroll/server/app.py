@@ -162,11 +162,77 @@ class _State:
         self.set(ProjectCore.create(root, name, intent=intent))
 
 
+class _MutationGateMiddleware:
+    """Unified gate: every non-GET mutation must pass Lease + Revision."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http':
+            await self.app(scope, receive, send)
+            return
+        method = scope['method'].upper()
+        path = scope['path']
+        if method in ('GET', 'HEAD', 'OPTIONS'):
+            await self.app(scope, receive, send)
+            return
+        if path.startswith('/lease') or path == '/mutation/check':
+            await self.app(scope, receive, send)
+            return
+        # 工程生命周期管理：初始化/切换无需 lease（创建新工程本身不可能持有该工程的 lease）
+        if path in ('/project/new', '/project/open', '/project'):
+            await self.app(scope, receive, send)
+            return
+        from starlette.responses import JSONResponse
+        from urllib.parse import parse_qs
+        qs = parse_qs((scope.get('query_string') or b'').decode('utf-8', errors='replace'))
+        session_id = (qs.get('sessionId') or [''])[0]
+        base_rev_raw = (qs.get('baseRevision') or [''])[0]
+        try:
+            base_rev = int(base_rev_raw) if base_rev_raw else None
+        except (TypeError, ValueError):
+            base_rev = None
+        st = _STATE.get('default')
+        if st is None:
+            response = JSONResponse({'detail': 'server state unavailable'}, status_code=500)
+            await response(scope, receive, send)
+            return
+        if not session_id:
+            response = JSONResponse({'detail': 'sessionId required for mutations (call /lease/acquire first)'}, status_code=403)
+            await response(scope, receive, send)
+            return
+        if base_rev is None:
+            response = JSONResponse({'detail': 'baseRevision query param required for mutations'}, status_code=400)
+            await response(scope, receive, send)
+            return
+        try:
+            from yroll.core.lease import require_edit_right
+            require_edit_right(st.core, session_id)
+        except Exception as e:
+            response = JSONResponse({'detail': f'lease rejected: {e}'}, status_code=403)
+            await response(scope, receive, send)
+            return
+        try:
+            from yroll.core.revision import check_project_revision as _cpr
+            _cpr(st.core, base_rev)
+        except Exception as e:
+            response = JSONResponse({'detail': f'revision conflict: {e}'}, status_code=409)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
+# Global state for middleware lookup
+_STATE: dict = {}
+
 def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
     core = ProjectCore.open(project_path)
     ProjectCore.ensure_default_tracks(core)  # 老工程补齐默认轨道
     st = _State(core, who)
+    _STATE.clear()
+    _STATE["default"] = st
     app = FastAPI(title="YROLL Server", version="0.1.0")
+    app.add_middleware(_MutationGateMiddleware)
 
     @app.post("/project/open")
     def open_project(path: str):

@@ -131,11 +131,20 @@ def test_mutation_check_returns_current_revision(app_client):
     app, core = app_client
     client = TestClient(app)
     initial_rev = get_current_revision(core)
+    # mutation/check is exempt from gate
     r = client.post(f'/mutation/check?baseRevision={initial_rev}')
     assert r.json()['ok'] is True
-    # Use API to add a track - that produces a real op
-    r = client.post('/tracks?kind=video&track_id=t_test')
+    # Acquire lease then add a track to bump revision (gate needs sessionId)
+    s = client.post('/lease/acquire?actor=human&mode=edit').json()
+    sid = s['sessionId']
+    # TestClient merges URL query + params, with params taking precedence.
+    # To preserve sessionId+baseRevision in URL, put them in params too.
+    r = client.post(
+        f'/tracks',
+        params={'sessionId': sid, 'baseRevision': initial_rev,
+                'kind': 'video', 'track_id': 't_test'})
     assert r.status_code == 200
+    # Now mutation/check with stale revision should report mismatch
     r = client.post(f'/mutation/check?baseRevision={initial_rev}')
     assert r.json()['ok'] is False
     assert r.json()['currentRevision'] == initial_rev + 1

@@ -54,7 +54,8 @@ def test_add_and_edit_subtitle(proj):
 
 
 def test_subtitle_rest_api(proj):
-    client = TestClient(create_app(proj.path))
+    from tests.conftest import _AuthedClient
+    client = _AuthedClient(TestClient(create_app(proj.path)))
     r = client.post("/subtitles", params={"text": "接口字幕", "start": 0, "end": 1.5})
     assert r.status_code == 200
     clip_id = r.json()["clip_id"]

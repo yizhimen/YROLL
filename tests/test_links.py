@@ -71,7 +71,8 @@ def test_links_api(tmp_path: Path):
     sub.context["text"] = "字幕内容"
     core.save_state()  # server 从磁盘重开工程，需落盘
 
-    client = TestClient(create_app(core.path))
+    from tests.conftest import _AuthedClient
+    client = _AuthedClient(TestClient(create_app(core.path)))
     r = client.post("/links/infer")
     assert r.status_code == 200 and r.json()["inferred"] == 1
 

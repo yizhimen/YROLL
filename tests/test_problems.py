@@ -66,7 +66,8 @@ def test_problem_api(tmp_path: Path):
     cmd = CommandLayer(core)
     clip = cmd.add_clip("a1", 0.0, 10.0, timeline_start=0.0)
 
-    client = TestClient(create_app(core.path))
+    from tests.conftest import _AuthedClient
+    client = _AuthedClient(TestClient(create_app(core.path)))
     r = client.post("/problems", json={
         "description": "声音太小", "category": "audio",
         "target_clip": clip.clip_id,
