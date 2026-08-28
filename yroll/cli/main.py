@@ -177,9 +177,30 @@ def cmd_render(args: argparse.Namespace) -> None:
     print(f"✓ 预览已渲染: {out}")
 
 
+def cmd_reality_test(args: argparse.Namespace) -> None:
+    """End-to-end reality test (v0.2 spec §36): Test A-G using real
+    synthetic video files. Exits 0 on PASS, 1 on FAIL.
+    """
+    import tempfile
+    import sys
+    from pathlib import Path
+
+    import pytest
+
+    code = pytest.main([
+        "tests/test_reality_v02.py",
+        "-v", "--tb=short",
+        "-x",  # stop on first failure
+    ])
+    sys.exit(0 if code == 0 else 1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="yroll")
     sub = parser.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("reality-test",
+                       help="端到端 Reality Test v0.2 (Test A-G)")
+    r.set_defaults(func=cmd_reality_test)
     p = sub.add_parser("ingest", help="扫描并理解素材目录")
     p.add_argument("source")
     p.add_argument("--name")
