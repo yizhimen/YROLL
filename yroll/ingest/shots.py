@@ -29,12 +29,18 @@ def detect_shots(asset: Asset, threshold: float = 27.0) -> list[Shot]:
         scenes = [(video.base_timecode, video.base_timecode + dur)]
 
     for i, (start, end) in enumerate(scenes):
+        # pyscenedetect >= 0.6: FrameTimecode.get_seconds() / get_frames()
+        # pyscenedetect <= 0.5: .seconds / .frame_num
+        s_sec = (start.get_seconds()
+                 if hasattr(start, "get_seconds") else start.seconds)
+        e_sec = (end.get_seconds()
+                 if hasattr(end, "get_seconds") else end.seconds)
         shots.append(
             Shot(
                 shot_id=f"{asset.asset_id}-s{i:03d}",
                 asset_id=asset.asset_id,
-                start=start.seconds,
-                end=end.seconds,
+                start=s_sec,
+                end=e_sec,
             )
         )
     return shots
