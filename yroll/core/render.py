@@ -417,9 +417,16 @@ def _write_srt(clips: list[Clip], texts: dict[str, str], out: Path,
 
 
 def render_preview(core: ProjectCore, out_path: str | Path,
-                   width: int = 1080, fps: int = 30,
+                   width: int = 0, fps: int = 0,
                    burn_subtitles: bool = False,
                    on_step=None) -> Path:
+    """Render the project timeline. If width/fps are 0, derive from Project.timebase."""
+    if width == 0:
+        width = core.project.width or 1080
+    if fps == 0:
+        fps_num = core.project.fps_num or 30
+        fps_den = core.project.fps_den or 1
+        fps = fps_num // fps_den if fps_den == 1 else fps_num / fps_den
     """on_step(label, done, total)：渲染进度回调（GUI 进度条用）。"""
     def step(label: str, done: int, total: int) -> None:
         if on_step:

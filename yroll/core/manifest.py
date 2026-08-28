@@ -240,6 +240,10 @@ class Project(BaseModel):
     name: str
     created_at: datetime = Field(default_factory=datetime.now)
     intent: dict[str, str] = Field(default_factory=dict)  # goal/audience/style
+    fps_num: int = 30
+    fps_den: int = 1
+    width: int = 1920
+    height: int = 1080
     assets: list[Asset] = Field(default_factory=list)
     timeline: Timeline = Field(default_factory=Timeline)
     clips: dict[str, Clip] = Field(default_factory=dict)
