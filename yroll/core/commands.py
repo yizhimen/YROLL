@@ -379,18 +379,28 @@ class CommandLayer:
         created: list[str] = []
         text_track = next((t for t in project.timeline.tracks
                            if t.kind == TrackKind.TEXT), None)
+        # Project fps for TimeMap (default 30 if not set)
+        from yroll.core.timebase import FrameTime, Rational
+        from yroll.core.timemap import TimeMap
+        proj_fps = Rational(getattr(project, 'fps_num', 30),
+                            getattr(project, 'fps_den', 1) or 1)
         for clip in candidates:
             segs = transcripts.get(clip.asset_id, [])
             sr, tr = clip.source_range, clip.timeline_range
+            tm = TimeMap.for_clip(clip, proj_fps)
             for seg in segs:
-                # 与源区间的交集
+                # 与源区间的交集（保留 seconds 因为 transcripts 是 ASR 输出，seconds 是事实）
                 s = max(seg["start"], sr.start)
                 e = min(seg["end"], sr.end)
                 if e - s < 0.3 or not seg.get("text", "").strip():
                     continue
-                # 源时间 → 时间轴时间（speed 映射）
-                tl_s = tr.start + (s - sr.start) / clip.speed
-                tl_e = tr.start + (e - sr.start) / clip.speed
+                # 源时间 → 时间轴时间（用 TimeMap 而非内联计算）
+                s_frame = FrameTime.from_seconds(s, proj_fps).frame
+                e_frame = FrameTime.from_seconds(e, proj_fps).frame
+                tl_s_frame = tm.timeline_from_source(s_frame)
+                tl_e_frame = tm.timeline_from_source(e_frame)
+                tl_s = tl_s_frame / proj_fps.as_float()
+                tl_e = tl_e_frame / proj_fps.as_float()
                 # 幂等：范围内已有字幕则跳过
                 if text_track and any(
                     (oc := project.clips.get(ocid)) and oc.context.get("text")
