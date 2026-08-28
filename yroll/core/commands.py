@@ -63,6 +63,48 @@ class CommandLayer:
                 overlap.append(cid)
         return overlap
 
+
+    def _fps(self) -> tuple[int, int]:
+        return (self.core.project.fps_num or 30, self.core.project.fps_den or 1)
+
+    def _frame_to_sec(self, frame: int) -> float:
+        n, d = self._fps()
+        return frame * d / n
+
+    def _sec_to_frame(self, sec: float) -> int:
+        n, d = self._fps()
+        return round(sec * n / d)
+
+    # ---------- Frame-based API (P0-01) ----------
+
+    def add_clip_frame(self, asset_id: str, src_start_frame: int, src_end_frame: int,
+                       timeline_start_frame: int, track_id: str = 'v1', why: str = '') -> 'Clip':
+        """Frame-based add_clip. Internally converts to seconds."""
+        return self.add_clip(
+            asset_id,
+            self._frame_to_sec(src_start_frame),
+            self._frame_to_sec(src_end_frame),
+            self._frame_to_sec(timeline_start_frame),
+            track_id, why)
+
+    def move_clip_frame(self, clip_id: str, timeline_start_frame: int, why: str = '') -> Operation:
+        """Frame-based move_clip."""
+        return self.move_clip(clip_id, self._frame_to_sec(timeline_start_frame), why=why)
+
+    def trim_clip_frame(self, clip_id: str, src_start_frame: int | None = None,
+                        src_end_frame: int | None = None, why: str = '') -> Operation:
+        """Frame-based trim_clip."""
+        return self.trim_clip(
+            clip_id,
+            new_source_start=self._frame_to_sec(src_start_frame) if src_start_frame is not None else None,
+            new_source_end=self._frame_to_sec(src_end_frame) if src_end_frame is not None else None,
+            why=why)
+
+    def split_clip_frame(self, clip_id: str, at_timeline_frame: int, why: str = '') -> tuple:
+        """Frame-based split_clip. at is timeline frame, NOT source frame."""
+        at_sec = self._frame_to_sec(at_timeline_frame)
+        return self.split_clip(clip_id, at_sec, why=why)
+
     def _check_no_overlap(self, track_id: str, start: float, end: float,
                            exclude_clip_id: str | None = None,
                            op_name: str = "operation") -> None:
