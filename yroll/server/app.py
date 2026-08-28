@@ -1134,6 +1134,36 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             raise HTTPException(400, "selection must include clip_ids or track_ids")
         return preview_mutation(st.core.project, sel, op, params)
 
+    # ---------- L0 Frame Preview (v0.2 §30) ----------
+    # GET /frame/preview?frame=N — what covers this timeline frame?
+    @app.get("/frame/preview")
+    def frame_preview(frame: int = 0):
+        from yroll.core.frame_preview import resolve_frame
+        from yroll.core.timebase import Rational
+        fps = Rational(st.core.project.fps_num,
+                       st.core.project.fps_den or 1)
+        pv = resolve_frame(st.core.project, frame, fps)
+        return {
+            "timeline_frame": pv.timeline_frame,
+            "is_black": pv.is_black(),
+            "video": {
+                "clip_id": pv.video_clip_id,
+                "track_id": pv.video_track_id,
+                "source_frame": pv.video_source_frame,
+                "asset_path": pv.video_asset_path,
+            } if pv.video_clip_id else None,
+            "audio": [
+                {"clip_id": cid, "source_frame": sf, "asset_path": ap}
+                for cid, sf, ap in zip(pv.audio_clip_ids,
+                                       pv.audio_source_frames,
+                                       pv.audio_asset_paths)
+            ],
+            "subtitles": [
+                {"clip_id": cid, "text": text}
+                for cid, text in zip(pv.subtitle_clip_ids, pv.subtitle_texts)
+            ],
+        }
+
     # ---------- Problem → Solution（产品灵魂） ----------
 
     @app.post("/problems")
