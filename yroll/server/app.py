@@ -1204,6 +1204,50 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         from yroll.core.keyboard import describe_keymap
         return {"bindings": describe_keymap()}
 
+    # ---------- Mutation Proposal (v0.2 §3 P3 + §29) ----------
+    @app.post("/proposals")
+    def create_proposal(req: dict):
+        from yroll.core.proposals import get_proposal_store
+        from yroll.core.selection import Selection
+        sel = Selection.from_clip_or_id(req.get("selection") or {})
+        store = get_proposal_store(st.core)
+        p = store.propose(st.core.project, sel,
+                          op=req.get("op", "move"),
+                          params=req.get("params") or {},
+                          reason=req.get("reason", ""))
+        return {"proposal_id": p.proposal_id,
+                "preview": p.preview,
+                "expires_at": p.expires_at,
+                "reason": p.reason}
+
+    @app.get("/proposals")
+    def list_proposals():
+        from yroll.core.proposals import get_proposal_store
+        store = get_proposal_store(st.core)
+        return {"pending": [
+            {"proposal_id": p.proposal_id,
+             "preview": p.preview,
+             "reason": p.reason,
+             "expires_at": p.expires_at}
+            for p in store.list_pending()
+        ]}
+
+    @app.post("/proposals/{proposal_id}/approve")
+    def approve_proposal(proposal_id: str, approved_by: str = "human"):
+        from yroll.core.proposals import get_proposal_store
+        store = get_proposal_store(st.core)
+        if not store.approve(proposal_id, approved_by=approved_by):
+            raise HTTPException(400, "proposal not pending or expired")
+        return {"ok": True, "proposal_id": proposal_id}
+
+    @app.post("/proposals/{proposal_id}/reject")
+    def reject_proposal(proposal_id: str, rejected_by: str = "human"):
+        from yroll.core.proposals import get_proposal_store
+        store = get_proposal_store(st.core)
+        if not store.reject(proposal_id, rejected_by=rejected_by):
+            raise HTTPException(400, "proposal not pending or already approved")
+        return {"ok": True, "proposal_id": proposal_id}
+
     # ---------- Problem → Solution（产品灵魂） ----------
 
     @app.post("/problems")
