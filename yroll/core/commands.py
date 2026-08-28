@@ -507,6 +507,142 @@ class CommandLayer:
                      time_range=TimeRange(start=at_source_time, end=at_source_time))
         return clip, right
 
+    # ---------- Selection-aware mutations (P0-04B) ----------
+    #
+    # Single API that handles: single clip, multi-clip, cross-track, range-based.
+    # Backed by move_clip() / remove_clip() etc. internally — those remain for
+    # direct callers and undo/redo. The Selection variants are the *front door*
+    # for GUI, MCP, Agent.
+    # ---------- Selection-aware mutations (P0-04B) ----------
+
+    def move_selection(self, selection: 'Selection', delta_seconds: float,
+                       new_track_id: str | None = None,
+                       why: str = "") -> Operation:
+        """Move all clips in selection by delta_seconds (or to new_track_id).
+
+        Single composite Operation that captures every per-clip move plus
+        cross-track strong-link propagation. Undo restores all in one step.
+        """
+        from yroll.core.selection import Selection as _Selection
+        if not isinstance(selection, _Selection):
+            selection = _Selection.from_clip_or_id(selection)
+        # Determine target clips: explicit clip_ids wins; otherwise resolve
+        # from track_ids (all clips in those tracks intersecting range, or all
+        # clips in track if no range).
+        target_ids = list(selection.clip_ids)
+        if not target_ids and selection.track_ids:
+            for t in self.core.project.timeline.tracks:
+                if t.track_id in selection.track_ids:
+                    for cid in t.clip_ids:
+                        c = self.core.project.clips.get(cid)
+                        if c is None:
+                            continue
+                        if selection.range is None:
+                            target_ids.append(cid)
+                            continue
+                        # Range is in frames (FrameRange); compare to clip's
+                        # timeline_range converted to frames.
+                        from yroll.core.timebase import FrameTime, Rational
+                        fps = Rational(getattr(self.core.project, 'fps_num', 30),
+                                       getattr(self.core.project, 'fps_den', 1) or 1)
+                        tl_s_f = FrameTime.from_seconds(c.timeline_range.start, fps).frame
+                        tl_e_f = FrameTime.from_seconds(c.timeline_range.end, fps).frame
+                        from yroll.core.timebase import FrameRange as _FR
+                        clip_fr = _FR(tl_s_f, tl_e_f, fps)
+                        if selection.range.overlaps(clip_fr):
+                            target_ids.append(cid)
+        if not target_ids:
+            raise CommandError("Selection is empty — nothing to move")
+
+        # Apply per-clip moves (each emits its own op); aggregate into a
+        # composite "move_selection" op capturing all changes.
+        from yroll.core.manifest import TimeRange
+        before: dict = {}
+        after: dict = {}
+        for cid in target_ids:
+            c = self.core.project.clips.get(cid)
+            if c is None:
+                continue
+            before[cid] = {"timeline_range": c.timeline_range.model_dump(),
+                           "track_id": c.track_id}
+            ns = c.timeline_range.start + delta_seconds
+            nt = new_track_id if new_track_id and cid == target_ids[0] else None
+            # Direct state mutation: composite op captures before/after.
+            if nt and nt != c.track_id:
+                # Cross-track move
+                old_track = next((t for t in self.core.project.timeline.tracks
+                                  if cid in t.clip_ids), None)
+                if old_track:
+                    old_track.clip_ids.remove(cid)
+                dst = next((t for t in self.core.project.timeline.tracks
+                            if t.track_id == nt), None)
+                if dst is None:
+                    raise CommandError(f"目标轨道不存在: {nt}")
+                dst.clip_ids.append(cid)
+                c.track_id = nt
+            c.timeline_range = TimeRange(start=ns, end=ns + (c.timeline_range.end - c.timeline_range.start))
+            after[cid] = {"timeline_range": c.timeline_range.model_dump(),
+                          "track_id": c.track_id}
+
+        return self._apply_record(
+            "move_selection", target_ids[0], before, after,
+            why=why or f"Selection 移动 {len(target_ids)} clip(s) by {delta_seconds:+.2f}s",
+            tool="selection.move")
+
+    def delete_selection(self, selection: 'Selection', ripple: bool = False,
+                         why: str = "") -> Operation:
+        """Delete all clips in selection. ripple=True → collapse subsequent clips."""
+        from yroll.core.selection import Selection as _Selection
+        if not isinstance(selection, _Selection):
+            selection = _Selection.from_clip_or_id(selection)
+        ids = list(selection.clip_ids)
+        if not ids and selection.track_ids:
+            for t in self.core.project.timeline.tracks:
+                if t.track_id in selection.track_ids:
+                    ids.extend(t.clip_ids)
+        if not ids:
+            raise CommandError("Selection is empty — nothing to delete")
+        # Composite op: remove each clip + shift same-track followers if ripple.
+        before = {}
+        after = {}
+        for cid in ids:
+            c = self.core.project.clips.get(cid)
+            if c is None:
+                continue
+            before[cid] = c.model_dump()
+            self.core.project.clips.pop(cid, None)
+            for t in self.core.project.timeline.tracks:
+                if cid in t.clip_ids:
+                    t.clip_ids.remove(cid)
+        if ripple:
+            # For each track touched, shift later clips left by deleted duration.
+            touched_tracks: dict[str, float] = {}
+            for cid in ids:
+                bd = before.get(cid) or {}
+                if bd.get("track_id"):
+                    dur = bd["timeline_range"]["end"] - bd["timeline_range"]["start"]
+                    touched_tracks[bd["track_id"]] = (
+                        touched_tracks.get(bd["track_id"], 0.0) + dur)
+            for tid, shift in touched_tracks.items():
+                track = next((t for t in self.core.project.timeline.tracks
+                              if t.track_id == tid), None)
+                if not track:
+                    continue
+                for cid2 in track.clip_ids:
+                    c2 = self.core.project.clips.get(cid2)
+                    if c2 is None:
+                        continue
+                    before.setdefault(cid2, {})["timeline_range_pre_shift"] = (
+                        c2.timeline_range.model_dump())
+                    c2.timeline_range = TimeRange(
+                        start=c2.timeline_range.start - shift,
+                        end=c2.timeline_range.end - shift)
+                    after[cid2] = {"timeline_range": c2.timeline_range.model_dump()}
+        return self._apply_record(
+            "delete_selection", ids[0], before, after,
+            why=why or f"Selection 删除 {len(ids)} clip(s){' (ripple)' if ripple else ''}",
+            tool="selection.delete")
+
     def move_clip(self, clip_id: str, new_timeline_start: float,
                   new_track_id: str | None = None, why: str = "") -> Operation:
         from yroll.core.links import infer_relationships

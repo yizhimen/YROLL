@@ -465,6 +465,34 @@ class ProjectCore:
                             t.clip_ids.remove(cid)
             if aid:
                 p.assets = [a for a in p.assets if a.asset_id != aid]
+        elif op_type in ("move_selection", "delete_selection") and before:
+            # P0-04B: atomic composite Selection op. Restore every touched clip.
+            from yroll.core.manifest import TimeRange
+            for cid, pre in before.items():
+                c = p.clips.get(cid)
+                if c is None:
+                    # Was deleted by delete_selection; restore from dump
+                    if "timeline_range" in pre and "source_range" in pre:
+                        from yroll.core.manifest import Clip
+                        p.clips[cid] = Clip.model_validate(pre)
+                        # Re-attach to original track
+                        orig_tid = pre.get("track_id", "v1")
+                        track = next((t for t in p.timeline.tracks
+                                      if t.track_id == orig_tid), None)
+                        if track and cid not in track.clip_ids:
+                            track.clip_ids.append(cid)
+                    continue
+                if "timeline_range" in pre:
+                    c.timeline_range = TimeRange(**pre["timeline_range"])
+                if "track_id" in pre and pre["track_id"] != c.track_id:
+                    cur = next((t for t in p.timeline.tracks
+                                if cid in t.clip_ids), None)
+                    dst = next((t for t in p.timeline.tracks
+                                if t.track_id == pre["track_id"]), None)
+                    if cur and dst:
+                        cur.clip_ids.remove(cid)
+                        dst.clip_ids.append(cid)
+                        c.track_id = pre["track_id"]
         elif op_type in ("track_mute", "track_lock"):
             track = next((t for t in p.timeline.tracks
                           if t.track_id == op.target), None)
