@@ -1297,6 +1297,25 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         return lease_status(st.core,
                             client_known_revision=client_known_revision)
 
+    # ---------- Agent Action Audit (v0.2 §28 + P2 Evaluation) ----------
+    @app.get("/audit/since/{operation_id}")
+    def audit_since_endpoint(operation_id: str,
+                              previewed: bool = False):
+        from yroll.core.audit import audit_since
+        return audit_since(st.core, since_operation_id=operation_id,
+                            previewed=previewed)
+
+    @app.get("/audit/last")
+    def audit_last(n: int = 1, previewed: bool = False):
+        """Audit the last n operations as a single batch."""
+        from yroll.core.audit import audit_batch
+        ops = st.core.operations()
+        batch = ops[-n:] if n > 0 else []
+        if not batch:
+            return {"actor": "agent", "operations": 0,
+                    "summary": "no-op", "details": []}
+        return audit_batch(st.core, batch, previewed=previewed)
+
     # ---------- Problem → Solution（产品灵魂） ----------
 
     @app.post("/problems")
