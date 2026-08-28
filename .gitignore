@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+*.egg
+
+# Node
+node_modules/
+.pnpm-store/
+.vite/
+.turbo/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# YROLL runtime data
+projects/*/cache/
+projects/*/generated/
+projects/*/operations/
+projects/*/versions/
+projects/*/preview.mp4
+projects/*/*.mp4
+projects/*/*.jpg
+*.log
+.env
+.env.local
+
+# Reference projects (cloned, don't push)
+# (kept in D:\cc\YROLL\参考\ but we can keep them tracked or not - your call)
+
+
+# 第三方参考项目源码（太大，单独 git 或别推）
+参考/
+
+
+# GUI build output (会重新生成，1500+ 文件太大)
+gui/dist/
