@@ -27,17 +27,28 @@ ApprovalHook = Callable[[dict], bool]
 
 
 class Task:
-    """一次用户输入 → 多轮 Turn 直到模型不再给动作或达到上限。"""
+    """一次用户输入 → 多轮 Turn 直到模型不再给动作或达到上限。
+
+    Mutation Gate (audit §6.5): when constructed with `session_id`, the Task
+    enforces Edit Lease on every action applied. When `expected_base_revision`
+    is also given, every action also checks that the project hasn't drifted
+    beneath us. Without these, the Task falls back to legacy behavior (used
+    for tests that don't go through the HTTP gate).
+    """
 
     def __init__(self, cmd: CommandLayer, system: str,
                  max_turns: int = 4,
                  on_event: EventHandler | None = None,
-                 approval_hook: ApprovalHook | None = None):
+                 approval_hook: ApprovalHook | None = None,
+                 session_id: str | None = None,
+                 expected_base_revision: int | None = None):
         self.cmd = cmd
         self.system = system
         self.max_turns = max_turns
         self.on_event = on_event or (lambda e: None)
         self.approval_hook = approval_hook
+        self.session_id = session_id
+        self.expected_base_revision = expected_base_revision
         self.events: list[dict] = []
 
     def _emit(self, type_: str, **data) -> None:
@@ -116,7 +127,32 @@ class Task:
     def _apply_batch(self, actions: list[dict],
                      all_applied: list, all_errors: list,
                      problems: list) -> list[str]:
-        """执行一批动作，结果逐条落日志/事件，返回人读的执行结果行。"""
+        """执行一批动作，结果逐条落日志/事件，返回人读的执行结果行。
+
+        Mutation Gate (audit §6.5): when session_id is set, enforce Lease +
+        Revision before executing any action. Returns an error row and skips
+        the action if gate fails — Task does NOT abort, since one bad action
+        shouldn't kill the whole batch.
+        """
+        if self.session_id:
+            from yroll.core.lease import require_edit_right
+            try:
+                require_edit_right(self.cmd.core, self.session_id)
+            except Exception as e:
+                err = f"[gate] lease rejected: {e}"
+                all_errors.append(err)
+                self._emit("gate_rejected", reason="lease", error=str(e))
+                return [err]
+            if self.expected_base_revision is not None:
+                from yroll.core.revision import check_project_revision
+                try:
+                    check_project_revision(self.cmd.core,
+                                           self.expected_base_revision)
+                except Exception as e:
+                    err = f"[gate] revision conflict: {e}"
+                    all_errors.append(err)
+                    self._emit("gate_rejected", reason="revision", error=str(e))
+                    return [err]
         results = []
         for a in actions:
             if a.get("op") in HIGH_RISK_OPS and not self._approve(a):

@@ -123,6 +123,8 @@ class ChatReq(BaseModel):
     message: str
     selected_clip: str | None = None
     playhead: float | None = None
+    sessionId: str | None = None
+    baseRevision: int | None = None
 
 
 class ProblemReq(BaseModel):
@@ -701,7 +703,13 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         if req.playhead is not None:
             ctx += f"\n【播放头位置】{req.playhead:.1f}s（时间轴时间）"
 
-        task = Task(CommandLayer(st.core, who=Actor.AI), build_system(req.message))
+        # Mutation Gate (audit §6.5): chat 是另一条 mutation path，必须强制 Lease+Revision
+        task = Task(
+            CommandLayer(st.core, who=Actor.AI),
+            build_system(req.message),
+            session_id=req.sessionId,
+            expected_base_revision=req.baseRevision,
+        )
         result = task.run(ctx, req.message)
         st.core.save_state()
         return result
@@ -786,9 +794,12 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
                                     await ws.send_json(queue.get_nowait())
                                 break
 
+                # Mutation Gate (audit §6.5): WS chat 也是 mutation path，必须走 Lease+Revision
                 task = Task(CommandLayer(st.core, who=Actor.AI),
                             system,
-                            on_event=on_event, approval_hook=approval_hook)
+                            on_event=on_event, approval_hook=approval_hook,
+                            session_id=req.get("sessionId"),
+                            expected_base_revision=req.get("baseRevision"))
                 recv_task = asyncio.create_task(receiver())
 
                 if req.get("plan"):
