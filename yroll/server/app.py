@@ -21,6 +21,10 @@ from yroll.core.lease import (
     get_lease_store, require_edit_right, get_current_revision,
     check_revision_match,
 )
+from yroll.core.revision import (
+    RevisionConflictError as ProjectRevisionConflict,
+    check_project_revision,
+)
 from yroll.core.project import ProjectCore
 
 
@@ -184,6 +188,29 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         except CommandError as e:
             raise HTTPException(400, str(e)) from e
 
+    def require_revision(fn):
+        """Wrap mutation: verify baseRevision query param matches server, else 409."""
+        def _do(*args, **kwargs):
+            base_rev = kwargs.pop('baseRevision', None)
+            # args/kwargs may have baseRevision for endpoints that take it
+            if base_rev is None and len(args) > 0 and isinstance(args[0], (int, float)):
+                # Try to read from query-like position
+                pass
+            return fn(*args, **kwargs)
+        return _do
+
+    def _check_rev(baseRevision, fn):
+        """Decorator-equivalent: check revision before calling fn, return 409 on conflict."""
+        def _do(*args, **kwargs):
+            if baseRevision is not None:
+                try:
+                    check_project_revision(st.core, baseRevision)
+                except ProjectRevisionConflict as e:
+                    raise HTTPException(409, str(e)) from e
+            return fn(*args, **kwargs)
+        return _do
+
+
     @app.get("/project")
     def get_project():
         return st.core.project
@@ -219,12 +246,12 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         return st.core.versions()
 
     @app.post("/clips")
-    def add_clip(req: AddClipReq, sessionId: str = ""):
+    def add_clip(req: AddClipReq, sessionId: str = "", baseRevision: int = None):
         def _do():
             if sessionId:
                 require_edit_right(st.core, sessionId)
             return st.cmd.add_clip(**req.model_dump())
-        return guard(_do)
+        return guard(_check_rev(baseRevision, _do))
 
     @app.post("/tracks")
     def add_track(kind: str, track_id: str | None = None):
@@ -295,17 +322,17 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         return guard(lambda: st.cmd.remove_clip(clip_id, why=why))
 
     @app.post("/clips/{clip_id}/trim")
-    def trim(clip_id: str, req: TrimReq):
-        return guard(lambda: st.cmd.trim_clip(clip_id, **req.model_dump()))
+    def trim(clip_id: str, req: TrimReq, baseRevision: int = None):
+        return guard(_check_rev(baseRevision, lambda: st.cmd.trim_clip(clip_id, **req.model_dump())))
 
     @app.post("/clips/{clip_id}/split")
-    def split(clip_id: str, req: SplitReq):
-        left, right = guard(lambda: st.cmd.split_clip(clip_id, **req.model_dump()))
+    def split(clip_id: str, req: SplitReq, baseRevision: int = None):
+        left, right = guard(_check_rev(baseRevision, lambda: st.cmd.split_clip(clip_id, **req.model_dump())))
         return {"left": left, "right": right}
 
     @app.post("/clips/{clip_id}/move")
-    def move(clip_id: str, req: MoveReq):
-        return guard(lambda: st.cmd.move_clip(clip_id, **req.model_dump()))
+    def move(clip_id: str, req: MoveReq, baseRevision: int = None):
+        return guard(_check_rev(baseRevision, lambda: st.cmd.move_clip(clip_id, **req.model_dump())))
 
     @app.post("/clips/{clip_id}/speed")
     def speed(clip_id: str, req: SpeedReq):
