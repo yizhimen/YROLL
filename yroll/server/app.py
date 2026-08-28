@@ -448,6 +448,33 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             raise HTTPException(404, f"operation 不存在: {req.operation_id}")
         return op
 
+    # ---------- History API (P0-08): external undo/redo ----------
+    @app.get("/history/state")
+    def history_state():
+        from yroll.core.history import HistoryAPI
+        return HistoryAPI(st.core).state()
+
+    @app.post("/history/undo")
+    def history_undo(why: str = ""):
+        from yroll.core.history import HistoryAPI
+        rev = HistoryAPI(st.core).undo(who=who.value, why=why)
+        if rev is None:
+            raise HTTPException(400, "no operation to undo")
+        return rev
+
+    @app.post("/history/redo")
+    def history_redo(why: str = ""):
+        from yroll.core.history import HistoryAPI
+        redone = HistoryAPI(st.core).redo(who=who.value, why=why)
+        if redone is None:
+            raise HTTPException(400, "no operation to redo")
+        return redone
+
+    @app.get("/history")
+    def history_log():
+        from yroll.core.history import HistoryAPI
+        return {"operations": HistoryAPI(st.core).history()}
+
     _render_job: dict = {"status": "idle", "step": "", "done": 0, "total": 1,
                          "error": "", "preview": ""}
 
