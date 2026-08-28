@@ -1248,6 +1248,48 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             raise HTTPException(400, "proposal not pending or already approved")
         return {"ok": True, "proposal_id": proposal_id}
 
+    # ---------- Story / Beat Model (v0.2 §13, §39 P2) ----------
+    @app.get("/beats")
+    def list_beats():
+        from yroll.core.story import list_beats as _lb
+        return {"beats": [b.to_dict() for b in _lb(st.core.project)]}
+
+    @app.post("/beats")
+    def create_beat(label: str, kind: str,
+                     start_frame: int, end_frame: int,
+                     intent: str = "", color: str = "#a78bfa",
+                     note: str = ""):
+        from yroll.core.story import add_beat
+        b = add_beat(st.core.project, label, kind,
+                     start_frame, end_frame,
+                     intent=intent, color=color, note=note)
+        st.core.save_state()
+        return b.to_dict()
+
+    @app.delete("/beats/{beat_id}")
+    def delete_beat(beat_id: str):
+        from yroll.core.story import remove_beat
+        if not remove_beat(st.core.project, beat_id):
+            raise HTTPException(404, f"beat 不存在: {beat_id}")
+        st.core.save_state()
+        return {"ok": True}
+
+    @app.get("/beats/at/{frame}")
+    def beat_at_frame(frame: int):
+        from yroll.core.story import beat_at_frame
+        b = beat_at_frame(st.core.project, frame)
+        return b.to_dict() if b else {"beat": None}
+
+    @app.post("/beats/suggest")
+    def suggest_beats():
+        from yroll.core.story import suggest_beat_boundaries
+        from yroll.core.timebase import Rational
+        fps = Rational(st.core.project.fps_num,
+                       st.core.project.fps_den or 1)
+        return {"suggestions": [
+            b.to_dict() for b in suggest_beat_boundaries(st.core.project, fps)
+        ]}
+
     # ---------- Problem → Solution（产品灵魂） ----------
 
     @app.post("/problems")
