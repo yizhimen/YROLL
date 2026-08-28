@@ -4,6 +4,7 @@ import Timeline from "./components/Timeline";
 import ChatPanel from "./components/ChatPanel";
 import ClipWorkspace from "./components/ClipWorkspace";
 import MenuBar from "./components/MenuBar";
+import EditLease from "./components/EditLease";
 import AssetPanel from "./components/AssetPanel";
 import OpsPanel from "./components/OpsPanel";
 import PreviewPlayer, { AspectRatio } from "./components/PreviewPlayer";
@@ -429,7 +430,8 @@ export default function App() {
         <button onClick={() => run(() => api.commit("GUI 手动存档"), "已存版本")}>存版本</button>
       </div>
 
-      <MenuBar
+      <EditLease />
+        <MenuBar
         hasClip={!!clip}
         onOpenProject={() => {
           const path = window.prompt("工程目录路径（含 current.json）：");

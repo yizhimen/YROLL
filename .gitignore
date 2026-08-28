@@ -61,3 +61,6 @@ models/
 
 # Tauri 编译产物
 gui/src-tauri/target/
+
+# TypeScript build cache
+tsconfig.tsbuildinfo

@@ -268,4 +268,29 @@ export const api = {
   importJianying: (draftDir: string) =>
     req<{ assets: number; clips: number; tracks: number; skipped: number }>(
       `/import/jianying?draft_dir=${encodeURIComponent(draftDir)}`, { method: "POST" }),
+  // === Edit Lease (P0-10) ===
+  getLease: () =>
+    req<{ heldBy: string | null; sessionId: string | null; mode: string | null;
+           actor: string | null; baseRevision: number; isAlive: boolean;
+           humanLabel: string }>('/lease'),
+  acquireLease: (actor: 'human' | 'agent' = 'human', mode: 'edit' | 'propose' | 'observe' = 'edit',
+                  baseRevision?: number, humanLabel: string = 'User') =>
+    req<{ ok: boolean; sessionId?: string; actor?: string; mode?: string; baseRevision?: number }>(
+      '/lease/acquire?' + new URLSearchParams({ actor, mode,
+        ...(baseRevision !== undefined ? { baseRevision: String(baseRevision) } : {}),
+        humanLabel }).toString(),
+      { method: 'POST' }),
+  releaseLease: (sessionId: string) =>
+    req<{ ok: boolean }>('/lease/release?sessionId=' + sessionId, { method: 'POST' }),
+  handoffLease: (fromSessionId: string, toActor: 'human' | 'agent' = 'agent',
+                  toMode: 'edit' | 'propose' | 'observe' = 'edit', toLabel: string = 'Claude') =>
+    req<{ ok: boolean; sessionId?: string; actor?: string; mode?: string; humanLabel?: string }>(
+      '/lease/handoff?' + new URLSearchParams({ fromSessionId: fromSessionId, toActor, toMode, toLabel }).toString(),
+      { method: 'POST' }),
+  mutationCheck: (baseRevision: number, sessionId: string = '') =>
+    req<{ ok: boolean; currentRevision?: number; error?: string }>(
+      '/mutation/check?baseRevision=' + baseRevision +
+      (sessionId ? '&sessionId=' + sessionId : ''),
+      { method: 'POST' }),
 };
+

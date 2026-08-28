@@ -15,6 +15,12 @@ from pydantic import BaseModel
 
 from yroll.core.commands import CommandError, CommandLayer
 from yroll.core.manifest import Actor, Region, TimeRange
+from yroll.core.lease import (
+    LeaseStore, LeaseMode, Actor as LeaseActor,
+    LeaseError, LeaseConflictError, LeaseExpiredError,
+    get_lease_store, require_edit_right, get_current_revision,
+    check_revision_match,
+)
 from yroll.core.project import ProjectCore
 
 
@@ -213,8 +219,12 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         return st.core.versions()
 
     @app.post("/clips")
-    def add_clip(req: AddClipReq):
-        return guard(lambda: st.cmd.add_clip(**req.model_dump()))
+    def add_clip(req: AddClipReq, sessionId: str = ""):
+        def _do():
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            return st.cmd.add_clip(**req.model_dump())
+        return guard(_do)
 
     @app.post("/tracks")
     def add_track(kind: str, track_id: str | None = None):
@@ -443,6 +453,70 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         """所有 preset 一次性拉取（字体/字幕样式/转场/滤镜/音效/导出/视窗比例）。"""
         from yroll.core.presets import all_presets
         return all_presets()
+
+    # ---------- Edit Lease (P0-10): editing-rights management ----------
+    @app.get("/lease")
+    def get_lease():
+        ls = get_lease_store(st.core).get(st.core.project.project_id)
+        if ls is None:
+            return {"heldBy": None, "sessionId": None, "mode": None,
+                    "actor": None, "baseRevision": get_current_revision(st.core),
+                    "isAlive": False, "humanLabel": ""}
+        return {"heldBy": ls.actor.value, "sessionId": ls.session_id,
+                "mode": ls.mode.value, "actor": ls.actor.value,
+                "baseRevision": ls.base_revision, "isAlive": ls.is_alive(LeaseStore.HEARTBEAT_TTL),
+                "humanLabel": ls.human_label,
+                "acquiredAt": ls.acquired_at, "lastHeartbeat": ls.last_heartbeat}
+
+    @app.post("/lease/acquire")
+    def acquire_lease(actor: str = "human", mode: str = "edit",
+                       baseRevision: int = -1, humanLabel: str = ""):
+        if baseRevision < 0:
+            baseRevision = get_current_revision(st.core)
+        try:
+            ls = get_lease_store(st.core).acquire(
+                st.core.project.project_id,
+                LeaseActor(actor), LeaseMode(mode), baseRevision, humanLabel)
+            return {"ok": True, "sessionId": ls.session_id,
+                    "actor": ls.actor.value, "mode": ls.mode.value,
+                    "baseRevision": ls.base_revision}
+        except LeaseConflictError as e:
+            raise HTTPException(409, str(e))
+
+    @app.post("/lease/release")
+    def release_lease(sessionId: str):
+        ok = get_lease_store(st.core).release(st.core.project.project_id, sessionId)
+        return {"ok": ok}
+
+    @app.post("/lease/heartbeat")
+    def heartbeat_lease(sessionId: str):
+        ok = get_lease_store(st.core).heartbeat(st.core.project.project_id, sessionId)
+        return {"ok": ok}
+
+    @app.post("/lease/handoff")
+    def handoff_lease(fromSessionId: str, toActor: str = "agent",
+                       toMode: str = "edit", toLabel: str = ""):
+        try:
+            ls = get_lease_store(st.core).handoff(
+                st.core.project.project_id, fromSessionId,
+                LeaseActor(toActor), LeaseMode(toMode), toLabel)
+            return {"ok": True, "sessionId": ls.session_id,
+                    "actor": ls.actor.value, "mode": ls.mode.value,
+                    "humanLabel": ls.human_label}
+        except (LeaseError, LeaseExpiredError) as e:
+            raise HTTPException(409, str(e))
+
+    @app.post("/mutation/check")
+    def mutation_check(baseRevision: int, sessionId: str = ""):
+        try:
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            check_revision_match(st.core, baseRevision)
+            return {"ok": True, "currentRevision": get_current_revision(st.core)}
+        except (LeaseError, LeaseConflictError) as e:
+            return {"ok": False, "error": str(e),
+                    "currentRevision": get_current_revision(st.core)}
+
 
     # ---------- 本地字体导入 ----------
     @app.post("/fonts/import")
