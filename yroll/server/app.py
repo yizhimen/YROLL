@@ -1290,6 +1290,13 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             b.to_dict() for b in suggest_beat_boundaries(st.core.project, fps)
         ]}
 
+    # ---------- Lease Status (v0.2 §24-27) ----------
+    @app.get("/ui/status")
+    def ui_status(client_known_revision: int | None = None):
+        from yroll.core.lease_status import lease_status
+        return lease_status(st.core,
+                            client_known_revision=client_known_revision)
+
     # ---------- Problem → Solution（产品灵魂） ----------
 
     @app.post("/problems")
