@@ -1,5 +1,7 @@
 // YROLL Manifest v0.1 对应的 TS 类型（与 yroll/core/manifest.py 对齐）
 
+import { sessionStore, refreshSessionFromServer, currentGate } from "./session";
+
 export interface TimeRange { start: number; end: number }
 
 export interface Asset {
@@ -81,6 +83,79 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
   return r.json();
+}
+
+// --- Mutation Gate envelope (YROLL-Editor-Foundation-v0.2.md §二) ---
+//
+// Every mutation MUST go through this envelope so sessionId +
+// baseRevision are injected automatically. Components no longer
+// compose URLs that include those — the envelope owns it.
+//
+// Behavior:
+//   - 200/2xx: bump local revision from server's `currentRevision`
+//     (or by fetching /operations if response doesn't carry it).
+//   - 403 (no sessionId): surface to UI as "lease required".
+//   - 409 (revision conflict): mark session conflict for top bar.
+//   - other 4xx: rethrow as before.
+
+interface MutationResult<R> {
+  ok: boolean;
+  status: number;
+  data?: R;
+  gateError?: "no_session" | "no_revision" | "revision_conflict"
+              | "lease_rejected" | null;
+}
+
+async function mutate<R>(
+  method: "POST" | "DELETE" | "PATCH" | "PUT",
+  path: string,
+  body?: unknown,
+): Promise<R> {
+  const { sessionId, baseRevision } = currentGate();
+  const url = new URL(path, window.location.origin);
+  if (sessionId) url.searchParams.set("sessionId", sessionId);
+  url.searchParams.set("baseRevision", String(baseRevision));
+  let init: RequestInit = {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  };
+  let r: Response;
+  try {
+    r = await fetch(url.toString(), init);
+  } catch (e: any) {
+    throw new Error(`network: ${e?.message ?? e}`);
+  }
+  if (!r.ok) {
+    // Translate gate errors into structured info for UI
+    if (r.status === 403) {
+      const text = await r.text();
+      if (text.includes("sessionId required")) {
+        refreshSessionFromServer(null);
+        throw new Error("gate: session required (call /lease/acquire first)");
+      }
+      if (text.includes("lease rejected")) {
+        throw new Error(`gate: ${text}`);
+      }
+    }
+    if (r.status === 400) {
+      const text = await r.text();
+      if (text.includes("baseRevision query param required")) {
+        throw new Error("gate: baseRevision required");
+      }
+    }
+    if (r.status === 409) {
+      refreshSessionFromServer(null);
+      throw new Error(`gate: revision conflict (${await r.text()})`);
+    }
+    throw new Error(`${r.status}: ${await r.text()}`);
+  }
+  // Best-effort revision refresh: read /operations to count.
+  try {
+    const ops = await fetch("/operations").then((rr) => rr.ok ? rr.json() : null);
+    if (Array.isArray(ops)) refreshSessionFromServer(ops.length);
+  } catch { /* ignore */ }
+  return r.json() as Promise<R>;
 }
 
 export const api = {
