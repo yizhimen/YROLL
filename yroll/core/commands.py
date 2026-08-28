@@ -130,6 +130,36 @@ class CommandLayer:
         )
         return self.core.log(op)
 
+    # ---------- Composite Mutation Helpers (P0-04D: one user intent = one Op) ----------
+    #
+    # _apply_record(): for composite commands that touch multiple objects in
+    # one user intent (replace_voice, remove_silence, ripple_delete ...),
+    # call _apply_record() instead of _record() for the OUTER composite op.
+    # Inside the block, perform the inner state changes WITHOUT calling
+    # _record() (so they don't emit their own ops). The single outer op then
+    # captures the entire before→after for atomic undo/redo.
+    #
+    # For state inspection helpers (rendering preview, impact preview), the
+    # composite op's `before`/`after` describes both primary and side effects.
+    # ---------- Composite Mutation Helpers (P0-04D) ----------
+
+    def _apply_record(self, type_: str, target: str, before: dict, after: dict,
+                     why: str = "", time_range: TimeRange | None = None,
+                     region: Region | None = None, cost: float = 0.0,
+                     tool: str | None = None) -> Operation:
+        """Record a composite Operation WITHOUT intermediate per-step ops.
+        The before/after dicts are expected to capture all state changes
+        performed by this user intent. This is the atomic mutation primitive.
+        """
+        op = self.core.new_operation(
+            who=self.who, type=type_, target=target,
+            time_range=time_range, region=region,
+            parameters=after, before=before, after=after,
+            why=why, tool=tool or f"video.{type_}", cost=cost,
+            approved_by=self.who,
+        )
+        return self.core.log(op)
+
     # ---------- 轨道 ----------
 
     def set_track_muted(self, track_id: str, muted: bool, why: str = "") -> Operation:
@@ -550,7 +580,11 @@ class CommandLayer:
     def replace_clip_voice(self, clip_id: str, text: str,
                            voice_id: str | None = None, why: str = "") -> Operation:
         """L2 语音重配：TTS 合成正确文本的语音 → 新音频 clip 对齐原 clip → 原 clip 静音。
-        非破坏（原素材不动；撤销即恢复原声）。voice_id 缺省用 MiniMax 系统音色。"""
+        非破坏（原素材不动；撤销即恢复原声）。voice_id 缺省用 MiniMax 系统音色。
+
+        Atomic (P0-04D): 一个用户意图 = 一个 voice_replace Operation。
+        不再产生独立的 add_clip / mute 子 op；Undo 一次回到替换前状态。
+        """
         import hashlib
         import uuid
 
@@ -578,21 +612,58 @@ class CommandLayer:
         atrack = next((t for t in project.timeline.tracks
                        if t.kind == TrackKind.AUDIO and not t.muted), None)
         if atrack is None:
-            atrack = self.add_track(TrackKind.AUDIO, "a1")
+            atrack = self._add_track_no_op(TrackKind.AUDIO, "a1")
         dur = clip.timeline_range.end - clip.timeline_range.start
-        self.add_clip(asset.asset_id, 0.0, dur,
-                      timeline_start=clip.timeline_range.start,
-                      track_id=atrack.track_id,
-                      why=f"TTS 重配：{text[:20]}")
-        self.set_muted(clip_id, True, why="TTS 重配：原声静音")
-        self.core.save_state()
+        new_clip = self._add_clip_no_op(
+            asset.asset_id, 0.0, dur,
+            timeline_start=clip.timeline_range.start,
+            track_id=atrack.track_id)
+        old_muted = clip.context.get("muted")
+        clip.context["muted"] = "1"
 
-        return self._record(
-            "voice_replace", clip_id, {},
-            {"asset_id": asset.asset_id, "text": text,
-             "voice_id": voice_id or "default"},
+        before = {
+            "muted": old_muted,
+            "asset_id": None,
+            "new_clip_id": None,
+        }
+        after = {
+            "asset_id": asset.asset_id,
+            "text": text,
+            "voice_id": voice_id or "default",
+            "new_clip_id": new_clip.clip_id,
+            "muted": clip.context.get("muted"),
+        }
+        return self._apply_record(
+            "voice_replace", clip_id, before, after,
             why=why or f"语音重配：{text[:20]}", cost=0.05,
             tool="voice.clone_replace")
+
+    def _add_track_no_op(self, kind, track_id):
+        """Atomic helper: add a track without emitting an Operation."""
+        from yroll.core.manifest import Track
+        track = Track(track_id=track_id, kind=kind)
+        self.core.project.timeline.tracks.append(track)
+        return track
+
+    def _add_clip_no_op(self, asset_id: str, source_start: float, source_end: float,
+                        timeline_start: float, track_id: str = "v1"):
+        """Atomic helper: add a clip without emitting an Operation."""
+        import uuid
+        from yroll.core.manifest import Clip
+        clip = Clip(
+            clip_id=f"c{uuid.uuid4().hex[:6]}",
+            asset_id=asset_id,
+            source_range=TimeRange(start=source_start, end=source_end),
+            timeline_range=TimeRange(start=timeline_start,
+                                     end=timeline_start + (source_end - source_start)),
+            track_id=track_id,
+        )
+        self.core.project.clips[clip.clip_id] = clip
+        track = next((t for t in self.core.project.timeline.tracks
+                      if t.track_id == track_id), None)
+        if track:
+            track.clip_ids.append(clip.clip_id)
+        return clip
 
     def set_muted(self, clip_id: str, muted: bool, why: str = "") -> Operation:
         """静音开关（M 键手感）：渲染时音量为 0，不动 clip.volume 原值。"""

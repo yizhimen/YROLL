@@ -442,16 +442,28 @@ class ProjectCore:
         elif op_type == "subtitle_style" and clip:
             clip.context["style"] = dict(before.get("style", {}))
         elif op_type == "voice_replace" and clip:
-            # 撤销语音重配：原 clip 取消静音，TTS 音频 clip/素材移除
-            clip.context.pop("muted", None)
+            # Atomic undo (P0-04D): 还原 muted 状态 + 移除 TTS clip/asset
+            old_muted = before.get("muted")
+            if old_muted:
+                clip.context["muted"] = old_muted
+            else:
+                clip.context.pop("muted", None)
             aid = (op.after or {}).get("asset_id")
-            if aid:
+            new_cid = (op.after or {}).get("new_clip_id")
+            # 优先用 new_clip_id 精确删除（避免误删其他同 asset 引用）
+            if new_cid:
+                p.clips.pop(new_cid, None)
+                for t in p.timeline.tracks:
+                    if new_cid in t.clip_ids:
+                        t.clip_ids.remove(new_cid)
+            elif aid:
                 for cid in [c.clip_id for c in p.clips.values()
                             if c.asset_id == aid]:
                     p.clips.pop(cid, None)
                     for t in p.timeline.tracks:
                         if cid in t.clip_ids:
                             t.clip_ids.remove(cid)
+            if aid:
                 p.assets = [a for a in p.assets if a.asset_id != aid]
         elif op_type in ("track_mute", "track_lock"):
             track = next((t for t in p.timeline.tracks
