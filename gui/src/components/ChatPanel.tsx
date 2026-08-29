@@ -12,13 +12,13 @@ interface Msg {
 
 interface Props {
   selectedClip: string | null;
-  playhead: number;
+  playheadFrame: number;
   onChanged: () => Promise<void>;
   onStatus: (ok: boolean, text: string) => void;
 }
 
 /** AI 对话面板：意图 → LLM → Command Layer → Timeline 可见修改。 */
-export default function ChatPanel({ selectedClip, playhead, onChanged, onStatus }: Props) {
+export default function ChatPanel({ selectedClip, playheadFrame, onChanged, onStatus }: Props) {
   const [msgs, setMsgs] = useState<Msg[]>([
     { who: "ai", text: "我是你的 AI 剪辑师。直接说想怎么改，比如：把选中的片段加快到 2 倍 / 把音量调到一半 / 在播放头处切开。" },
   ]);
@@ -66,7 +66,7 @@ export default function ChatPanel({ selectedClip, playhead, onChanged, onStatus 
       wsRef.current = ws;
       let settled = false;
       ws.onopen = () =>
-        ws.send(JSON.stringify({ message: text, selected_clip: selectedClip, playhead, plan: planMode }));
+        ws.send(JSON.stringify({ message: text, selected_clip: selectedClip, playheadFrame, plan: planMode }));
       ws.onmessage = async (ev) => {
         const e = JSON.parse(ev.data);
         if (e.type === "turn_started") {
@@ -106,7 +106,7 @@ export default function ChatPanel({ selectedClip, playhead, onChanged, onStatus 
 
   const sendViaHttp = async (text: string) => {
     try {
-      const r = await api.chat(text, selectedClip, playhead);
+      const r = await api.chat(text, selectedClip, playheadFrame);
       const note =
         r.applied.length > 0
           ? `（已执行 ${r.applied.length} 个操作）`

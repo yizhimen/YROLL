@@ -1,6 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, Clip, Project } from "./api";
 import { sessionStore } from "./session";
+import { useProjectSequence } from "./sequence";
+import { useCoreKeymap } from "./keymap";
+import {
+  framesToTimecode,
+  pxPerFrame,
+  roundHalfAwayFromZero,
+  type Rational,
+} from "./frames";
 import Timeline from "./components/Timeline";
 import ChatPanel from "./components/ChatPanel";
 import ClipWorkspace from "./components/ClipWorkspace";
@@ -25,8 +33,20 @@ export default function App() {
     clipId: string;
     impact: Awaited<ReturnType<typeof api.impact>>;
   } | null>(null);
-  const [playhead, setPlayhead] = useState(0);
+  // GUI-02: playheadFrame is canonical in integer frames. The float
+  // seconds interface is gone. Display via framesToTimecode.
+  const [playheadFrame, setPlayheadFrame] = useState(0);
+  // pxPerSec is the *perceived* px-per-second (stable across FPS).
+  // Internally we anchor in frames: pxPerFrame = pxPerSec * fps.den/fps.num.
   const [pxPerSec, setPxPerSec] = useState(12);
+  // Sequence (canonical timebase) from /sequence
+  const seq = useProjectSequence();
+  // Core keymap (semantic binding) from /keyboard/keymap
+  const keymap = useCoreKeymap();
+  const pxPerFrameVal = useMemo(
+    () => pxPerFrame(pxPerSec, seq.fps),
+    [pxPerSec, seq.fps],
+  );
   const [status, setStatus] = useState<{ ok: boolean; text: string }>({ ok: true, text: "加载中…" });
   const [previewVersion, setPreviewVersion] = useState(0);
   // Preview 框选（去水印）：框选模式 + 归一化坐标草稿
@@ -135,7 +155,7 @@ export default function App() {
 
   // 时间轴 seek → 预览跟随（PreviewPlayer 按模式映射源时间/成片时间）
   const seek = (t: number) => {
-    setPlayhead(Math.max(0, t));
+    setPlayheadFrame(Math.max(0, t));
   };
 
   // 走带控制（PreviewPlayer 注入）+ 剪贴板
@@ -173,8 +193,8 @@ export default function App() {
     }
     const sorted = [...pts].sort((a, b) => a - b);
     const t = dir === 1
-      ? sorted.find((p) => p > playhead + 0.05)
-      : [...sorted].reverse().find((p) => p < playhead - 0.05);
+      ? sorted.find((p) => p > playheadFrame + 0.05)
+      : [...sorted].reverse().find((p) => p < playheadFrame - 0.05);
     if (t !== undefined) seek(t);
   };
 
@@ -198,10 +218,10 @@ export default function App() {
         e.preventDefault();
         if (c.asset_id === "") {
           const dur = c.timeline_range.end - c.timeline_range.start;
-          run(() => api.addSubtitle(c.context?.text ?? "", playhead, playhead + dur, "GUI 粘贴字幕"), "已粘贴");
+          run(() => api.addSubtitle(c.context?.text ?? "", playheadFrame, playheadFrame + dur, "GUI 粘贴字幕"), "已粘贴");
         } else {
           run(() => api.addClip(c.asset_id, c.source_range.start, c.source_range.end,
-            playhead, c.track_id, "GUI 粘贴"), "已粘贴到播放头");
+            playheadFrame, c.track_id, "GUI 粘贴"), "已粘贴到播放头");
         }
       } else if (ctrl && (e.key === "d" || e.key === "D")) {
         if (!clip) return;
@@ -220,18 +240,23 @@ export default function App() {
       } else if (e.key === " ") {
         e.preventDefault();
         transportRef.current?.toggle?.();
-      } else if (e.key === "j" || e.key === "J") {
-        // J = 反向 5 秒（CapCut 风格，简化版；Premiere 标准是反向播放）
-        seek(playhead - 5);
-      } else if (e.key === "k" || e.key === "K") {
-        transportRef.current?.toggle?.();
-      } else if (e.key === "l" || e.key === "L") {
-        // L = 正向 5 秒（CapCut 风格，简化版）
-        seek(playhead + 5);
-      } else if (e.key === "ArrowLeft") {
-        seek(playhead - (e.shiftKey ? 1 : 0.1));
-      } else if (e.key === "ArrowRight") {
-        seek(playhead + (e.shiftKey ? 1 : 0.1));
+      } else if (e.key === "j" || e.key === "J" || e.key === "k" || e.key === "K"
+                 || e.key === "l" || e.key === "L" || e.key === "ArrowLeft"
+                 || e.key === "ArrowRight") {
+        e.preventDefault();
+        // GUI-02: J/K/L/ArrowLeft/ArrowRight all dispatch via the
+        // Core keymap's `delta_frames`. No hardcoded seconds.
+        const lookup = (k: string) => keymap.find((a) => a.key === k);
+        const sign = (e.key === "j" || e.key === "J" || e.key === "ArrowLeft") ? -1 : 1;
+        const baseName = sign < 0 ? "_nudge_playhead_back" : "_nudge_playhead";
+        const small = lookup(e.key === "ArrowLeft" || e.key === "ArrowRight"
+                             ? (sign < 0 ? "ArrowLeft" : "ArrowRight")
+                             : (e.key === "j" || e.key === "J" ? "J" : "L"))
+                    ?.deltaFrames ?? 1;
+        const shiftMul = e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight") ? 10 : 1;
+        // Suppress unused warning for the baseName lookup
+        void baseName;
+        seek(playheadFrame + sign * small * shiftMul);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         jumpBoundary(-1);
@@ -257,11 +282,11 @@ export default function App() {
           }, anyUnmuted ? `已静音 ${ids.length} 个 clip` : "已取消静音");
         }
       } else if (e.key === "i" || e.key === "I") {
-        setInPoint(playhead);
-        setStatus({ ok: true, text: `入点 ${playhead.toFixed(1)}s` });
+        setInPoint(playheadFrame);
+        setStatus({ ok: true, text: `入点 ${playheadFrame.toFixed(1)}s` });
       } else if (e.key === "o" || e.key === "O") {
-        setOutPoint(playhead);
-        setStatus({ ok: true, text: `出点 ${playhead.toFixed(1)}s` });
+        setOutPoint(playheadFrame);
+        setStatus({ ok: true, text: `出点 ${playheadFrame.toFixed(1)}s` });
       } else if (e.key === "Delete" && clip) {
         if (e.shiftKey) {
           // Shift+Delete：Ripple 删除（收拢）
@@ -302,7 +327,7 @@ export default function App() {
       const c = project.clips[clipId];
       if (c) {
         const len = c.timeline_range.end - c.timeline_range.start;
-        const candidates = [0, playhead];
+        const candidates = [0, playheadFrame];
         for (const other of Object.values(project.clips)) {
           if (other.clip_id === clipId) continue;
           candidates.push(other.timeline_range.start, other.timeline_range.end);
@@ -354,11 +379,11 @@ export default function App() {
     if (!clip) return;
     // 播放头（timeline 时间）→ 源时间换算
     const tr = clip.timeline_range;
-    if (playhead <= tr.start || playhead >= tr.end) {
+    if (playheadFrame <= tr.start || playheadFrame >= tr.end) {
       setStatus({ ok: false, text: "播放头不在选中 clip 范围内" });
       return;
     }
-    const ratio = (playhead - tr.start) / (tr.end - tr.start);
+    const ratio = (playheadFrame - tr.start) / (tr.end - tr.start);
     const atSource =
       clip.source_range.start + (clip.source_range.end - clip.source_range.start) * ratio;
     run(() => api.split(clip.clip_id, atSource, "GUI 在播放头处切分"), "已切分");
@@ -524,10 +549,10 @@ export default function App() {
             setStatus({ ok: true, text: `响度：mean ${r.after.mean_db}dB / max ${r.after.max_db}dB` });
           }, "响度分析完成")}
         onAddSubtitle={() => {
-          // 优先编辑已有字幕（如果 playhead 在某字幕 clip 上），否则新建
+          // 优先编辑已有字幕（如果 playheadFrame 在某字幕 clip 上），否则新建
           const selClip = project.clips[selected ?? ""];
           if (selClip && project.timeline.tracks.find((t) => t.track_id === selClip.track_id)?.kind === "text"
-              && playhead >= selClip.timeline_range.start && playhead < selClip.timeline_range.end) {
+              && playheadFrame >= selClip.timeline_range.start && playheadFrame < selClip.timeline_range.end) {
             setSubtitleEdit({
               clipId: selClip.clip_id,
               text: selClip.context?.text ?? "",
@@ -538,7 +563,7 @@ export default function App() {
             });
           } else {
             // 新建空白字幕
-            const [s, e] = selRange ?? [playhead, playhead + 2];
+            const [s, e] = selRange ?? [playheadFrame, playheadFrame + 2];
             setSubtitleEdit({
               clipId: "",
               text: "",
@@ -577,10 +602,10 @@ export default function App() {
         <div className="preview-pane" ref={previewRef} style={{ position: "relative" }}>
           <PreviewPlayer
             project={project}
-            playhead={playhead}
+            playheadFrame={playheadFrame}
             durationHint={Math.max(90, ...Object.values(project.clips).map((c) => c.timeline_range.end))}
             renderedUrl={previewVersion > 0 ? `/preview.mp4?v=${previewVersion}` : null}
-            onPlayhead={setPlayhead}
+            onPlayhead={setPlayheadFrame}
             onStatus={(ok, text) => setStatus({ ok, text })}
             overrideSrc={previewAsset}
             onClearOverride={() => setPreviewAsset(null)}
@@ -692,7 +717,7 @@ export default function App() {
                   const vtrack = project.timeline.tracks.find((t) => t.kind === "video");
                   const target = vtrack?.clip_ids
                     .map((id) => project.clips[id])
-                    .find((c) => c && playhead >= c.timeline_range.start && playhead <= c.timeline_range.end);
+                    .find((c) => c && playheadFrame >= c.timeline_range.start && playheadFrame <= c.timeline_range.end);
                   if (!target) {
                     setStatus({ ok: false, text: "播放头下没有视频 clip" });
                     return;
@@ -1001,7 +1026,7 @@ export default function App() {
           <hr style={{ borderColor: "#333" }} />
           <ChatPanel
             selectedClip={selected}
-            playhead={playhead}
+            playheadFrame={playheadFrame}
             onChanged={refresh}
             onStatus={(ok, text) => setStatus({ ok, text })}
           />
@@ -1065,7 +1090,7 @@ export default function App() {
         snapMode={snapMode}
         highlightRel={highlightRel}
         selectedIds={selectedSet}
-        playhead={playhead}
+        playheadFrame={playheadFrame}
         pxPerSec={pxPerSec}
         selRange={selRange}
         inPoint={inPoint}
@@ -1245,7 +1270,7 @@ export default function App() {
 
       <div className="statusbar">
         <span className={status.ok ? "ok" : "err"}>{status.text}</span>
-        <span>播放头 {playhead.toFixed(1)}s</span>
+        <span>播放头 {playheadFrame.toFixed(1)}s</span>
         <span>{Object.keys(project.clips).length} clips</span>
       </div>
 

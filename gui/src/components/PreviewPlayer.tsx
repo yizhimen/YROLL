@@ -10,7 +10,7 @@ export type AspectRatio = "16:9" | "9:16" | "1:1" | "4:3" | "3:4";
 
 interface Props {
   project: Project;
-  playhead: number;
+  playheadFrame: number;
   renderedUrl: string | null;
   onPlayhead: (t: number) => void;
   onStatus: (ok: boolean, text: string) => void;
@@ -30,7 +30,7 @@ const ASPECTS: { id: AspectRatio; label: string; w: number; h: number }[] = [
 ];
 
 export default function PreviewPlayer({
-  project, playhead, renderedUrl, onPlayhead, onStatus,
+  project, playheadFrame, renderedUrl, onPlayhead, onStatus,
   overrideSrc, onClearOverride,
   aspect = "16:9", onAspect,
   durationHint = 120,
@@ -38,13 +38,13 @@ export default function PreviewPlayer({
   const [mode, setMode] = useState<"instant" | "rendered">("instant");
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // 内部播放控制：用 setInterval 推进 playhead，无论有没有 video 元素
+  // 内部播放控制：用 setInterval 推进 playheadFrame，无论有没有 video 元素
   const [playing, setPlaying] = useState(false);
   const playStartRef = useRef<{ startTime: number; startHead: number } | null>(null);
 
   useEffect(() => {
     if (!playing) return;
-    playStartRef.current = { startTime: performance.now(), startHead: playhead };
+    playStartRef.current = { startTime: performance.now(), startHead: playheadFrame };
     const timer = setInterval(() => {
       const s = playStartRef.current;
       if (!s) return;
@@ -79,14 +79,14 @@ export default function PreviewPlayer({
     .filter(Boolean)
     .sort((a, b) => a.timeline_range.start - b.timeline_range.start);
   const clip = clips.find(
-    (c) => playhead >= c.timeline_range.start && playhead < c.timeline_range.end
+    (c) => playheadFrame >= c.timeline_range.start && playheadFrame < c.timeline_range.end
   ) ?? null;
   const asset = clip
     ? project.assets.find((a) => a.asset_id === clip.asset_id)
     : null;
 
   const srcTime = clip
-    ? clip.source_range.start + (playhead - clip.timeline_range.start) * clip.speed
+    ? clip.source_range.start + (playheadFrame - clip.timeline_range.start) * clip.speed
     : 0;
 
   useEffect(() => {
@@ -97,11 +97,11 @@ export default function PreviewPlayer({
       v.playbackRate = clip.speed;
       v.volume = Math.min(1, clip.volume);
     } else if (mode === "rendered") {
-      if (Math.abs(v.currentTime - playhead) > 0.4) v.currentTime = playhead;
+      if (Math.abs(v.currentTime - playheadFrame) > 0.4) v.currentTime = playheadFrame;
       v.playbackRate = 1;
       v.volume = 1;
     }
-  }, [playhead, mode, clip?.clip_id]);
+  }, [playheadFrame, mode, clip?.clip_id]);
 
   const onTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const v = e.currentTarget;
@@ -130,7 +130,7 @@ export default function PreviewPlayer({
     .flatMap((t) => t.clip_ids)
     .map((id) => project.clips[id])
     .filter((c) => c && !c.context?.muted
-      && playhead >= c.timeline_range.start && playhead < c.timeline_range.end)
+      && playheadFrame >= c.timeline_range.start && playheadFrame < c.timeline_range.end)
     : [];
 
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
@@ -139,14 +139,14 @@ export default function PreviewPlayer({
     for (const c of audioNow) {
       const el = audioRefs.current.get(c.clip_id);
       if (!el) continue;
-      const t = c.source_range.start + (playhead - c.timeline_range.start) * c.speed;
+      const t = c.source_range.start + (playheadFrame - c.timeline_range.start) * c.speed;
       if (Math.abs(el.currentTime - t) > 0.4) el.currentTime = t;
       el.volume = Math.min(1, c.volume);
       el.playbackRate = c.speed;
       if (playing && el.paused) el.play().catch(() => undefined);
       if (!playing && !el.paused) el.pause();
     }
-  }, [playhead, playing, audioNow.map((c) => c.clip_id).join(",")]);
+  }, [playheadFrame, playing, audioNow.map((c) => c.clip_id).join(",")]);
 
   // 视窗比例：外层 stage 全填，内层 frame 用 aspect-ratio
   const stageStyle: React.CSSProperties = {
@@ -252,7 +252,7 @@ export default function PreviewPlayer({
             <div className="placeholder">
               {clips.length === 0
                 ? "📭 时间轴是空的——从素材库拖到 V1 轨"
-                : `⏰ 播放头在间隙里（${playhead.toFixed(1)}s）`}
+                : `⏰ 播放头在间隙里（${playheadFrame.toFixed(1)}s）`}
             </div>
           )}
         </div>
