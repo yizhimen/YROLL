@@ -280,6 +280,30 @@ export const api = {
       asset_id: assetId, source_start: sourceStart, source_end: sourceEnd,
       timeline_start: timelineStart, track_id: trackId, why,
     }),
+  // GUI-03B: image-first-class media. Frame-native coordinates; the
+  // server derives source_range = (0, 1/seq_fps) and speed=1.0.
+  addImageClip: (
+    assetId: string,
+    timelineStartFrame: number,
+    timelineDurationFrames: number,
+    trackId: string = "v1",
+    why = "",
+  ) => mutate<Clip>("POST", "/clips/add_image", {
+    asset_id: assetId,
+    timeline_start_frame: timelineStartFrame,
+    timeline_duration_frames: timelineDurationFrames,
+    track_id: trackId, why,
+  }),
+  trimImageClip: (
+    clipId: string,
+    timelineStartFrame?: number,
+    timelineEndFrame?: number,
+    why = "",
+  ) => mutate<Clip>("POST", `/clips/${clipId}/trim_image`, {
+    timeline_start_frame: timelineStartFrame,
+    timeline_end_frame: timelineEndFrame,
+    why,
+  }),
   revert: (operationId: string, why = "") =>
     mutate("POST", "/revert", { operation_id: operationId, why }),
   volumeRange: (clipId: string, volume: number, start: number, end: number, why = "") =>

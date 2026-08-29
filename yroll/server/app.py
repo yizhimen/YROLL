@@ -112,6 +112,22 @@ class AddClipReq(BaseModel):
     why: str = ""
 
 
+class AddImageClipReq(BaseModel):
+    """GUI-03B: add an image clip with frame-native coordinates."""
+    asset_id: str
+    timeline_start_frame: int
+    timeline_duration_frames: int
+    track_id: str = "v1"
+    why: str = ""
+
+
+class TrimImageClipReq(BaseModel):
+    """GUI-03B: trim an image clip's on-screen duration in frames."""
+    timeline_start_frame: int | None = None
+    timeline_end_frame: int | None = None
+    why: str = ""
+
+
 class AdjustReq(BaseModel):
     kind: str
     params: dict = {}
@@ -414,6 +430,46 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             if sessionId:
                 require_edit_right(st.core, sessionId)
             return st.cmd.add_clip(**req.model_dump())
+        return guard(_check_rev(baseRevision, _do))
+
+    @app.post("/clips/add_image")
+    def add_image_clip(req: AddImageClipReq, sessionId: str = "",
+                        baseRevision: int = None):
+        """GUI-03B: add an IMAGE clip with frame-native coordinates.
+
+        Body: {asset_id, timeline_start_frame, timeline_duration_frames,
+        track_id?, why?}. The image's source range is fixed at
+        (0, 1/seq_fps); the timeline duration is user-controlled.
+        """
+        def _do():
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            return st.cmd.add_image_clip(
+                asset_id=req.asset_id,
+                timeline_start_frame=req.timeline_start_frame,
+                timeline_duration_frames=req.timeline_duration_frames,
+                track_id=req.track_id,
+                why=req.why,
+            )
+        return guard(_check_rev(baseRevision, _do))
+
+    @app.post("/clips/{clip_id}/trim_image")
+    def trim_image_clip(clip_id: str, req: TrimImageClipReq,
+                        sessionId: str = "", baseRevision: int = None):
+        """GUI-03B: trim an IMAGE clip's on-screen duration.
+
+        Body: {timeline_start_frame?, timeline_end_frame?, why?}.
+        Image source side is NOT adjustable (1-frame source range).
+        """
+        def _do():
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            return st.cmd.trim_image_clip_frame(
+                clip_id,
+                timeline_start_frame=req.timeline_start_frame,
+                timeline_end_frame=req.timeline_end_frame,
+                why=req.why,
+            )
         return guard(_check_rev(baseRevision, _do))
 
     @app.post("/tracks")

@@ -273,6 +273,174 @@ class CommandLayer:
                      tool="timeline.add_clip")
         return clip
 
+    # ---------- GUI-03B: image-first-class media ----------
+
+    def add_image_clip(self, asset_id: str,
+                        timeline_start_frame: int,
+                        timeline_duration_frames: int,
+                        track_id: str = "v1",
+                        why: str = "") -> Clip:
+        """Add an image clip with frame-native coordinates.
+
+        GUI-03B contract: an image asset has intrinsic_duration =
+        None (still). The image clip's timeline_duration_frames is
+        user-controlled — it does NOT derive from source media time.
+
+        Image source semantics:
+          - source_range = (0, 1/seq_fps) — exactly 1 source frame's
+            worth of seconds. The image is one static frame; trim of
+            the source side is NOT permitted (trim_image_clip_frame
+            below is the only way to adjust image clip length).
+          - speed = 1.0 (locked; set_speed(image) is rejected)
+          - timeline_range derived from timeline_start_frame +
+            timeline_duration_frames via the project's sequence fps.
+
+        Heterogeneous FPS: image clips do not have a distinct
+        source_fps. The TimeMap is built with source_fps = sequence_fps
+        (conformant), so the source-side math is a no-op.
+
+        Track policy: image may live on any VIDEO-class track
+        (v1/v2/v3/PiP). Audio and text tracks reject images.
+        """
+        if timeline_duration_frames <= 0:
+            raise CommandError(
+                f"add_image_clip: timeline_duration_frames must be > 0, "
+                f"got {timeline_duration_frames}"
+            )
+        if timeline_start_frame < 0:
+            raise CommandError(
+                f"add_image_clip: timeline_start_frame must be >= 0, "
+                f"got {timeline_start_frame}"
+            )
+
+        asset = next((a for a in self.core.project.assets
+                      if a.asset_id == asset_id), None)
+        if asset is None:
+            raise CommandError(f"add_image_clip: asset not found: {asset_id}")
+        if asset.type.value != "image":
+            raise CommandError(
+                f"add_image_clip: asset {asset_id} is type "
+                f"{asset.type.value}, not image"
+            )
+
+        # Resolve the target track (auto-create if absent — keeps
+        # the call site simple for Agent scripts).
+        tl = self.core.project.timeline
+        track = next((t for t in tl.tracks if t.track_id == track_id), None)
+        if track is None:
+            track = self.add_track(TrackKind.VIDEO, track_id)
+
+        # Track policy: VIDEO tracks accept images; AUDIO/TEXT reject.
+        kind = track.kind.value
+        if kind == "audio":
+            raise CommandError(
+                f"track {track_id} (audio) rejects asset type image")
+        if kind == "text":
+            raise CommandError(
+                f"track {track_id} (text) rejects asset type image "
+                f"(use add_subtitle for text)")
+
+        fps = self._fps_rational()
+        seq_fps_num, seq_fps_den = fps.num, fps.den
+
+        # Source range: exactly 1 source frame's worth of seconds.
+        src_start_sec = 0.0
+        src_end_sec = seq_fps_den / seq_fps_num  # 1/30 sec @ 30fps
+
+        # Timeline range from frames (frame-native).
+        tl_start_sec = timeline_start_frame * seq_fps_den / seq_fps_num
+        tl_dur_sec = timeline_duration_frames * seq_fps_den / seq_fps_num
+        tl_end_sec = tl_start_sec + tl_dur_sec
+
+        # Overlap check on the target track.
+        self._check_no_overlap(
+            track_id, tl_start_sec, tl_end_sec,
+            op_name=f"add_image_clip({asset_id})")
+
+        clip = Clip(
+            clip_id=f"c{uuid.uuid4().hex[:6]}",
+            asset_id=asset_id,
+            source_range=TimeRange(start=src_start_sec, end=src_end_sec),
+            timeline_range=TimeRange(start=tl_start_sec, end=tl_end_sec),
+            track_id=track_id,
+            speed=1.0,
+        )
+        track.clip_ids.append(clip.clip_id)
+        self.core.project.clips[clip.clip_id] = clip
+        self._record(
+            "add_image_clip", clip.clip_id, {}, clip.model_dump(),
+            why=why, tool="timeline.add_image_clip",
+        )
+        return clip
+
+    def trim_image_clip_frame(self, clip_id: str,
+                               timeline_start_frame: int | None = None,
+                               timeline_end_frame: int | None = None,
+                               why: str = "") -> Operation:
+        """GUI-03B: trim an IMAGE clip's on-screen duration.
+
+        Only the timeline side is adjustable; image clips have a
+        fixed 1-frame source range (no source trim). To change the
+        duration, pass `timeline_end_frame`; the new duration is
+        `timeline_end_frame - timeline_start_frame`. Pass BOTH
+        timeline_start_frame and timeline_end_frame to also move
+        the clip's timeline start.
+
+        Returns an Operation record (revertable).
+        """
+        clip = self._clip(clip_id)
+        asset = next((a for a in self.core.project.assets
+                      if a.asset_id == clip.asset_id), None)
+        if asset is None or asset.type.value != "image":
+            raise CommandError(
+                f"trim_image_clip_frame: clip {clip_id} is not an image "
+                f"clip (use trim_clip_frame for video/audio)."
+            )
+        if timeline_start_frame is not None and timeline_start_frame < 0:
+            raise CommandError(
+                f"trim_image_clip_frame: timeline_start_frame must be "
+                f">= 0, got {timeline_start_frame}"
+            )
+        if timeline_end_frame is not None and timeline_end_frame <= (
+            timeline_start_frame if timeline_start_frame is not None else 0
+        ):
+            raise CommandError(
+                f"trim_image_clip_frame: timeline_end_frame must be "
+                f"> timeline_start_frame "
+                f"(got end={timeline_end_frame}, "
+                f"start={timeline_start_frame})"
+            )
+
+        fps = self._fps_rational()
+        seq_fps_num, seq_fps_den = fps.num, fps.den
+
+        before = clip.model_dump()
+
+        # Determine the new timeline range in frames.
+        current_start_f = round(clip.timeline_range.start * seq_fps_num / seq_fps_den)
+        current_end_f = round(clip.timeline_range.end * seq_fps_num / seq_fps_den)
+        new_start_f = timeline_start_frame if timeline_start_frame is not None else current_start_f
+        new_end_f = timeline_end_frame if timeline_end_frame is not None else current_end_f
+
+        # Convert back to seconds for storage.
+        clip.timeline_range = TimeRange(
+            start=new_start_f * seq_fps_den / seq_fps_num,
+            end=new_end_f * seq_fps_den / seq_fps_num,
+        )
+
+        # Re-run overlap check (the clip's track might have shifted).
+        self._check_no_overlap(
+            clip.track_id, clip.timeline_range.start, clip.timeline_range.end,
+            exclude_clip_id=clip_id,
+            op_name=f"trim_image_clip_frame({clip_id})")
+
+        after = clip.model_dump()
+        return self._record(
+            "trim_image_clip_frame", clip_id, before, after, why=why,
+            time_range=clip.timeline_range,
+            tool="timeline.trim_image_clip_frame",
+        )
+
     def remove_clip(self, clip_id: str, why: str = "") -> Operation:
         clip = self._clip(clip_id)
         before = clip.model_dump()
@@ -848,6 +1016,18 @@ class CommandLayer:
         clip = self._clip(clip_id)
         if speed <= 0:
             raise CommandError("speed 必须 > 0")
+        # GUI-03B: image clips cannot be retimed. The asset has
+        # only one source frame; speed is structurally locked at 1.0.
+        # Use `trim_image_clip_frame` to adjust the timeline duration.
+        asset = next((a for a in self.core.project.assets
+                      if a.asset_id == clip.asset_id), None)
+        if asset is not None and asset.type.value == "image":
+            raise CommandError(
+                f"set_speed: image clip {clip_id} cannot be retimed "
+                f"(image has 1 source frame; speed is locked to 1.0). "
+                f"Use trim_image_clip_frame to change the on-screen "
+                f"duration."
+            )
         before = {"speed": clip.speed,
                   "timeline_range": clip.timeline_range.model_dump()}
         clip.speed = speed
