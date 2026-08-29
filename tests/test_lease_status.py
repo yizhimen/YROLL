@@ -16,6 +16,7 @@ from yroll.core.project import ProjectCore
 @pytest.fixture()
 def core(tmp_path: Path) -> ProjectCore:
     core = ProjectCore.create(tmp_path, "lease-status-test")
+    ProjectCore.ensure_default_tracks(core)
     core.project.assets.append(Asset(
         asset_id="a1", type=AssetType.VIDEO, path="v.mp4",
         identity=AssetIdentity(md5="x" * 32, size_bytes=1, duration_sec=10.0),

@@ -57,6 +57,7 @@ def _loudness(path: Path, ss: float, to: float) -> float:
 def test_image_clip_and_audio_track_mix(tmp_path: Path):
     _make(tmp_path)
     core = ProjectCore.create(tmp_path, "mt-demo")
+    ProjectCore.ensure_default_tracks(core)
     for aid, atype, fname in [("v1", AssetType.VIDEO, "v.mp4"),
                               ("bgm", AssetType.AUDIO, "bgm.m4a"),
                               ("img", AssetType.IMAGE, "img.jpg")]:
@@ -122,6 +123,7 @@ def test_second_video_track_overlay(tmp_path: Path):
         check=True, capture_output=True)
 
     core = ProjectCore.create(tmp_path, "pip-demo")
+    ProjectCore.ensure_default_tracks(core)
     for aid, fname, dur in [("b", "base.mp4", 2.0), ("p", "pip.mp4", 2.0)]:
         core.project.assets.append(Asset(
             asset_id=aid, type=AssetType.VIDEO, path=str(tmp_path / fname),
@@ -152,6 +154,7 @@ def test_gap_filled_with_black(tmp_path: Path):
     """主轨间隙 → 黑场静音占时长（混音/字幕才对得齐）。"""
     _make(tmp_path)
     core = ProjectCore.create(tmp_path, "gap-demo")
+    ProjectCore.ensure_default_tracks(core)
     core.project.assets.append(Asset(
         asset_id="v1", type=AssetType.VIDEO, path=str(tmp_path / "v.mp4"),
         identity=AssetIdentity(md5="x" * 32, size_bytes=1, duration_sec=2.0),
@@ -174,6 +177,7 @@ def test_burn_subtitles(tmp_path: Path):
     """烧录模式：字幕进画面（流里无 mov_text）；默认软字幕保留 mov_text。"""
     _make(tmp_path)
     core = ProjectCore.create(tmp_path, "burn-demo")
+    ProjectCore.ensure_default_tracks(core)
     core.project.assets.append(Asset(
         asset_id="v1", type=AssetType.VIDEO, path=str(tmp_path / "v.mp4"),
         identity=AssetIdentity(md5="x" * 32, size_bytes=1, duration_sec=2.0),
@@ -202,6 +206,7 @@ def test_fade_transition(tmp_path: Path):
     """淡入淡出：fade 后开头比中间暗（像素级）。"""
     _make(tmp_path)
     core = ProjectCore.create(tmp_path, "fade-demo")
+    ProjectCore.ensure_default_tracks(core)
     core.project.assets.append(Asset(
         asset_id="v1", type=AssetType.VIDEO, path=str(tmp_path / "v.mp4"),
         identity=AssetIdentity(md5="x" * 32, size_bytes=1, duration_sec=2.0),
@@ -237,6 +242,7 @@ def test_dissolve_xfade(tmp_path: Path):
         check=True, capture_output=True)
 
     core = ProjectCore.create(tmp_path, "dissolve-demo")
+    ProjectCore.ensure_default_tracks(core)
     for aid, fname in [("r", "red.mp4"), ("b", "blue.mp4")]:
         core.project.assets.append(Asset(
             asset_id=aid, type=AssetType.VIDEO, path=str(tmp_path / fname),
@@ -278,6 +284,7 @@ def test_dissolve_wipe_kind(tmp_path: Path):
          "-c:a", "aac", "-shortest", str(tmp_path / "blue.mp4")],
         check=True, capture_output=True)
     core = ProjectCore.create(tmp_path, "wipe-demo")
+    ProjectCore.ensure_default_tracks(core)
     for aid, fname in [("r", "red.mp4"), ("b", "blue.mp4")]:
         core.project.assets.append(Asset(
             asset_id=aid, type=AssetType.VIDEO, path=str(tmp_path / fname),
@@ -300,6 +307,7 @@ def test_track_muted_skips_audio(tmp_path: Path):
     """轨道静音：音频轨整体不进混音（可撤销）。"""
     _make(tmp_path)
     core = ProjectCore.create(tmp_path, "trackmute-demo")
+    ProjectCore.ensure_default_tracks(core)
     for aid, atype, fname in [("v1", AssetType.VIDEO, "v.mp4"),
                               ("bgm", AssetType.AUDIO, "bgm.m4a")]:
         core.project.assets.append(Asset(

@@ -53,6 +53,7 @@ def draft(tmp_path: Path):
 def test_import_jianying(draft):
     d, tmp_path = draft
     core = ProjectCore.create(tmp_path, "jy-demo")
+    ProjectCore.ensure_default_tracks(core)
     cmd = CommandLayer(core)
 
     stats = import_jianying_draft(cmd, d)
@@ -80,5 +81,6 @@ def test_import_jianying_not_draft(tmp_path: Path):
     from yroll.core.commands import CommandError
 
     core = ProjectCore.create(tmp_path, "jy-bad")
+    ProjectCore.ensure_default_tracks(core)
     with pytest.raises(CommandError, match="draft_content"):
         import_jianying_draft(CommandLayer(core), tmp_path)

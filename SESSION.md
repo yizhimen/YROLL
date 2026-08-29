@@ -1,13 +1,45 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-29 commit 待 push）
+## 当前状态（2026-08-30 commit 待 push）
 - **GUI-01（Session + Mutation Gate + Revision）已完整交付**
-- **GUI-02 Closure** 02-1 → 02-5 已完成（push 待执行）：
+- **GUI-02 Closure** 02-1 → 02-6.1 + 02-7 已完成：
   - 02-1 `f674a56` 标准 NTSC DF + reject dropped labels
   - 02-2 `3cdfc5c` TS mirror standard NTSC DF
-  - 02-3 `884eba1` Source Timebase & Conformance
+  - 02-3 `884eba1` Source TimeBase & Conformance
   - 02-4 `20be59f` ClipBlock frame-only refactor
-  - **02-5 (新)** FrameClock + PreviewPlayer `performance.now()` refactor + TimeMap heterogeneous FPS math fix
+  - 02-5 `2c44f80` FrameClock + PreviewPlayer `performance.now()` refactor
+  - 02-6 `e21deeb` Core Keymap sole-source + global seconds-leakage guard
+  - 02-6.1 + 02-7 `8754ddc` jumpBoundary fix + frame_consistency + Playwright smoke
+- **GUI-03** 03A/03B/03C 已完成（待 push）：
+  - 03A Spec v0.1 (GUi-03-Production-Usability-Spec-v0.1.md)
+  - 03B Image first-class media (no set_speed kludge)
+  - **03C Dynamic track allocation + optional TrackRole + empty-track hide**
+    - `ProjectCore.create()` no longer pre-creates v1/v2/v3/a1/a2/a3/t1/t2
+    - `cmd.allocate_track_for(asset_type, tl_start, tl_end, prefer_track_id)` is the Core-owned policy
+    - `ASSET_TYPE_TO_TRACK_KINDS` map: image+video → video, audio → audio, text → text/subtitle
+    - `Track.role: Optional[TrackRole]` + `Track.label: Optional[str]` (forward-compat)
+    - GUI: Timeline component filters empty tracks; "空轨道" toggle (default off)
+- 资产复用: 沙盒工程 `projects/sanlihe-slice-30s/` 演示 Agent → Core → Human 链路
+- Core v0.2 测试：**543 passed + 1 skipped**
+- GUI 测试：**171 vitest** + Playwright gui-01 / gui-02
+
+### GUI-03C 关键设计决策
+1. **Track allocation 是 Core-owned**，不在 React 复制。GUI 和 Agent 走相同路径 → 同样的 Core state。
+2. **Asset 推断 fallback**：未注册 asset 时，add_clip 根据 track_id 前缀推断 kind（a* → audio、t* → text、v* → video）。这样 legacy 测试不需注册 asset 也能跑。
+3. **Track policy 双重保险**：
+   - asset 注册了 + track 存在 + 类型不匹配 → 拒绝（`image_to_audio_track_rejected`）
+   - asset 未注册 → 跳过类型检查（legacy 测试兼容）
+4. **空轨保留在 Core**，GUI 端 Timeline 组件 filter；`showEmptyTracks` toggle 默认 off。
+5. **`add_track` 幂等**：同名同 kind 直接返回已有 track（不重不删），兼容 `ensure_default_tracks` 迁移路径。
+
+### GUI-03C Spec 待办
+- 03D L1 Composite Preview（image + video + 字幕 + 音频 layered）
+- 03E Multiple Timelines / Fork
+- 03F Lease UX polish
+
+### 前后端手动测试环境
+- 后端：`python -m yroll.cli.main serve projects/sanlihe-slice-30s` → `127.0.0.1:8765`
+- 前端：`pnpm dev`（已在跑）→ `http://localhost:5173/`
 - 工程：sanlihe-story（38 clip + 18 字幕 + 40 资产 + 91 op）
 - Core v0.2 测试：**477 passed + 1 skipped**
 - GUI 测试：**163 vitest** + Playwright 端到端冒烟通过

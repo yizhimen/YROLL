@@ -96,6 +96,9 @@ export default function App() {
   const [assetW, setAssetW] = useState(260);
   const [snapMode, setSnapMode] = useState<"always" | "alt" | "off">("always");
   const [highlightRel, setHighlightRel] = useState(false);
+  // GUI-03C: when false (default), the Timeline hides tracks with
+  // no clips. Toggle to inspect / debug the allocation policy.
+  const [showEmptyTracks, setShowEmptyTracks] = useState(false);
   const [inspectorW, setInspectorW] = useState(260);
   const [timelineH, setTimelineH] = useState(280);  // 时间线高度
   // 台词搜索定位
@@ -459,6 +462,12 @@ export default function App() {
             <option value="alt">Alt+拖动</option>
             <option value="off">关</option>
           </select>
+        </label>
+        <label style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 3 }}
+               title="GUI-03C：显示空轨道（默认隐藏，Core 仍持有空轨道数据）">
+          <input type="checkbox" checked={showEmptyTracks}
+                 onChange={(e) => setShowEmptyTracks(e.target.checked)} />
+          空轨道
         </label>
         <label style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 3 }}
                title="高亮所有跨轨关联的 clip（Semantic Link）">
@@ -1098,6 +1107,7 @@ export default function App() {
         height={timelineH}
         snapMode={snapMode}
         highlightRel={highlightRel}
+        showEmptyTracks={showEmptyTracks}
         selectedIds={selectedSet}
         playheadFrame={playheadFrame}
         pxPerSec={pxPerSec}

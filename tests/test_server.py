@@ -15,6 +15,7 @@ from tests.conftest import _AuthedClient
 def client(tmp_path: Path) -> TestClient:
     """Raw TestClient (no auto-lease)."""
     core = ProjectCore.create(tmp_path, "api-demo")
+    ProjectCore.ensure_default_tracks(core)
     app = create_app(core.path, who=Actor.AI)
     return TestClient(app)
 
@@ -23,6 +24,7 @@ def client(tmp_path: Path) -> TestClient:
 def authed_client(tmp_path: Path) -> _AuthedClient:
     """TestClient wrapper that auto-attaches sessionId + baseRevision to mutations."""
     core = ProjectCore.create(tmp_path, "api-demo")
+    ProjectCore.ensure_default_tracks(core)
     app = create_app(core.path, who=Actor.AI)
     return _AuthedClient(TestClient(app))
 

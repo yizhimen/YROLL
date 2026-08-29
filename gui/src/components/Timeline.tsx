@@ -49,9 +49,14 @@ interface Props {
   onTrackLock?: (trackId: string, locked: boolean) => void;
   onTrackHide?: (trackId: string, hidden: boolean) => void;
   onAssetDrop?: (assetId: string, trackId: string, timelineStartFrame: number) => void;
+  /** GUI-03C: when true, the Timeline renders tracks with no clips
+   *  (default false — empty tracks are hidden). */
+  showEmptyTracks?: boolean;
 }
 
-const TRACK_NAME: Record<string, string> = { video: "视频", audio: "音频", text: "字幕" };
+const TRACK_NAME: Record<string, string> = {
+  video: "视频", audio: "音频", text: "字幕", subtitle: "字幕",
+};
 
 export default function Timeline({
   project, selectedIds, playheadFrame, pxPerSec, selRange, inPoint, outPoint,
@@ -59,6 +64,7 @@ export default function Timeline({
   snapMode = "always",
   highlightRel = false,
   onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onDropOnTrack, onTrackMute, onTrackLock, onTrackHide, onAssetDrop,
+  showEmptyTracks = false,
 }: Props) {
   const paneRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState({ left: 0, width: 1 });
@@ -266,7 +272,12 @@ export default function Timeline({
           })()}
         </div>
         <div className="tracks">
-        {[...project.timeline.tracks].reverse().map((track) => (
+        {[...project.timeline.tracks].reverse()
+          // GUI-03C: hide empty tracks by default. The Core still
+          // owns them; the GUI just chooses not to render them.
+          // Toggle via the showEmptyTracks prop (default false).
+          .filter((track) => showEmptyTracks || track.clip_ids.length > 0 || track.hidden)
+          .map((track) => (
           <div
             key={track.track_id}
             className={`track-row ${track.hidden ? "track-hidden" : ""}`}

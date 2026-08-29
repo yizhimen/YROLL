@@ -17,12 +17,14 @@ import uuid
 
 from yroll.core.manifest import (
     Actor,
+    ASSET_TYPE_TO_TRACK_KINDS,
     Clip,
     Operation,
     Region,
     TimeRange,
     Track,
     TrackKind,
+    TrackRole,
 )
 from yroll.core.project import ProjectCore
 
@@ -216,56 +218,200 @@ class CommandLayer:
                             why=why or f"轨道 {track_id} {'隐藏' if hidden else '显示'}",
                             tool="track.hide")
 
-    def add_track(self, kind: TrackKind, track_id: str | None = None) -> Track:
-        tid = track_id or f"{kind.value[0]}{len(self.core.project.timeline.tracks) + 1}"
-        track = Track(track_id=tid, kind=kind)
+    def add_track(self, kind: TrackKind, track_id: str | None = None,
+                role: TrackRole | None = None,
+                label: str | None = None) -> Track:
+        """Explicitly create a track. Most callers should use
+        `allocate_track_for` instead — this method is for users who
+        want to name a track (e.g. "V9 自定义") or set a role.
+
+        Idempotent: if a track with the given `track_id` already
+        exists with the same `kind`, return it (no new op, no
+        failure). If it exists with a different `kind`, raise
+        CommandError. Compatible with `ensure_default_tracks`, the
+        legacy migration path for pre-GUI-03C projects.
+        """
+        if track_id is None:
+            # Auto-name: lowest unused <prefix><n> for the kind.
+            track_id = self._next_track_id_for_kind(kind)
+        for t in self.core.project.timeline.tracks:
+            if t.track_id == track_id:
+                if t.kind != kind:
+                    raise CommandError(
+                        f"add_track: track {track_id!r} exists with kind "
+                        f"{t.kind.value!r}, requested {kind.value!r}")
+                # Idempotent: same id, same kind → return existing.
+                if role is not None and t.role != role:
+                    t.role = role
+                if label is not None and t.label != label:
+                    t.label = label
+                return t
+        track = Track(track_id=track_id, kind=kind, role=role, label=label)
         self.core.project.timeline.tracks.append(track)
-        self._record("add_track", tid, {}, track.model_dump(), tool="timeline.add_track")
+        self._record("add_track", track_id, {}, track.model_dump(), tool="timeline.add_track")
         return track
+
+    def _next_track_id_for_kind(self, kind: TrackKind) -> str:
+        """Lowest unused '<prefix><n>' for the kind's prefix.
+        VIDEO -> 'vN', AUDIO -> 'aN', SUBTITLE -> 'tN', TEXT -> 'tN'."""
+        prefix_map = {
+            TrackKind.VIDEO: "v",
+            TrackKind.AUDIO: "a",
+            TrackKind.SUBTITLE: "t",
+            TrackKind.TEXT: "t",
+        }
+        prefix = prefix_map[kind]
+        existing_nums = set()
+        for t in self.core.project.timeline.tracks:
+            if t.kind == kind and t.track_id.startswith(prefix):
+                try:
+                    existing_nums.add(int(t.track_id[len(prefix):]))
+                except ValueError:
+                    pass
+        n = 1
+        while n in existing_nums:
+            n += 1
+        return f"{prefix}{n}"
+
+    def _track_overlaps(self, track: Track, tl_start: float,
+                         tl_end: float, exclude_clip_id: str | None = None) -> bool:
+        """True if `track` contains a clip whose timeline range
+        overlaps (half-open) [tl_start, tl_end)."""
+        for cid in track.clip_ids:
+            if exclude_clip_id and cid == exclude_clip_id:
+                continue
+            c = self.core.project.clips.get(cid)
+            if c is None:
+                continue
+            cs, ce = c.timeline_range.start, c.timeline_range.end
+            if cs < tl_end and tl_start < ce:
+                return True
+        return False
+
+    def allocate_track_for(self, asset_type_value: str,
+                            tl_start: float, tl_end: float,
+                            prefer_track_id: str | None = None) -> Track:
+        """GUI-03C: Core-owned track allocation policy.
+
+        Returns an existing compatible track (same kind, no
+        timeline overlap) — preferring `prefer_track_id` if it's
+        compatible — or creates a new track of the right kind.
+
+        Asset-type → allowed track kinds:
+          video   → {video}
+          image   → {video}     # image shares VIDEO tracks
+          audio   → {audio}
+          subtitle→ {subtitle, text}
+          text    → {subtitle, text}
+
+        Asset types not in the map (e.g. 'document') raise.
+        """
+        allowed_kinds = ASSET_TYPE_TO_TRACK_KINDS.get(asset_type_value)
+        if not allowed_kinds:
+            raise CommandError(
+                f"allocate_track_for: asset type {asset_type_value!r} "
+                f"is not a Timeline media")
+        # Find the FIRST existing compatible track with no overlap.
+        for t in self.core.project.timeline.tracks:
+            if t.kind.value not in allowed_kinds:
+                continue
+            if not self._track_overlaps(t, tl_start, tl_end):
+                return t
+        # No fit: create a new track.
+        kind_enum = TrackKind(list(allowed_kinds)[0])
+        return self.add_track(kind_enum)
 
     # ---------- Clip 增删 ----------
 
     def add_clip(self, asset_id: str, source_start: float, source_end: float,
-                 timeline_start: float, track_id: str = "v1",
+                 timeline_start: float, track_id: str | None = None,
                  why: str = "") -> Clip:
         duration = source_end - source_start
         if duration <= 0:
             raise CommandError("source_range 无效")
 
-        # 类型校验：素材类型与轨道 kind 必须匹配
+        # Asset type → allowed track kinds.
         asset = next((a for a in self.core.project.assets
                       if a.asset_id == asset_id), None)
         if asset is not None:
-            asset_type = asset.type.value
-            tl = self.core.project.timeline
-            track = next((t for t in tl.tracks
-                          if t.track_id == track_id), None)
-            if track is not None:
-                # VIDEO 轨接受 video / image（图片当静帧）
-                # AUDIO 轨只接受 audio
-                # TEXT 轨只接受无 asset_id（字幕）—— 实际不强制，但常规用法
-                kind = track.kind.value
-                if kind == "video" and asset_type not in ("video", "image"):
+            asset_type_value = asset.type.value
+        elif asset_id == "":
+            # Legacy: add_clip("", ...) was used to create subtitle
+            # clips (no asset; text in context). Treat as text so
+            # the allocator routes to a TEXT/SUBTITLE track.
+            asset_type_value = "text"
+        else:
+            # Unknown asset_id — infer the kind from the track_id
+            # prefix. Legacy callers (tests) often call add_clip
+            # without first registering the asset, so we look at
+            # the track naming convention to route correctly.
+            #   a*/A* → audio
+            #   t*/T* → text/subtitle
+            #   v*/V* (or default) → video
+            if track_id and track_id[0].lower() == "a":
+                asset_type_value = "audio"
+            elif track_id and track_id[0].lower() == "t":
+                asset_type_value = "text"
+            else:
+                asset_type_value = "video"
+        tl_end = timeline_start + duration
+
+        # GUI-03C: Core-owned track allocation. If the user named
+        # track_id AND a track with that id already exists, honor
+        # GUI-03C: Core-owned track allocation. If `track_id` names
+        # an existing track, honor the prefer (with type-policy
+        # check when the asset is registered). If the track doesn't
+        # exist, fall through to the allocator which finds a
+        # compatible track (or creates one of the right kind). We
+        # no longer auto-create a VIDEO track for an arbitrary
+        # track_id — that legacy path assumed the new track was
+        # always VIDEO, which broke heterogeneous assets.
+        if track_id:
+            existing = next(
+                (t for t in self.core.project.timeline.tracks
+                 if t.track_id == track_id), None,
+            )
+            if existing is not None:
+                _allowed = ASSET_TYPE_TO_TRACK_KINDS.get(asset_type_value, set())
+                if asset is not None and existing.kind.value not in _allowed:
                     raise CommandError(
-                        f"track {track_id} (video) rejects asset type {asset_type}")
-                if kind == "audio" and asset_type != "audio":
+                        f"track {track_id} (kind {existing.kind.value}) "
+                        f"rejects asset type {asset_type_value!r}")
+                if self._track_overlaps(existing, timeline_start, tl_end):
                     raise CommandError(
-                        f"track {track_id} (audio) rejects asset type {asset_type}")
+                        f"add_clip: track {track_id} 时间重叠："
+                        f"({timeline_start:.2f}, {tl_end:.2f}) 与已有 clip 重叠"
+                    )
+                track = existing
+                actual_track_id = track.track_id
+            else:
+                # Track doesn't exist — let the Core allocator find
+                # or create a compatible one. (We don't auto-create
+                # at the prefer_track_id because we don't know the
+                # right kind without the asset's type info, and
+                # legacy "always VIDEO" was the source of the bgm
+                # regression.)
+                track = self.allocate_track_for(
+                    asset_type_value, timeline_start, tl_end,
+                    prefer_track_id=None,
+                )
+                actual_track_id = track.track_id
+        else:
+            track = self.allocate_track_for(
+                asset_type_value, timeline_start, tl_end, prefer_track_id=None,
+            )
+            actual_track_id = track.track_id
 
         clip = Clip(
             clip_id=f"c{uuid.uuid4().hex[:6]}",
             asset_id=asset_id,
             source_range=TimeRange(start=source_start, end=source_end),
-            timeline_range=TimeRange(start=timeline_start, end=timeline_start + duration),
-            track_id=track_id,
+            timeline_range=TimeRange(start=timeline_start, end=tl_end),
+            track_id=actual_track_id,
         )
-        tl = self.core.project.timeline
-        track = next((t for t in tl.tracks if t.track_id == track_id), None)
-        if track is None:
-            track = self.add_track(TrackKind.VIDEO, track_id)
         # 重叠检查（同一轨道片段不允许重叠）
         self._check_no_overlap(
-            track_id, timeline_start, timeline_start + duration,
+            actual_track_id, timeline_start, tl_end,
             op_name=f"add_clip({asset_id})")
         track.clip_ids.append(clip.clip_id)
         self.core.project.clips[clip.clip_id] = clip
@@ -278,7 +424,7 @@ class CommandLayer:
     def add_image_clip(self, asset_id: str,
                         timeline_start_frame: int,
                         timeline_duration_frames: int,
-                        track_id: str = "v1",
+                        track_id: str | None = None,
                         why: str = "") -> Clip:
         """Add an image clip with frame-native coordinates.
 
@@ -323,23 +469,6 @@ class CommandLayer:
                 f"{asset.type.value}, not image"
             )
 
-        # Resolve the target track (auto-create if absent — keeps
-        # the call site simple for Agent scripts).
-        tl = self.core.project.timeline
-        track = next((t for t in tl.tracks if t.track_id == track_id), None)
-        if track is None:
-            track = self.add_track(TrackKind.VIDEO, track_id)
-
-        # Track policy: VIDEO tracks accept images; AUDIO/TEXT reject.
-        kind = track.kind.value
-        if kind == "audio":
-            raise CommandError(
-                f"track {track_id} (audio) rejects asset type image")
-        if kind == "text":
-            raise CommandError(
-                f"track {track_id} (text) rejects asset type image "
-                f"(use add_subtitle for text)")
-
         fps = self._fps_rational()
         seq_fps_num, seq_fps_den = fps.num, fps.den
 
@@ -352,9 +481,48 @@ class CommandLayer:
         tl_dur_sec = timeline_duration_frames * seq_fps_den / seq_fps_num
         tl_end_sec = tl_start_sec + tl_dur_sec
 
-        # Overlap check on the target track.
+        # GUI-03C: Core-owned track allocation. Image may share a
+        # VIDEO track with other video/image clips; the allocator
+        # Honor an explicit prefer_track_id first. If it doesn't
+        # exist, fall through to the allocator (which finds or
+        # creates a compatible track). The image-source semantics
+        # (1 source frame, 1.0 speed) are preserved.
+        if track_id:
+            existing = next(
+                (t for t in self.core.project.timeline.tracks
+                 if t.track_id == track_id), None,
+            )
+            if existing is not None:
+                # Image only goes on VIDEO tracks.
+                if existing.kind != TrackKind.VIDEO:
+                    raise CommandError(
+                        f"track {track_id} (kind {existing.kind.value}) "
+                        f"rejects asset type image")
+                if self._track_overlaps(existing, tl_start_sec, tl_end_sec):
+                    raise CommandError(
+                        f"add_image_clip: track {track_id} 时间重叠")
+                track = existing
+                actual_track_id = track.track_id
+            else:
+                # Track doesn't exist — fall through to the
+                # allocator (which will find or create a VIDEO track
+                # for the image).
+                track = self.allocate_track_for(
+                    "image", tl_start_sec, tl_end_sec,
+                    prefer_track_id=None,
+                )
+                actual_track_id = track.track_id
+        else:
+            # Core-owned allocator: find a non-overlapping track or create.
+            track = self.allocate_track_for(
+                "image", tl_start_sec, tl_end_sec,
+                prefer_track_id=track_id,
+            )
+            actual_track_id = track.track_id
+
+        # Overlap check on the resolved track.
         self._check_no_overlap(
-            track_id, tl_start_sec, tl_end_sec,
+            actual_track_id, tl_start_sec, tl_end_sec,
             op_name=f"add_image_clip({asset_id})")
 
         clip = Clip(
@@ -362,7 +530,7 @@ class CommandLayer:
             asset_id=asset_id,
             source_range=TimeRange(start=src_start_sec, end=src_end_sec),
             timeline_range=TimeRange(start=tl_start_sec, end=tl_end_sec),
-            track_id=track_id,
+            track_id=actual_track_id,
             speed=1.0,
         )
         track.clip_ids.append(clip.clip_id)
@@ -521,20 +689,24 @@ class CommandLayer:
     # ---------- 字幕（text 轨） ----------
 
     def add_subtitle(self, text: str, start: float, end: float,
-                     track_id: str = "t1", why: str = "") -> Clip:
-        """在 text 轨加字幕 clip（无源素材，asset_id=""，内容在 context.text）。"""
+                     track_id: str | None = None, why: str = "") -> Clip:
+        """在 text 轨加字幕 clip（无源素材，asset_id=""，内容在 context.text）。
+        GUI-03C: track_id is None by default; the Core-owned
+        allocator routes to the first compatible TEXT/SUBTITLE
+        track. Pass track_id to pin to a specific track (must be
+        text/subtitle kind)."""
         if end <= start:
             raise CommandError("字幕时间范围无效")
-        tl = self.core.project.timeline
-        track = next((t for t in tl.tracks if t.track_id == track_id), None)
-        if track is None:
-            track = self.add_track(TrackKind.TEXT, track_id)
+        track = self.allocate_track_for(
+            "text", start, end, prefer_track_id=track_id,
+        )
+        actual_track_id = track.track_id
         clip = Clip(
             clip_id=f"c{uuid.uuid4().hex[:6]}",
             asset_id="",
             source_range=TimeRange(start=0.0, end=end - start),
             timeline_range=TimeRange(start=start, end=end),
-            track_id=track_id,
+            track_id=actual_track_id,
             context={"text": text},
         )
         track.clip_ids.append(clip.clip_id)

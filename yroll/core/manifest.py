@@ -26,6 +26,35 @@ class TrackKind(str, Enum):
     VIDEO = "video"
     AUDIO = "audio"
     TEXT = "text"
+    SUBTITLE = "subtitle"
+
+
+class TrackRole(str, Enum):
+    """GUI-03C: optional semantic role for a track. Not required —
+    most tracks leave role=None and rely on kind-based policy.
+    Roles hint at the intended use (V1=primary, A1=voice, etc.)
+    and may be displayed in the track label.
+    """
+    PRIMARY = "primary"     # main visual
+    OVERLAY = "overlay"     # PiP, B-roll, picture-in-picture
+    VOICE = "voice"         # voiceover
+    MUSIC = "music"         # background music
+    SFX = "sfx"             # sound effects
+    CAPTION = "caption"     # subtitle / karaoke text
+
+
+# Map asset.type.value → allowed TrackKind(s).
+# Image and video share VIDEO tracks. Audio and subtitle are
+# exclusive to their own kinds. TrackKind.TEXT and TrackKind.SUBTITLE
+# are aliases (subtitle clips are text-only assets).
+ASSET_TYPE_TO_TRACK_KINDS: dict[str, set[str]] = {
+    "video":    {"video"},
+    "image":    {"video"},
+    "audio":    {"audio"},
+    "subtitle": {"subtitle", "text"},   # accept both for legacy
+    "text":     {"subtitle", "text"},
+    "document": set(),                  # documents aren't a Timeline media
+}
 
 
 class RelationStrength(str, Enum):
@@ -153,9 +182,11 @@ class Track(BaseModel):
     track_id: str
     kind: TrackKind
     clip_ids: list[str] = Field(default_factory=list)
-    muted: bool = False  # 轨道静音（音频轨不出声 / PiP 轨不叠画）
+    muted: bool = False   # 轨道静音（音频轨不出声 / PiP 轨不叠画）
     locked: bool = False  # 轨道锁定（GUI 禁止拖动/编辑该轨 clip）
     hidden: bool = False  # 轨道隐藏（GUI 不显示该轨 clip，渲染时仍参与）
+    role: Optional[TrackRole] = None  # GUI-03C optional semantic role
+    label: Optional[str] = None       # human label, e.g. "V1 主画面"
 
 
 class Timeline(BaseModel):

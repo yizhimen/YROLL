@@ -23,6 +23,7 @@ def proj(tmp_path: Path):
          "-c:a", "aac", "-shortest", str(tmp_path / "v.mp4")],
         check=True, capture_output=True)
     core = ProjectCore.create(tmp_path, "sub-demo")
+    ProjectCore.ensure_default_tracks(core)
     core.project.assets.append(Asset(
         asset_id="a1", type=AssetType.VIDEO, path=str(tmp_path / "v.mp4"),
         identity=AssetIdentity(md5="y" * 32, size_bytes=1, duration_sec=2.0),

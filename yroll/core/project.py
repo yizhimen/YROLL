@@ -40,18 +40,12 @@ class ProjectCore:
         project = Project(
             project_id=uuid.uuid4().hex[:12], name=name, intent=intent or {}
         )
-        # 默认轨道结构（对齐剪映/CapCut：V1 主轨 + V2/V3 PiP + A1/A2/A3 + T1/T2）
-        from yroll.core.manifest import Track, TrackKind
-        project.timeline.tracks = [
-            Track(track_id="v1", kind=TrackKind.VIDEO),
-            Track(track_id="v2", kind=TrackKind.VIDEO),  # PiP 画中画
-            Track(track_id="v3", kind=TrackKind.VIDEO),  # 叠加/特效
-            Track(track_id="a1", kind=TrackKind.AUDIO),  # 主音（视频自带）
-            Track(track_id="a2", kind=TrackKind.AUDIO),  # 旁白/人声
-            Track(track_id="a3", kind=TrackKind.AUDIO),  # BGM/音效
-            Track(track_id="t1", kind=TrackKind.TEXT),   # 主字幕
-            Track(track_id="t2", kind=TrackKind.TEXT),   # 标题/特效字幕
-        ]
+        # GUI-03C: no pre-created default tracks. Tracks are allocated
+        # on demand by `cmd.allocate_track_for` (and `cmd.add_track` for
+        # explicit creation). Old projects that had v1/v2/v3/a1/a2/a3/
+        # t1/t2 pre-created still work — those tracks are present
+        # in `project.timeline.tracks` after ProjectCore.open() and
+        # the allocator reuses them when compatible.
         core = cls(path, project)
         core.save_state()
         return core

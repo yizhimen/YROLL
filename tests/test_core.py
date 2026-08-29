@@ -11,9 +11,15 @@ from yroll.core.project import ProjectCore
 
 @pytest.fixture()
 def core(tmp_path: Path) -> ProjectCore:
-    return ProjectCore.create(tmp_path, "demo", intent={"goal": "测试项目"})
+    c = ProjectCore.create(tmp_path, "demo", intent={"goal": "测试项目"})
+    # GUI-03C: pre-create the legacy 8 default tracks so existing
+    # tests counting operations and revisions see the same state
+    # they did before dynamic-track allocation.
+    ProjectCore.ensure_default_tracks(c)
+    return c
 
 
+    ProjectCore.ensure_default_tracks(core)
 @pytest.fixture()
 def cmd(core: ProjectCore) -> CommandLayer:
     return CommandLayer(core, who=Actor.HUMAN)
@@ -131,6 +137,7 @@ def test_revert_restores_state(tmp_path):
     from yroll.core.manifest import Actor, Region
 
     core = ProjectCore.create(tmp_path, "revert-demo")
+    ProjectCore.ensure_default_tracks(core)
     core.project.assets.append(Asset(
         asset_id="a1", type=AssetType.VIDEO, path="v.mp4",
         identity=AssetIdentity(md5="x" * 32, size_bytes=1, duration_sec=10.0),
@@ -173,6 +180,7 @@ def test_revert_split_and_problem(tmp_path):
     from yroll.core.problems import recommend, report_problem
 
     core = ProjectCore.create(tmp_path, "revert2-demo")
+    ProjectCore.ensure_default_tracks(core)
     core.project.assets.append(Asset(
         asset_id="a1", type=AssetType.VIDEO, path="v.mp4",
         identity=AssetIdentity(md5="x" * 32, size_bytes=1, duration_sec=10.0),
@@ -211,6 +219,7 @@ def test_redo_via_revert_of_revert(tmp_path):
     from yroll.core.project import ProjectCore
 
     core = ProjectCore.create(tmp_path, "redo-demo")
+    ProjectCore.ensure_default_tracks(core)
     core.project.assets.append(Asset(
         asset_id="a1", type=AssetType.VIDEO, path="v.mp4",
         identity=AssetIdentity(md5="x" * 32, size_bytes=1, duration_sec=10.0),
@@ -232,6 +241,7 @@ def test_ripple_delete(tmp_path):
     from yroll.core.project import ProjectCore
 
     core = ProjectCore.create(tmp_path, "ripple-demo")
+    ProjectCore.ensure_default_tracks(core)
     core.project.assets.append(Asset(
         asset_id="a1", type=AssetType.VIDEO, path="v.mp4",
         identity=AssetIdentity(md5="x" * 32, size_bytes=1, duration_sec=30.0),

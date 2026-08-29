@@ -27,32 +27,57 @@ def _make_core(tmp_path: Path, name: str = "t") -> ProjectCore:
 
 
 def test_default_tracks_present():
-    """P0-7：新建工程必须有 V1/V2/V3 + A1/A2/A3 + T1/T2 共 8 条默认轨。"""
+    """GUI-03C: NEW projects have NO pre-created default tracks.
+    Tracks are allocated on demand by the Core allocator. The
+    visible Timeline contains only tracks that are actually needed
+    by the current project (after adding clips)."""
     import tempfile
     with tempfile.TemporaryDirectory() as td:
         core = ProjectCore.create(Path(td), "new")
-        kinds = [(t.track_id, t.kind) for t in core.project.timeline.tracks]
-        expected = [
-            ("v1", TrackKind.VIDEO), ("v2", TrackKind.VIDEO), ("v3", TrackKind.VIDEO),
-            ("a1", TrackKind.AUDIO), ("a2", TrackKind.AUDIO), ("a3", TrackKind.AUDIO),
-            ("t1", TrackKind.TEXT), ("t2", TrackKind.TEXT),
-        ]
-        for e in expected:
-            assert e in kinds, f"缺少默认轨 {e[0]} ({e[1].value})"
+        # No pre-created tracks.
+        assert core.project.timeline.tracks == [], (
+            "GUI-03C: ProjectCore.create() must NOT pre-create "
+            "v1/v2/v3/a1/a2/a3/t1/t2; tracks are allocated on demand."
+        )
+        # Add an image — exactly one track (v1) is created.
+        core.project.assets.append(Asset(
+            asset_id="img1", type=AssetType.IMAGE, path="x.jpg",
+            identity=AssetIdentity(md5="x" * 32, size_bytes=1),
+        ))
+        layer = CommandLayer(core, who=Actor.HUMAN)
+        layer.add_image_clip("img1", 0, 30)
+        # Only v1 is now present.
+        assert len(core.project.timeline.tracks) == 1
+        assert core.project.timeline.tracks[0].track_id == "v1"
+        # Adding an audio clip allocates a1 (a new track kind).
+        core.project.assets.append(Asset(
+            asset_id="aud1", type=AssetType.AUDIO, path="x.m4a",
+            identity=AssetIdentity(md5="y" * 32, size_bytes=1, duration_sec=2.0),
+        ))
+        layer.add_clip("aud1", 0.0, 2.0, timeline_start=0.0)
+        track_ids = sorted(t.track_id for t in core.project.timeline.tracks)
+        assert track_ids == ["a1", "v1"]
 
 
 def test_ensure_default_tracks_idempotent(tmp_path):
-    """P0-7：老工程 open 时自动补齐缺失轨道；已有轨道不重不删。"""
-    # 手工建一个只有 v1 + t1 的工程（模拟老 jdz-chaishao）
+    """P0-7 (legacy compat): OLD projects that have only v1+t1
+    still get the other 6 default tracks added on `ensure_default_tracks`
+    call. This is a legacy migration path for pre-GUI-03C projects;
+    new projects don't need it because they create tracks on demand."""
+    # Hand-craft an old project with only v1 + t1.
     core = ProjectCore.create(tmp_path, "old")
+    # New projects have no pre-created tracks; we add v1 + t1 manually
+    # to simulate a pre-GUI-03C project state.
+    from yroll.core.manifest import Track, TrackKind
     core.project.timeline.tracks = [
-        next(t for t in core.project.timeline.tracks if t.track_id == "v1"),
-        next(t for t in core.project.timeline.tracks if t.track_id == "t1"),
+        Track(track_id="v1", kind=TrackKind.VIDEO),
+        Track(track_id="t1", kind=TrackKind.TEXT),
     ]
     assert len(core.project.timeline.tracks) == 2
     ProjectCore.ensure_default_tracks(core)
+    # The legacy migration fills in the missing tracks.
     assert len(core.project.timeline.tracks) == 8
-    # 第二次调用幂等
+    # Second call is idempotent.
     ProjectCore.ensure_default_tracks(core)
     assert len(core.project.timeline.tracks) == 8
 
