@@ -393,6 +393,31 @@ export const api = {
       mutation_op: string;
       params: Record<string, unknown>;
     }> }>("/keyboard/keymap"),
+  // GUI-02: Core SnapEngine. Called on drag-end (not per pointermove).
+  // Threshold is in frames, bounded (default 8), zoom-independent.
+  snap: (frame: number, context: Record<string, unknown>, threshold: number = 8) =>
+    req<{
+      snapped_frame: number | null;
+      target: null | {
+        frame: number;
+        kind: string;
+        label: string;
+        clip_id: string;
+      };
+      delta_frames: number;
+    }>("/snap?threshold=" + threshold, {
+      method: "POST",
+      body: JSON.stringify({ frame, ...context }),
+    }),
+  getTimemap: (clipId: string) =>
+    req<{
+      source_start_frame: number;
+      source_end_frame: number;
+      timeline_start_frame: number;
+      speed: number;
+      fps: { num: number; den: number };
+      duration_frames: number;
+    }>(`/clip/${clipId}/timemap`),
   getLease: () =>
     req<{ heldBy: string | null; sessionId: string | null; mode: string | null;
            actor: string | null; baseRevision: number; isAlive: boolean;

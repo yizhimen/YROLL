@@ -67,6 +67,11 @@ class CommandLayer:
     def _fps(self) -> tuple[int, int]:
         return (self.core.project.fps_num or 30, self.core.project.fps_den or 1)
 
+    def _fps_rational(self):
+        from yroll.core.timebase import Rational
+        n, d = self._fps()
+        return Rational(n, d)
+
     def _frame_to_sec(self, frame: int) -> float:
         n, d = self._fps()
         return frame * d / n
@@ -450,11 +455,12 @@ class CommandLayer:
 
     def trim_clip(self, clip_id: str, new_source_start: float | None = None,
                   new_source_end: float | None = None, why: str = "") -> Operation:
+        """Trim by SOURCE seconds (legacy). For frame-native, use
+        `trim_clip_frame` which calls this with frame-derived seconds."""
         clip = self._clip(clip_id)
         before = {"source_range": clip.source_range.model_dump(),
                   "timeline_range": clip.timeline_range.model_dump()}
         sr = clip.source_range
-        old_len = sr.end - sr.start
         if new_source_start is not None:
             delta = new_source_start - sr.start
             sr.start = new_source_start
@@ -475,7 +481,64 @@ class CommandLayer:
         return self._record("trim", clip_id, before, after, why=why,
                             time_range=clip.timeline_range)
 
+    def trim_clip_frame(self, clip_id: str, src_start_frame: int | None = None,
+                        src_end_frame: int | None = None, why: str = '') -> Operation:
+        """Frame-native trim. Math in frames throughout; TimeMap is
+        used for source<->timeline conversion (also in frames). The
+        frame→seconds conversion happens once at the storage boundary
+        (TimeRange model) — not in the editing logic."""
+        import dataclasses
+        from yroll.core.timemap import TimeMap
+        fps = self._fps_rational()
+        clip = self._clip(clip_id)
+        tm = TimeMap.for_clip(clip, fps)
+        before = {"source_range": clip.source_range.model_dump(),
+                  "timeline_range": clip.timeline_range.model_dump()}
+        # Compute everything in frame domain.
+        if src_start_frame is not None and not (src_start_frame < tm.source_end_frame):
+            raise CommandError("trim src_start_frame 越界")
+        if src_end_frame is not None and not (src_end_frame > tm.source_start_frame):
+            raise CommandError("trim src_end_frame 越界")
+        # Apply frame changes via dataclasses.replace (TimeMap is frozen).
+        new_start_f = src_start_frame if src_start_frame is not None else tm.source_start_frame
+        new_end_f = src_end_frame if src_end_frame is not None else tm.source_end_frame
+        delta = (new_start_f - tm.source_start_frame) if src_start_frame is not None else 0
+        new_tl_start_f = tm.timeline_from_clip(
+            tm.clip_from_timeline(tm.timeline_start_frame) + delta
+        ) if src_start_frame is not None else tm.timeline_start_frame
+        tm = dataclasses.replace(
+            tm,
+            source_start_frame=new_start_f,
+            source_end_frame=new_end_f,
+            timeline_start_frame=new_tl_start_f,
+        )
+        if tm.source_range.duration_frames <= 0:
+            raise CommandError("trim 后长度无效")
+        # durationFrames > 0 invariant (GUI-02 user spec).
+        assert tm.source_range.duration_frames > 0, "trim produced non-positive duration"
+        # Write back as seconds (storage boundary).
+        clip.source_range = clip.source_range.model_copy(update={
+            "start": tm.source_start_frame * fps.den / fps.num,
+            "end": tm.source_end_frame * fps.den / fps.num,
+        })
+        clip.timeline_range = clip.timeline_range.model_copy(update={
+            "start": tm.timeline_start_frame * fps.den / fps.num,
+            "end": (tm.timeline_start_frame + tm.source_range.duration_frames) * fps.den / fps.num / clip.speed,
+        })
+        # 重叠检查
+        self._check_no_overlap(
+            clip.track_id, clip.timeline_range.start, clip.timeline_range.end,
+            exclude_clip_id=clip_id,
+            op_name=f"trim_clip_frame({clip_id})")
+        after = {"source_range": clip.source_range.model_dump(),
+                 "timeline_range": clip.timeline_range.model_dump()}
+        return self._record("trim", clip_id, before, after, why=why,
+                            time_range=clip.timeline_range)
+
     def split_clip(self, clip_id: str, at_source_time: float, why: str = "") -> tuple[Clip, Clip]:
+        """Split at SOURCE seconds (legacy). For frame-native, use
+        `split_clip_frame(at_timeline_frame)` which uses Core's TimeMap
+        to convert timeline_frame -> source_frame."""
         clip = self._clip(clip_id)
         sr = clip.source_range
         if not (sr.start < at_source_time < sr.end):
@@ -506,6 +569,28 @@ class CommandLayer:
                      why=why,
                      time_range=TimeRange(start=at_source_time, end=at_source_time))
         return clip, right
+
+    def split_clip_frame(self, clip_id: str, at_timeline_frame: int, why: str = '') -> tuple:
+        """Frame-native split. `at` is in TIMELINE frame coordinates;
+        TimeMap handles source<->timeline conversion in frames."""
+        from yroll.core.timebase import Rational
+        from yroll.core.timemap import TimeMap
+        fps = self._fps_rational()
+        clip = self._clip(clip_id)
+        tm = TimeMap.for_clip(clip, fps)
+        # Convert timeline frame to source frame.
+        at_source_frame = tm.source_from_timeline(at_timeline_frame)
+        if not (tm.source_start_frame < at_source_frame < tm.source_end_frame):
+            raise CommandError("切分点不在 clip 范围内")
+        # Perform the seconds-based split using the converted source frame.
+        at_source_time = at_source_frame * fps.den / fps.num
+        clip0, right = self.split_clip(clip_id, at_source_time, why=why)
+        # durationFrames > 0 invariant (GUI-02 user spec)
+        tm0 = TimeMap.for_clip(clip0, fps)
+        tm1 = TimeMap.for_clip(right, fps)
+        assert tm0.source_range.duration_frames > 0, "split left clip has 0 frames"
+        assert tm1.source_range.duration_frames > 0, "split right clip has 0 frames"
+        return clip0, right
 
     # ---------- Selection-aware mutations (P0-04B) ----------
     #
@@ -645,6 +730,8 @@ class CommandLayer:
 
     def move_clip(self, clip_id: str, new_timeline_start: float,
                   new_track_id: str | None = None, why: str = "") -> Operation:
+        """Move to new TIMELINE seconds (legacy). For frame-native, use
+        `move_clip_frame(new_timeline_start_frame)`."""
         from yroll.core.links import infer_relationships
 
         clip = self._clip(clip_id)
@@ -708,6 +795,16 @@ class CommandLayer:
             after["cross_shifted_count"] = len(cross_shifted)
         return self._record("move", clip_id, before, after, why=why,
                             time_range=clip.timeline_range)
+
+    def move_clip_frame(self, clip_id: str, new_timeline_start_frame: int,
+                        new_track_id: str | None = None,
+                        why: str = "") -> Operation:
+        """Frame-native move. Math in frames; conversion at storage
+        boundary only."""
+        fps = self._fps_rational()
+        new_timeline_start = new_timeline_start_frame * fps.den / fps.num
+        return self.move_clip(clip_id, new_timeline_start,
+                              new_track_id=new_track_id, why=why)
 
     def set_speed(self, clip_id: str, speed: float, why: str = "") -> Operation:
         clip = self._clip(clip_id)

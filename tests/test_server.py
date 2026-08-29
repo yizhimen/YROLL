@@ -39,9 +39,12 @@ def test_full_edit_flow_over_http(authed_client):
     assert r.status_code == 200
     clip_id = r.json()["clip_id"]
 
-    # trim / speed / volume
+    # GUI-02: trim body is now frame-native.
+    # The clip was added as src 0..10s = frames 0..300 at 30fps.
+    # Trim to source frames 60..300 (i.e. 2..10s).
     assert authed_client.post(f"/clips/{clip_id}/trim",
-                       json={"new_source_start": 2.0}).status_code == 200
+                       json={"new_source_start_frame": 60,
+                             "new_source_end_frame": 300}).status_code == 200
     assert authed_client.post(f"/clips/{clip_id}/speed", json={"speed": 2.0}).status_code == 200
     assert authed_client.post(f"/clips/{clip_id}/volume", json={"volume": 0.8}).status_code == 200
 
@@ -71,7 +74,7 @@ def test_full_edit_flow_over_http(authed_client):
 
 
 def test_errors(authed_client):
-    r = authed_client.post("/clips/bad-id/trim", json={"new_source_start": 1.0})
+    r = authed_client.post("/clips/bad-id/trim", json={"new_source_start_frame": 1})
     assert r.status_code == 400
     r = authed_client.post("/revert", json={"operation_id": "op99999"})
     assert r.status_code == 404

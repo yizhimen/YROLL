@@ -89,7 +89,7 @@ def test_mcp_succeeds_after_handoff_human_to_agent(backend):
     assert mcp.state["mode"] == "edit", mcp.state
 
     refresh_revision(mcp)
-    resp = call_tool(mcp, "yroll_trim", {"clip_id": clip_id, "new_source_start": 2.0, "why": "B-test"})
+    resp = call_tool(mcp, "yroll_trim", {"clip_id": clip_id, "new_source_start_frame": 60, "new_source_end_frame": 300, "why": "B-test"})
     body = content(resp)
     assert not body.get("_isError"), body
     assert body["type"] == "trim"
@@ -119,7 +119,7 @@ def test_agent_holds_edit_blocks_gui_mutation(backend):
     # A third party tries to mutate with a bogus sessionId
     status, body = http_post(
         url, f"/clips/{clip_id}/trim",
-        {"new_source_start": 9.0, "new_source_end": 10.0, "why": "C-test"},
+        {"new_source_start_frame":270,"new_source_end_frame":300,"why": "C-test"},
         params={"sessionId": "bogus", "baseRevision": 1})
     assert status == 403, (status, body)
     assert "lease rejected" in str(body)
@@ -151,7 +151,7 @@ def test_stale_base_revision_returns_409_for_mcp_path(backend):
     # Now try a trim with a STALE baseRevision
     status, body = http_post(
         url, f"/clips/{clip_id}/trim",
-        {"new_source_start": 7.0, "new_source_end": 9.0, "why": "D-stale"},
+        {"new_source_start_frame":210,"new_source_end_frame":270,"why": "D-stale"},
         params={"sessionId": sid, "baseRevision": 0})
     assert status == 409, (status, body)
     assert "revision mismatch" in str(body)
@@ -208,7 +208,7 @@ def test_no_silent_overwrite_on_mcp_conflict(backend):
     for i in range(3):
         status, body = http_post(
             url, f"/clips/{clip_id}/trim",
-            {"new_source_start": 8.0, "new_source_end": 9.0, "why": f"G-{i}"},
+            {"new_source_start_frame":240,"new_source_end_frame":270,"why": f"G-{i}"},
             params={"sessionId": sid, "baseRevision": 0})
         assert status == 409, (i, status, body)
     # No new ops, no state change

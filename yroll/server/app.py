@@ -72,13 +72,15 @@ def _ranged_file_response(path: Path, request: Request):
 
 
 class TrimReq(BaseModel):
-    new_source_start: float | None = None
-    new_source_end: float | None = None
+    # GUI-02: frame-native. Seconds fields are removed; the server
+    # rejects requests with the old field names.
+    new_source_start_frame: int | None = None
+    new_source_end_frame: int | None = None
     why: str = ""
 
 
 class MoveReq(BaseModel):
-    new_timeline_start: float
+    new_timeline_start_frame: int
     new_track_id: str | None = None
     why: str = ""
 
@@ -95,7 +97,9 @@ class VolumeReq(BaseModel):
 
 
 class SplitReq(BaseModel):
-    at_source_time: float
+    # GUI-02: at is in TIMELINE frame coordinates. The Core's TimeMap
+    # converts to source frame internally.
+    at_timeline_frame: int
     why: str = ""
 
 
@@ -205,6 +209,12 @@ class _MutationGateMiddleware:
         # callers (who need it most), so it is exempt. The handler is
         # still responsible for not mutating.
         if path == '/mutation/preview':
+            await self.app(scope, receive, send)
+            return
+        # GUI-02: /snap is a read despite being POST — it never writes
+        # state. The handler runs Core's SnapEngine and returns the
+        # result without logging an operation.
+        if path == '/snap':
             await self.app(scope, receive, send)
             return
         if path == '/session/ensure':
@@ -432,16 +442,62 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
 
     @app.post("/clips/{clip_id}/trim")
     def trim(clip_id: str, req: TrimReq, baseRevision: int = None):
-        return guard(_check_rev(baseRevision, lambda: st.cmd.trim_clip(clip_id, **req.model_dump())))
+        # GUI-02: frame-native. Body: {new_source_start_frame,
+        # new_source_end_frame, why}. Reject any legacy seconds fields.
+        for legacy in ("new_source_start", "new_source_end"):
+            if legacy in req.model_fields_set:
+                raise HTTPException(400, f"GUI-02: '{legacy}' (seconds) is no longer accepted; use 'new_source_{legacy.replace('new_source_','')}_frame'")
+        return guard(_check_rev(baseRevision, lambda: st.cmd.trim_clip_frame(
+            clip_id,
+            src_start_frame=req.new_source_start_frame,
+            src_end_frame=req.new_source_end_frame,
+            why=req.why,
+        )))
 
     @app.post("/clips/{clip_id}/split")
     def split(clip_id: str, req: SplitReq, baseRevision: int = None):
-        left, right = guard(_check_rev(baseRevision, lambda: st.cmd.split_clip(clip_id, **req.model_dump())))
+        # GUI-02: body {at_timeline_frame, why}. Core's TimeMap
+        # converts timeline_frame -> source_frame.
+        if "at_source_time" in req.model_fields_set:
+            raise HTTPException(400, "GUI-02: 'at_source_time' (seconds) is no longer accepted; use 'at_timeline_frame'")
+        left, right = guard(_check_rev(baseRevision, lambda: st.cmd.split_clip_frame(
+            clip_id, at_timeline_frame=req.at_timeline_frame, why=req.why)))
         return {"left": left, "right": right}
 
     @app.post("/clips/{clip_id}/move")
     def move(clip_id: str, req: MoveReq, baseRevision: int = None):
-        return guard(_check_rev(baseRevision, lambda: st.cmd.move_clip(clip_id, **req.model_dump())))
+        if "new_timeline_start" in req.model_fields_set:
+            raise HTTPException(400, "GUI-02: 'new_timeline_start' (seconds) is no longer accepted; use 'new_timeline_start_frame'")
+        return guard(_check_rev(baseRevision, lambda: st.cmd.move_clip_frame(
+            clip_id,
+            new_timeline_start_frame=req.new_timeline_start_frame,
+            new_track_id=req.new_track_id,
+            why=req.why,
+        )))
+
+    @app.get("/clip/{clip_id}/timemap")
+    def get_timemap(clip_id: str, fps_num: int = None, fps_den: int = None):
+        """GUI-02: returns TimeMap.for_clip(clip, fps) as a JSON object.
+        The GUI must not construct TimeMap locally; it consumes Core's
+        result via this endpoint. If fps_num/fps_den are not given,
+        the project's fps is used."""
+        from yroll.core.timebase import Rational
+        from yroll.core.timemap import TimeMap
+        clip = st.core.project.clips.get(clip_id)
+        if clip is None:
+            raise HTTPException(404, f"clip 不存在: {clip_id}")
+        num = fps_num if fps_num is not None else st.core.project.fps_num
+        den = fps_den if fps_den is not None else (st.core.project.fps_den or 1)
+        fps = Rational(num or 30, den)
+        tm = TimeMap.for_clip(clip, fps)
+        return {
+            "source_start_frame": tm.source_start_frame,
+            "source_end_frame": tm.source_end_frame,
+            "timeline_start_frame": tm.timeline_start_frame,
+            "speed": tm.speed,
+            "fps": {"num": num, "den": den},
+            "duration_frames": tm.source_range.duration_frames,
+        }
 
     @app.post("/clips/{clip_id}/speed")
     def speed(clip_id: str, req: SpeedReq):
@@ -1385,6 +1441,76 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
                 {"clip_id": cid, "text": text}
                 for cid, text in zip(pv.subtitle_clip_ids, pv.subtitle_texts)
             ],
+        }
+
+    # ---------- GUI-02: /snap (Core SnapEngine over HTTP) ----------
+    @app.post("/snap")
+    def snap(req: dict, threshold: int = 8):
+        """GUI-02: authoritative Core SnapEngine. Threshold is in FRAMES,
+        bounded, and zoom-independent (default 8). The GUI does NOT
+        POST this on every pointermove — only on drag-end. Local
+        integer-frame candidate calculation during drag is fine.
+        """
+        from yroll.core.snap import (
+            SnapEngine, SnapTarget, SnapKind,
+        )
+        from yroll.core.timebase import Rational
+        from yroll.core.timemap import TimeMap
+        fps = Rational(st.core.project.fps_num,
+                       st.core.project.fps_den or 1)
+        engine = SnapEngine(threshold_frames=threshold)
+        ctx = req or {}
+        candidates: list = []
+        # Playhead
+        ph = ctx.get("playhead_frame")
+        if ph is not None:
+            candidates.append(SnapTarget(int(ph), SnapKind.PLAYHEAD, "playhead", ""))
+        # Clips
+        for cid in ctx.get("clip_ids", []) or []:
+            c = st.core.project.clips.get(cid)
+            if not c:
+                continue
+            tm = TimeMap.for_clip(c, fps)
+            # clip boundaries in TIMELINE frames
+            candidates.append(SnapTarget(tm.timeline_start_frame, SnapKind.CLIP_START, cid, cid))
+            candidates.append(SnapTarget(tm.timeline_from_source(tm.source_end_frame), SnapKind.CLIP_END, cid, cid))
+        # Tracks
+        for tid in ctx.get("track_ids", []) or []:
+            track = next((t for t in st.core.project.timeline.tracks if t.track_id == tid), None)
+            if not track:
+                continue
+            for cid in track.clip_ids:
+                c = st.core.project.clips.get(cid)
+                if not c:
+                    continue
+                tm = TimeMap.for_clip(c, fps)
+                candidates.append(SnapTarget(tm.timeline_start_frame, SnapKind.CLIP_START, cid, cid))
+                candidates.append(SnapTarget(tm.timeline_from_source(tm.source_end_frame), SnapKind.CLIP_END, cid, cid))
+        # Markers
+        if ctx.get("include_markers", True):
+            for m in getattr(st.core.project, "markers", []) or []:
+                candidates.append(SnapTarget(int(m.get("timeline_frame", 0)),
+                                           SnapKind.MARKER, m.get("label", ""), ""))
+        # Beats
+        if ctx.get("include_beats", True):
+            for b in getattr(st.core.project, "beats", []) or []:
+                # beats may use start_frame or timeline_frame depending on version
+                f = b.get("start_frame", b.get("timeline_frame", 0))
+                candidates.append(SnapTarget(int(f), SnapKind.BEAT, b.get("label", ""), ""))
+
+        frame = int(req.get("frame", 0)) if isinstance(req.get("frame"), (int, float)) else 0
+        result = engine.snap(frame, candidates)
+        if result is None:
+            return {"snapped_frame": None, "target": None, "delta_frames": 0}
+        return {
+            "snapped_frame": result.frame,
+            "target": {
+                "frame": result.target.frame,
+                "kind": result.target.kind.value,
+                "label": result.target.label,
+                "clip_id": result.target.clip_id,
+            },
+            "delta_frames": result.delta_frames,
         }
 
     # ---------- Markers (P1 §38) ----------

@@ -164,7 +164,8 @@ def test_yroll_trim_writes_via_http_and_logs_with_who_ai(mcp, backend):
         "base_revision", mcp.state["base_revision"])
 
     op = _content(_call(mcp, "yroll_trim",
-                        {"clip_id": clip_id, "new_source_start": 2.0,
+                        {"clip_id": clip_id, "new_source_start_frame": 60,
+                         "new_source_end_frame": 300,
                          "why": "MCP 跨进程测试"}))
     assert op["type"] == "trim"
     state = _content(_call(mcp, "yroll_get_project", {}))
