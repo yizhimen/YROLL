@@ -3,15 +3,18 @@
 // The 6 user-pinned DF vectors are the source of truth. The Python
 // implementation in yroll/core/timebase.py and this TypeScript
 // implementation MUST agree on every vector. The shared vector list
-// is in gui/src/frames.ts (PINNED_DF_VECTORS) and mirrored in
+// is USER_PINNED_DF here (exported by frames.ts) and mirrored in
 // tests/test_timecode_conformance.py.
+//
+// Closure note: F=30 -> "00:00:01;00" (the standard bijective map),
+// F=1798 -> "00:01:00;00" (a DROPPED label — from_timecode MUST raise).
 
 import { describe, expect, it } from "vitest";
 
 import {
   framesToTimecode,
   timecodeToFrames,
-  PINNED_DF_VECTORS,
+  USER_PINNED_DF,
   rational,
   framesToSeconds,
   secondsToFrames,
@@ -32,25 +35,89 @@ const FPS_60 = rational(60, 1);
 const FPS_30000_1001 = rational(30000, 1001);
 
 describe("conformance: 6 user-pinned DF vectors at 30000/1001", () => {
-  for (const [frame, expected] of PINNED_DF_VECTORS) {
+  for (const [frame, expected] of USER_PINNED_DF) {
     it(`frame ${frame} → ${expected}`, () => {
       expect(framesToTimecode(frame, FPS_30000_1001, true)).toBe(expected);
     });
   }
 });
 
-describe("conformance: DF roundtrip (the 5 unambiguous vectors)", () => {
-  // F=29 and F=30 both map to 00:00:00;29; the inverse returns
-  // the lower preimage (29). The other 5 vectors round-trip exactly.
-  for (const [frame, expected] of PINNED_DF_VECTORS) {
-    it(`frame ${frame} → ${expected} → frame`, () => {
+describe("conformance: DF roundtrip (5 vectors; F=1798 raises)", () => {
+  // Standard bijective DF: every non-dropped label maps back to its
+  // F. F=1798's label "00:01:00;00" IS a dropped label (NDF 1800),
+  // so timecodeToFrames must raise — the round-trip is intentionally
+  // asymmetric (to_timecode produces a label the inverse rejects).
+  for (const [frame, expected] of USER_PINNED_DF) {
+    it(`frame ${frame} → ${expected} → ${frame === 1798 ? "raises" : "frame"}`, () => {
       const s = framesToTimecode(frame, FPS_30000_1001, true);
-      const back = timecodeToFrames(s, FPS_30000_1001, true);
-      if (frame === 30) {
-        expect(back).toBe(29);
+      if (frame === 1798) {
+        expect(() => timecodeToFrames(s, FPS_30000_1001, true))
+          .toThrowError(/dropped NDF label/);
       } else {
+        const back = timecodeToFrames(s, FPS_30000_1001, true);
         expect(back).toBe(frame);
       }
+    });
+  }
+});
+
+describe("conformance: F=1798 round-trip asymmetry is pinned", () => {
+  // F=1798 → "00:01:00;00" (DF, the standard algorithm).
+  // "00:01:00;00" → RAISE (it's a dropped label).
+  // The inverse of the inverse (i.e. asserting a fresh DF round-trip
+  // from a non-dropped label) is covered by the loop above.
+  it("to_timecode(1798, DF) === '00:01:00;00'", () => {
+    expect(framesToTimecode(1798, FPS_30000_1001, true)).toBe("00:01:00;00");
+  });
+  it("from_timecode('00:01:00;00') raises 'dropped NDF label'", () => {
+    expect(() => timecodeToFrames("00:01:00;00", FPS_30000_1001, true))
+      .toThrowError(/dropped NDF label/);
+  });
+  it("from_timecode('00:01:00;00') raises even without explicit flag (semicolon separator)", () => {
+    expect(() => timecodeToFrames("00:01:00;00", FPS_30000_1001))
+      .toThrowError(/dropped NDF label/);
+  });
+});
+
+// Illegal dropped NDF labels must raise. The 2 dropped NDF frame
+// numbers at the start of each non-10th minute are NOT displayable
+// inputs. Per closure spec, from_timecode rejects them.
+const DROPPED_DF_LABELS = [
+  "00:01:00;00",   // NDF 1800 (dropped, minute 1 of 1st 10-min)
+  "00:01:00;01",   // NDF 1801 (dropped)
+  "00:02:00;00",   // NDF 3600 (dropped, minute 2)
+  "00:02:00;01",   // NDF 3601 (dropped)
+  "00:09:00;00",   // NDF 16200 (dropped, minute 9 of 1st 10-min)
+  "00:09:00;01",   // NDF 16201 (dropped)
+  "00:11:00;00",   // NDF 19800 (dropped, minute 1 of 2nd 10-min)
+  "00:11:00;01",   // NDF 19801 (dropped)
+];
+
+describe("conformance: dropped DF labels raise", () => {
+  for (const label of DROPPED_DF_LABELS) {
+    it(`from_timecode("${label}") raises "dropped NDF label"`, () => {
+      expect(() => timecodeToFrames(label, FPS_30000_1001, true))
+        .toThrowError(/dropped NDF label/);
+    });
+    it(`from_timecode("${label}") raises even without explicit flag`, () => {
+      expect(() => timecodeToFrames(label, FPS_30000_1001))
+        .toThrowError(/dropped NDF label/);
+    });
+  }
+});
+
+// Out-of-range fields also raise.
+describe("conformance: out-of-range fields raise", () => {
+  const cases: Array<[string, RegExp]> = [
+    ["00:00:00;30", /out-of-range/],   // FF >= fpsInt (30)
+    ["00:00:60;00", /out-of-range/],   // SS >= 60
+    ["00:60:00;00", /out-of-range/],   // MM >= 60
+    ["24:00:00;00", /hour > 23/],      // HH >= 24
+  ];
+  for (const [label, matchRe] of cases) {
+    it(`from_timecode("${label}") raises`, () => {
+      expect(() => timecodeToFrames(label, FPS_30000_1001, true))
+        .toThrowError(matchRe);
     });
   }
 });

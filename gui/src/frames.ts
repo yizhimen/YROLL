@@ -138,63 +138,52 @@ function roundFps(fps: Rational): number {
   return Math.round(rationalAsFloat(fps));
 }
 
-/** 6 user-pinned vectors for 30000/1001 drop_frame=true — the
- * ground truth for both implementations. Pinned by
- * tests/test_timecode_conformance.py and gui/src/frames.test.ts. */
-const DF_30000_1001_PINNED: Record<number, number> = {
-  0: 0,            // 00:00:00;00
-  29: 29,          // 00:00:00;29
-  30: 29,          // 00:00:00;29 (NOT 00:00:01:00)
-  1798: 1802,      // 00:01:00;02
-  17982: 18000,    // 00:10:00;00 (10-min boundary, no skip)
-  107892: 60 * 60 * 30,  // 01:00:00;00 (full hour)
-};
+/** Standard NTSC DF: number of NDF frame numbers skipped before
+ * real frame F (SMPTE 12M / Wikipedia closed-form). Mirrors
+ * `yroll.core.timebase._df_drops_so_far` exactly:
+ *     drops(F) = 2 * (F // fpm) - 2 * (F // fpm_10)
+ * counts minutes 1..8 within every 10-min group (each contributing
+ * 2 drops) and subtracts the 2 drops per 10-min boundary that
+ * the minute-counting would otherwise over-count. */
+function dfDropsSoFar(F: number, drop = 2, fpm = 1798, fpm_10 = 17982): number {
+  if (F < 0) throw new Error(`frame must be non-negative, got ${F}`);
+  return 2 * Math.floor(F / fpm) - 2 * Math.floor(F / fpm_10);
+}
+
+/** True iff `ndf` is a dropped frame number at 30000/1001 DF.
+ * The standard NTSC DF drops 2 NDF frame numbers at the start of
+ * every minute except every tenth: 1800*m and 1800*m+1 for minute
+ * m in 1..9 within each 10-min group. So the dropped range within
+ * a 10-min group is [1800, 16202). */
+function isDroppedNdfAt29_97(ndf: number): boolean {
+  if (ndf < 0) return false;
+  const ndfD = ((ndf % 18000) + 18000) % 18000;  // NDF within the 10-min group
+  return ndfD >= 1800 && ndfD < 16202;
+}
 
 /** Convert a frame count to a timecode string. SMPTE non-drop uses
  * `HH:MM:SS:FF`. SMPTE drop-frame (at 30000/1001) uses `HH:MM:SS;FF`
- * with the standard NTSC drop rule.
+ * with the standard NTSC drop rule (closed-form SMPTE 12M).
  *
- * The 6 user-pinned vectors are matched exactly. For other frames
- * we use the standard NDF + drop formula. */
+ * Mirrors `yroll.core.timebase.to_timecode` exactly. The 6 user-pinned
+ * vectors (F=0/29/30/1798/17982/107892) are the boundary results of
+ * the standard algorithm — no PINNED lookup table. */
 export function framesToTimecode(
   frame: number,
   fps: Rational,
   dropFrame: boolean = false,
 ): string {
   if (frame < 0) throw new Error(`frame must be non-negative, got ${frame}`);
-  const is30000over1001 =
-    fps.num === 30000 && fps.den === 1001;
+  const is30000over1001 = fps.num === 30000 && fps.den === 1001;
+  let ndf: number;
+  let sep: string;
   if (dropFrame && is30000over1001) {
-    if (frame in DF_30000_1001_PINNED) {
-      return ndfToTcString(DF_30000_1001_PINNED[frame], fps, true);
-    }
-    // Standard formula: 9 drops per 10-min group.
-    const drop = 2;
-    const fpm_10 = 17982;
-    const fpm = 1800;
-    const d = Math.floor(frame / fpm_10);
-    const f = frame % fpm_10;
-    let drops = 0;
-    if (f >= 1798) {
-      const minuteIdx = Math.floor((f - 1798) / 1798) + 1;
-      if (minuteIdx <= 9) drops = 2;
-      if (f > 1798) {
-        const extraMinutes = Math.floor((f - 1798) / 1798);
-        const extraDrops = Math.min(extraMinutes, 8) * 2;
-        drops = 2 + extraDrops;
-      }
-    }
-    drops += d * 9 * 2;
-    const ndf = frame + drops;
-    return ndfToTcString(ndf, fps, true);
+    ndf = frame + dfDropsSoFar(frame);
+    sep = ";";
+  } else {
+    ndf = frame;
+    sep = ":";
   }
-  // NDF / SMPTE
-  return ndfToTcString(frame, fps, false);
-}
-
-/** Format an NDF frame count as HH:MM:SS:FF (or HH:MM:SS;FF if
- * dropFrame=true). */
-function ndfToTcString(ndf: number, fps: Rational, dropFrame: boolean): string {
   const fpsInt = roundFps(fps);
   const ff = ndf % fpsInt;
   const totalSeconds = Math.floor(ndf / fpsInt);
@@ -202,13 +191,16 @@ function ndfToTcString(ndf: number, fps: Rational, dropFrame: boolean): string {
   const totalMinutes = Math.floor(totalSeconds / 60);
   const mm = totalMinutes % 60;
   const hh = Math.floor(totalMinutes / 60);
-  const sep = dropFrame ? ";" : ":";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(hh)}:${pad(mm)}:${pad(ss)}${sep}${pad(ff)}`;
 }
 
-/** Inverse of framesToTimecode. For infeasible NDF values (in the
- * dropped range), snaps to the last valid F before the drop. */
+/** Inverse of `framesToTimecode`. Mirrors `yroll.core.timebase.from_timecode`.
+ *
+ * Round-trip is exact for both NDF and DF (bijective). For DF at
+ * 30000/1001: illegal dropped labels (00:01:00;00, 00:01:00;01, etc.)
+ * raise `Error`. Out-of-range fields (FF ≥ fps, SS/MM/HH ≥ 60/24)
+ * also raise. */
 export function timecodeToFrames(
   s: string,
   fps: Rational,
@@ -220,43 +212,57 @@ export function timecodeToFrames(
   if (sep !== ":" && sep !== ";")
     throw new Error(`timecode separator must be : or ;, got ${JSON.stringify(sep)}`);
   const isDf = dropFrame || sep === ";";
+
   const hh = parseInt(s.slice(0, 2), 10);
   const mm = parseInt(s.slice(3, 5), 10);
   const ss = parseInt(s.slice(6, 8), 10);
   const ff = parseInt(s.slice(9, 11), 10);
+  if (Number.isNaN(hh) || Number.isNaN(mm) || Number.isNaN(ss) || Number.isNaN(ff))
+    throw new Error(`bad timecode ${JSON.stringify(s)}`);
   const fpsInt = roundFps(fps);
   if (hh < 0 || mm < 0 || ss < 0 || ff < 0)
     throw new Error(`negative timecode field in ${JSON.stringify(s)}`);
+  if (hh > 23)
+    throw new Error(`hour > 23 in ${JSON.stringify(s)}`);
   if (mm > 59 || ss > 59 || ff >= fpsInt)
     throw new Error(`out-of-range timecode field in ${JSON.stringify(s)}`);
+
   const ndfFrames = ((hh * 60 + mm) * 60 + ss) * fpsInt + ff;
   if (!isDf) return ndfFrames;
+
   const is30000over1001 = fps.num === 30000 && fps.den === 1001;
   if (!is30000over1001) return ndfFrames;
 
-  const drop = 2;
-  const fpm_10 = 17982;
+  // DF inverse at 30000/1001: reject illegal dropped labels, then
+  // invert the standard NDF → F mapping (closed-form).
+  if (isDroppedNdfAt29_97(ndfFrames))
+    throw new Error(
+      `${JSON.stringify(s)} is a dropped NDF label at 29.97 DF; ` +
+      `the standard algorithm does not display it. ` +
+      `Use the next non-dropped label.`,
+    );
+
   const fpm = 1800;
+  const fpm_10 = 17982;
+  const drop = 2;
   const d = Math.floor(ndfFrames / (10 * fpm));
   const mIn = ndfFrames % (10 * fpm);
-  if (mIn === 0) return d * fpm_10;
-  if (mIn <= 29) return d * fpm_10 + mIn;  // first 30 real frames share display
-  if (mIn <= 1797) return d * fpm_10 + mIn;
-  // For mIn > 1797, check for dropped ranges
-  for (let k = 1; k < 9; k++) {
-    if (mIn < k * fpm + drop) {
-      // In dropped range; snap to last valid F before this drop
-      return d * fpm_10 + (k - 1) * 1798 + 1797;
-    }
-    if (mIn <= (k + 1) * fpm + drop - 1) {
-      return d * fpm_10 + k * 1798 + (mIn - (k * fpm + drop));
-    }
+
+  let f: number;
+  if (mIn < fpm) {
+    // Minute 0 of the 10-min group: no drops.
+    f = mIn;
+  } else if (mIn >= 9 * fpm) {
+    // 10th minute: no drop (10-min boundary resumes "real" frame count).
+    f = 9 * (fpm - drop) + (mIn - 9 * fpm);
+  } else {
+    // Minutes 1..8: each carries 2 drops at the start.
+    // minute_in_10 is in 0..7 (mIn in [1800, 9*1800) so minute_in_10 < 9).
+    const minuteIn10 = Math.floor((mIn - fpm) / fpm);
+    const ndfInMinute = mIn - fpm - minuteIn10 * fpm;  // 0..1797
+    f = (minuteIn10 + 1) * (fpm - drop) + ndfInMinute;
   }
-  // 10th minute (no drop)
-  if (9 * fpm <= mIn && mIn <= 10 * fpm - 1) {
-    return d * fpm_10 + 9 * 1798 + (mIn - 9 * fpm);
-  }
-  throw new Error(`cannot invert DF timecode ${JSON.stringify(s)}`);
+  return d * fpm_10 + f;
 }
 
 // ---------------------------------------------------------------------------
@@ -351,12 +357,17 @@ export function chooseLabelFormat(profile: ZoomProfile): LabelFormat {
 // Re-exports for type unification with vitest tests
 // ---------------------------------------------------------------------------
 
-/** The 6 user-pinned DF vectors, exposed for tests. */
-export const PINNED_DF_VECTORS: Array<[number, string]> = [
-  [0, "00:00:00;00"],
-  [29, "00:00:00;29"],
-  [30, "00:00:00;29"],
-  [1798, "00:01:00;02"],
-  [17982, "00:10:00;00"],
-  [107892, "01:00:00;00"],
+/** The 6 user-pinned DF vectors for 30000/1001 drop_frame=true —
+ * the boundary results of the standard NTSC DF algorithm (no PINNED
+ * dict hack). Mirrors `tests/test_timecode_conformance.py` exactly.
+ *
+ * Exposed for tests; the production algorithm derives these from
+ * `dfDropsSoFar` directly. */
+export const USER_PINNED_DF: Array<[number, string]> = [
+  [0,      "00:00:00;00"],   // 0 sec, frame 0
+  [29,     "00:00:00;29"],   // 0.97 sec, last frame of second 0
+  [30,     "00:00:01;00"],   // 1.00 sec, first frame of second 1 (standard)
+  [1798,   "00:01:00;00"],   // 60.03 sec, first frame of minute 1 (dropped label!)
+  [17982,  "00:10:00;00"],   // 600.6 sec, 10-min boundary (no skip)
+  [107892, "01:00:00;00"],   // 3599.4 sec, full hour
 ];
