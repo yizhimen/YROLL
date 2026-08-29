@@ -84,11 +84,12 @@ yroll ingest <素材目录> --name <项目名> --goal "视频目标"
 ### v0.2 编辑内核 — 三种入口
 
 ```bash
-# 1. HTTP server（GUI/外部 Agent 都通过它）
+# 1. HTTP server（GUI/外部 Agent 都通过它）— sole Mutation Authority
 yroll serve <工程目录> --port 8765
 
-# 2. MCP server（stdio，给外部 MCP Agent）
-yroll mcp <工程目录>
+# 2. MCP server（stdio，给外部 MCP Agent）— 必须是 yroll serve 的 HTTP 客户端
+#    不再独立持有 ProjectCore；GUI + MCP 共享同一 LeaseStore / Revision
+yroll mcp --server http://127.0.0.1:8765 --actor-id claude-code
 
 # 3. Python API（直接集成）
 python -c "from yroll.agent_contract import YrollAgent; ..."
