@@ -1613,6 +1613,51 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             ],
         }
 
+    # ---------- GUI-03D: /preview/at_frame (L1 Timeline Composite) ----------
+    @app.get("/preview/at_frame")
+    def preview_at_frame(frame: int = 0):
+        """L1 Timeline Composite Preview. Returns ALL active visual
+        + audio + subtitle layers at `frame`, z-ordered by track
+        iteration order. The GUI consumes this and renders each
+        layer in its z-order (image statically for the clip's full
+        TimelineFrameRange; video at source_seconds; subtitle as
+        text overlay; audio synced to source_seconds)."""
+        from yroll.core.frame_preview import (
+            composite_preview_at_frame, CompositeLayer,
+        )
+        from yroll.core.timebase import Rational
+        fps = Rational(st.core.project.fps_num,
+                       st.core.project.fps_den or 1)
+        pv = composite_preview_at_frame(st.core.project, frame, fps)
+
+        def _layer_to_dict(l: CompositeLayer):
+            return {
+                "track_id": l.track_id,
+                "layer_index": l.layer_index,
+                "kind": l.kind,
+                "clip_id": l.clip_id,
+                "asset_id": l.asset_id,
+                "asset_path": l.asset_path,
+                "source_frame": l.source_frame,
+                "source_seconds": l.source_seconds,
+                "source_fps": (
+                    {"num": l.source_fps.num, "den": l.source_fps.den}
+                    if l.source_fps is not None else None
+                ),
+                "timeline_start_frame": l.timeline_start_frame,
+                "timeline_end_frame": l.timeline_end_frame,
+                "transform": l.transform,
+            }
+
+        return {
+            "timeline_frame": pv.timeline_frame,
+            "fps": {"num": pv.fps.num, "den": pv.fps.den},
+            "is_black": pv.is_black,
+            "visual_layers": [_layer_to_dict(l) for l in pv.visual_layers],
+            "audio_layers": [_layer_to_dict(l) for l in pv.audio_layers],
+            "subtitle_texts": list(pv.subtitle_texts),
+        }
+
     # ---------- GUI-02: /snap (Core SnapEngine over HTTP) ----------
     @app.post("/snap")
     def snap(req: dict, threshold: int = 8):

@@ -18,7 +18,7 @@
 //     orthogonal event), never for state derivation.
 
 import { useEffect, useRef, useState } from "react";
-import { Project } from "../api";
+import { api, Project } from "../api";
 import {
   type FrameClock,
   createFrameClock,
@@ -163,6 +163,62 @@ export default function PreviewPlayer({
   // we mirror it into React state for the sync effect below.
   const [sourceFrame, setSourceFrame] = useState<number | null>(null);
   const [timeMapEntry, setTimeMapEntry] = useState<TimeMapCacheEntry | null>(null);
+
+  // GUI-03D: L1 Timeline Composite Preview. The single source of
+  // truth for what the Preview should display at this playhead.
+  // Resolves all visual + audio + subtitle layers via Core's
+  // /preview/at_frame endpoint (which uses TimeMap for source-frame
+  // resolution and the asset's source timebase for media seconds).
+  const [composite, setComposite] = useState<{
+    visual_layers: Array<{
+      track_id: string;
+      layer_index: number;
+      kind: string;
+      clip_id: string;
+      asset_id: string;
+      asset_path: string;
+      source_frame: number;
+      source_seconds: number;
+      source_fps: { num: number; den: number } | null;
+      timeline_start_frame: number;
+      timeline_end_frame: number;
+      transform: Record<string, unknown>;
+    }>;
+    audio_layers: Array<{
+      track_id: string;
+      layer_index: number;
+      kind: string;
+      clip_id: string;
+      asset_id: string;
+      asset_path: string;
+      source_frame: number;
+      source_seconds: number;
+      source_fps: { num: number; den: number } | null;
+      timeline_start_frame: number;
+      timeline_end_frame: number;
+      transform: Record<string, unknown>;
+    }>;
+    subtitle_texts: string[];
+    is_black: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (mode !== "instant" || !project) {
+      setComposite(null);
+      return;
+    }
+    (async () => {
+      try {
+        const data = await api.compositePreview(playheadFrame);
+        if (cancelled) return;
+        setComposite(data);
+      } catch {
+        if (!cancelled) setComposite(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [project, mode, playheadFrame]);
 
   useEffect(() => {
     let cancelled = false;
@@ -381,7 +437,92 @@ export default function PreviewPlayer({
           {mode === "rendered" && renderedUrl ? (
             <video key={renderedUrl} ref={videoRef} src={renderedUrl}
               controls onTimeUpdate={onTimeUpdate} style={videoStyle} />
+          ) : mode === "instant" && composite && !composite.is_black ? (
+            // GUI-03D: render the L1 composite. Visual layers are
+            // z-ordered (lower index = bottom). Each layer is
+            // either an <img> (for image) or a <video> (for video).
+            // Subtitles are rendered as a single overlay below.
+            <div className="composite-stage" style={{ position: "relative", width: "100%", height: "100%" }}>
+              {composite.visual_layers
+                .filter((l) => l.kind === "image")
+                .map((l) => (
+                  <img
+                    key={`${l.track_id}:${l.clip_id}`}
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
+                      zIndex: l.layer_index,
+                    }}
+                    src={`/assets/${l.asset_id}/file`}
+                    alt=""
+                  />
+                ))}
+              {composite.visual_layers
+                .filter((l) => l.kind === "video")
+                .map((l) => (
+                  <video
+                    key={`${l.track_id}:${l.clip_id}`}
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
+                      zIndex: l.layer_index,
+                    }}
+                    ref={(el) => {
+                      if (!el) return;
+                      // Sync v.currentTime from Core's source_seconds.
+                      // Per the closure invariant: NEVER read
+                      // v.currentTime as TimelineFrame state.
+                      if (Math.abs(el.currentTime - l.source_seconds) > 0.4) {
+                        el.currentTime = l.source_seconds;
+                      }
+                    }}
+                    src={`/assets/${l.asset_id}/file`}
+                    muted
+                    playsInline
+                  />
+                ))}
+              {composite.subtitle_texts.length > 0 && (
+                <div
+                  className="composite-subtitle"
+                  style={{
+                    position: "absolute",
+                    left: 0, right: 0, bottom: "8%",
+                    textAlign: "center",
+                    color: "#fff",
+                    textShadow: "0 0 4px #000, 0 0 2px #000",
+                    fontSize: 22,
+                    fontWeight: 600,
+                    pointerEvents: "none",
+                    zIndex: 9999,
+                  }}
+                >
+                  {composite.subtitle_texts[composite.subtitle_texts.length - 1]}
+                </div>
+              )}
+              {composite.audio_layers.map((l) => (
+                <audio
+                  key={`audio:${l.track_id}:${l.clip_id}`}
+                  ref={(el) => {
+                    if (!el) return;
+                    if (Math.abs(el.currentTime - l.source_seconds) > 0.4) {
+                      el.currentTime = l.source_seconds;
+                    }
+                    if (playing && el.paused) el.play().catch(() => undefined);
+                    if (!playing && !el.paused) el.pause();
+                  }}
+                  src={`/assets/${l.asset_id}/file`}
+                />
+              ))}
+            </div>
           ) : clip && asset && sourceFrame !== null && timeMapEntry ? (
+            // Fallback L0 single-clip path (used when the composite
+            // fetch hasn't completed yet, e.g. very first render).
             asset.type === "image" ? (
               <img style={videoStyle} src={`/assets/${asset.asset_id}/file`} alt="" />
             ) : (

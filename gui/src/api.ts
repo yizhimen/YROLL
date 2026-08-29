@@ -223,6 +223,43 @@ export const api = {
     mutate("DELETE",
       `/clips/${clipId}?why=${encodeURIComponent(why)}${ripple ? "&ripple=true" : ""}`),
   commit: (note: string) => mutate("POST", `/versions?note=${encodeURIComponent(note)}`),
+  // GUI-03D: L1 Timeline Composite Preview. Returns z-ordered
+  // visual + audio + subtitle layers at the given timeline frame.
+  compositePreview: (timelineFrame: number) =>
+    req<{
+      timeline_frame: number;
+      fps: { num: number; den: number };
+      is_black: boolean;
+      visual_layers: Array<{
+        track_id: string;
+        layer_index: number;
+        kind: string;
+        clip_id: string;
+        asset_id: string;
+        asset_path: string;
+        source_frame: number;
+        source_seconds: number;
+        source_fps: { num: number; den: number } | null;
+        timeline_start_frame: number;
+        timeline_end_frame: number;
+        transform: Record<string, unknown>;
+      }>;
+      audio_layers: Array<{
+        track_id: string;
+        layer_index: number;
+        kind: string;
+        clip_id: string;
+        asset_id: string;
+        asset_path: string;
+        source_frame: number;
+        source_seconds: number;
+        source_fps: { num: number; den: number } | null;
+        timeline_start_frame: number;
+        timeline_end_frame: number;
+        transform: Record<string, unknown>;
+      }>;
+      subtitle_texts: string[];
+    }>(`/preview/at_frame?frame=${timelineFrame}`),
   render: (burnSubtitles = false, width = 1080, name = "preview.mp4") =>
     mutate<{ preview: string }>("POST",
       `/render?burn_subtitles=${burnSubtitles}&width=${width}&name=${encodeURIComponent(name)}`),

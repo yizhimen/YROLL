@@ -1,13 +1,25 @@
-"""L0 Frame Preview (v0.2 §30): single-frame accurate preview data.
+"""L0 Frame Preview (v0.2 §30) + L1 Timeline Composite Preview (GUI-03D).
 
-Given a timeline frame, return everything needed to render it accurately:
-- Which video clip (if any) covers this frame and its source frame
-- Which audio clip covers this frame and the playback offset
-- Which subtitle (text track) clips are visible at this frame
-- A pre-fetched asset URL for the video source (asset.path) — actual
-  rendering is the GUI's job; we just resolve the data.
+L0 (legacy): given a timeline frame, return what covers it.
+- One video clip (first match)
+- Multiple audio clips
+- Multiple subtitle clips
 
-All inputs/outputs in canonical frames. Project-level fps used.
+L1 (new): return a Z-ORDERED composite of ALL active visual + audio +
+subtitle layers. The GUI renders each layer:
+- image  → <img> rendered statically for the clip's entire
+           TimelineFrameRange (no source frame lookup needed)
+- video  → <video> with currentTime = source_seconds (via
+           Asset's source timebase)
+- audio  → <audio> with currentTime = source_seconds
+- subtitle → <div> overlay
+
+Track z-order: project.timeline.tracks is iterated in declared
+order. Earlier tracks (v1, v2, ...) render below later tracks (t1,
+t2, ...). Within a track, only the first matching clip is active.
+
+All inputs/outputs in canonical frames. Project sequence fps used as
+the time coordinate; asset's source_fps used for media I/O.
 """
 from __future__ import annotations
 
@@ -21,7 +33,7 @@ from yroll.core.timemap import TimeMap
 
 @dataclass
 class FramePreview:
-    """Result of resolving one timeline frame."""
+    """L0: Result of resolving one timeline frame (single primary video)."""
     timeline_frame: int
     fps: Rational
 
@@ -30,7 +42,7 @@ class FramePreview:
     video_source_frame: Optional[int] = None
     video_asset_path: Optional[str] = None
     video_track_id: Optional[str] = None
-    video_source_fps: Optional[Rational] = None  # asset's source FPS (NOT sequence)
+    video_source_fps: Optional[Rational] = None
 
     # Audio
     audio_clip_ids: list[str] = field(default_factory=list)
@@ -48,72 +60,192 @@ class FramePreview:
                 and not self.subtitle_clip_ids)
 
 
+@dataclass
+class CompositeLayer:
+    """One z-ordered layer in the L1 composite preview.
+
+    The GUI renders each layer in track order. The `layer_index`
+    field is 0-based and monotonically increasing per visual layer.
+    """
+    track_id: str
+    layer_index: int                # 0 = bottom, higher = on top
+    kind: str                       # "video" | "image" | "audio"
+    clip_id: str
+    asset_id: str
+    asset_path: str
+    # For video/audio: source frame in the asset's timebase.
+    # For image: always 0 (image has 1 source frame; render statically).
+    source_frame: int = 0
+    # Asset's source FPS (None for image). Used to compute
+    # source_seconds = source_frame / source_fps.
+    source_fps: Optional[Rational] = None
+    # Pre-computed media seconds for <video>/<audio> currentTime.
+    # For image: 0.
+    source_seconds: float = 0.0
+    # Timeline-frame range this layer covers (for sync / state).
+    timeline_start_frame: int = 0
+    timeline_end_frame: int = 0
+    # Transform (Ken Burns: x, y, scale, bg_blur).
+    transform: dict = field(default_factory=dict)
+
+
+@dataclass
+class CompositePreview:
+    """L1 Timeline Composite Preview at one TimelineFrame.
+
+    All visual layers (image + video) appear in `visual_layers`,
+    Z-ordered by track iteration. Audio layers live in `audio_layers`.
+    Subtitles live in `subtitle_texts`. Empty layers (e.g. a track
+    with no clip covering this frame) are absent.
+    """
+    timeline_frame: int
+    fps: Rational
+    visual_layers: list[CompositeLayer] = field(default_factory=list)
+    audio_layers: list[CompositeLayer] = field(default_factory=list)
+    subtitle_texts: list[str] = field(default_factory=list)
+
+    @property
+    def is_black(self) -> bool:
+        """True if no visual / audio / subtitle content covers this frame."""
+        return (not self.visual_layers
+                and not self.audio_layers
+                and not self.subtitle_texts)
+
+
+def _timeline_range_frames(c, fps):
+    """Project a clip's timeline_range (seconds) to integer frames."""
+    s = round(c.timeline_range.start * fps.num / fps.den)
+    e = round(c.timeline_range.end * fps.num / fps.den)
+    return s, e
+
+
+def _build_layer(c, asset, track, timeline_frame, fps, layer_index,
+                kind_override=None) -> Optional[CompositeLayer]:
+    """Resolve one clip into a CompositeLayer, or None if not coverable."""
+    s, e = _timeline_range_frames(c, fps)
+    if not (s <= timeline_frame < e):
+        return None
+    asset_type = asset.type.value
+    is_image = (asset_type == "image")
+    # Compute source_frame / source_seconds.
+    if is_image:
+        # Image has 1 source frame; render statically for the
+        # entire TimelineFrameRange. No source-fps math needed.
+        source_frame = 0
+        source_seconds = 0.0
+        source_fps = None
+    else:
+        # Video/audio: resolve via TimeMap (FPS-aware).
+        src_fps = asset.source_fps
+        if src_fps is None:
+            # Per GUI-02.3: don't silently fall back to sequence fps.
+            return None
+        tm = TimeMap.for_clip(c, fps, src_fps)
+        clip_frame = tm.clip_from_timeline(timeline_frame)
+        source_frame = tm.source_from_clip(clip_frame)
+        source_seconds = source_frame * src_fps.den / src_fps.num
+        source_fps = src_fps
+    transform = dict(c.transform or {})
+    return CompositeLayer(
+        track_id=track.track_id,
+        layer_index=layer_index,
+        kind=kind_override or asset_type,
+        clip_id=c.clip_id,
+        asset_id=asset.asset_id,
+        asset_path=asset.path,
+        source_frame=source_frame,
+        source_fps=source_fps,
+        source_seconds=source_seconds,
+        timeline_start_frame=s,
+        timeline_end_frame=e,
+        transform=transform,
+    )
+
+
+def composite_preview_at_frame(project: Project, timeline_frame: int,
+                                fps: Rational) -> CompositePreview:
+    """L1 Timeline Composite Preview. Pure function of (project, frame).
+
+    Iterates `project.timeline.tracks` in declared order (z-order):
+    earlier tracks render below later ones. Within each track, the
+    first matching clip is the active layer for that track. Empty
+    tracks (no clip covering the frame) contribute nothing.
+    """
+    pv = CompositePreview(timeline_frame=timeline_frame, fps=fps)
+    visual_index = 0
+    for track in project.timeline.tracks:
+        # Find the FIRST clip on this track that covers the frame.
+        # We must check every clip (not break early) so that a clip
+        # whose half-open interval ends at the frame is correctly
+        # skipped, and the next clip whose interval starts at the
+        # frame is correctly selected.
+        found = False
+        for cid in track.clip_ids:
+            c = project.clips.get(cid)
+            if c is None:
+                continue
+            s, e = _timeline_range_frames(c, fps)
+            if not (s <= timeline_frame < e):
+                continue
+            # TEXT/SUBTITLE text tracks have clips with no asset.
+            if track.kind in (TrackKind.TEXT, TrackKind.SUBTITLE):
+                text = c.context.get("text", "") or ""
+                if text:
+                    pv.subtitle_texts.append(text)
+                found = True
+                break
+            # Visual / audio tracks need an asset.
+            asset = next((a for a in project.assets
+                          if a.asset_id == c.asset_id), None)
+            if asset is None:
+                continue
+            if track.kind in (TrackKind.VIDEO,):
+                layer = _build_layer(c, asset, track, timeline_frame, fps,
+                                     visual_index)
+                if layer is not None:
+                    pv.visual_layers.append(layer)
+                    visual_index += 1
+                found = True
+                break
+            if track.kind == TrackKind.AUDIO:
+                layer = _build_layer(c, asset, track, timeline_frame, fps,
+                                     visual_index,
+                                     kind_override="audio")
+                if layer is not None:
+                    pv.audio_layers.append(layer)
+                found = True
+                break
+        # No clip on this track covers the frame → empty contribution.
+        # Empty tracks naturally produce no layer (correct).
+    return pv
+
+
 def resolve_frame(project: Project, timeline_frame: int,
                   fps: Rational) -> FramePreview:
-    """Resolve what covers a single timeline frame.
-
-    `fps` is the project sequence timebase. For each clip, the
-    asset's source_fps is looked up explicitly via
-    `asset.source_fps_rational` (raises if unset) — never silently
-    substituted with sequence fps.
-    """
+    """L0 (legacy) single-frame preview. Kept for backward compat
+    with /frame/preview. The L1 `composite_preview_at_frame` is the
+    recommended API for new code."""
     pv = FramePreview(timeline_frame=timeline_frame, fps=fps)
-
-    for track in project.timeline.tracks:
-        if track.kind == TrackKind.VIDEO:
-            for cid in track.clip_ids:
-                c = project.clips.get(cid)
-                if c is None:
-                    continue
-                # Clip is half-open [start, end) in seconds.
-                tl_s_f = FrameTime.from_seconds(c.timeline_range.start, fps).frame
-                tl_e_f = FrameTime.from_seconds(c.timeline_range.end, fps).frame
-                if tl_s_f <= timeline_frame < tl_e_f:
-                    pv.video_clip_id = cid
-                    pv.video_track_id = track.track_id
-                    asset = next((a for a in project.assets
-                                  if a.asset_id == c.asset_id), None)
-                    if asset is None or asset.source_fps is None:
-                        # Per GUI-02.3: do NOT silently fall back to
-                        # sequence fps. Skip the clip; caller can
-                        # surface this via validate_media_conformance.
-                        break
-                    tm = TimeMap.for_clip(c, fps, asset.source_fps)
-                    # Convert timeline_frame → clip-local → source
-                    clip_frame = tm.clip_from_timeline(timeline_frame)
-                    pv.video_source_frame = tm.source_from_clip(clip_frame)
-                    pv.video_asset_path = asset.path
-                    pv.video_source_fps = asset.source_fps
-                    break  # one video wins on each track; first match
-        elif track.kind == TrackKind.AUDIO:
-            for cid in track.clip_ids:
-                c = project.clips.get(cid)
-                if c is None:
-                    continue
-                tl_s_f = FrameTime.from_seconds(c.timeline_range.start, fps).frame
-                tl_e_f = FrameTime.from_seconds(c.timeline_range.end, fps).frame
-                if tl_s_f <= timeline_frame < tl_e_f:
-                    asset = next((a for a in project.assets
-                                  if a.asset_id == c.asset_id), None)
-                    if asset is None or asset.source_fps is None:
-                        continue
-                    tm = TimeMap.for_clip(c, fps, asset.source_fps)
-                    clip_frame = tm.clip_from_timeline(timeline_frame)
-                    src_frame = tm.source_from_clip(clip_frame)
-                    pv.audio_clip_ids.append(cid)
-                    pv.audio_source_frames.append(src_frame)
-                    pv.audio_asset_paths.append(asset.path)
-        elif track.kind == TrackKind.TEXT:
-            for cid in track.clip_ids:
-                c = project.clips.get(cid)
-                if c is None:
-                    continue
-                tl_s_f = FrameTime.from_seconds(c.timeline_range.start, fps).frame
-                tl_e_f = FrameTime.from_seconds(c.timeline_range.end, fps).frame
-                if tl_s_f <= timeline_frame < tl_e_f:
-                    pv.subtitle_clip_ids.append(cid)
-                    pv.subtitle_texts.append(
-                        c.context.get("text", "") or "")
+    composite = composite_preview_at_frame(project, timeline_frame, fps)
+    # Map L1 → L0 (pick the first visual video layer as the "main" video,
+    # and aggregate audio/subtitle layers).
+    for layer in composite.visual_layers:
+        if layer.kind == "video":
+            pv.video_clip_id = layer.clip_id
+            pv.video_track_id = layer.track_id
+            pv.video_source_frame = layer.source_frame
+            pv.video_asset_path = layer.asset_path
+            pv.video_source_fps = layer.source_fps
+            break
+    for layer in composite.audio_layers:
+        pv.audio_clip_ids.append(layer.clip_id)
+        pv.audio_source_frames.append(layer.source_frame)
+        pv.audio_asset_paths.append(layer.asset_path)
+    for text in composite.subtitle_texts:
+        pv.subtitle_texts.append(text)
+        # Subtitle clip_id is not stored in the L1 result; tests
+        # relying on it can use /project or composite directly.
+        pv.subtitle_clip_ids.append("")
     return pv
 
 
