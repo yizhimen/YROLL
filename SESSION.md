@@ -10,27 +10,59 @@
   - 02-5 `2c44f80` FrameClock + PreviewPlayer `performance.now()` refactor
   - 02-6 `e21deeb` Core Keymap sole-source + global seconds-leakage guard
   - 02-6.1 + 02-7 `8754ddc` jumpBoundary fix + frame_consistency + Playwright smoke
-- **GUI-03** 03A/03B/03C/03D 已完成（待 push）：
-  - 03A Spec v0.1 (GUi-03-Production-Usability-Spec-v0.1.md)
-  - 03B Image first-class media (no set_speed kludge)
-  - 03C Dynamic track allocation + optional TrackRole + empty-track hide
-  - **03D L1 Timeline Composite Preview**
-    - `cmd.composite_preview_at_frame` 解析所有 visual/audio/subtitle 层（z-order by track 顺序）
-    - `GET /preview/at_frame` HTTP endpoint
-    - `PreviewPlayer.tsx` 渲染 image 静态 / video 在 source-seconds / subtitle 文字叠加 / audio 同步
-    - v.currentTime 永远写不入 TimelineFrame state
-- 资产复用: 沙盒工程 `projects/sanlihe-slice-30s/` 演示 Agent → Core → Human 链路
-- Core v0.2 测试：**553 passed + 1 skipped**
+- **GUI-03** 03A/03B/03C/03D + 03D.1 已完成（待 push）：
+  - 03A Spec v0.1
+  - 03B Image first-class media
+  - 03C Dynamic track allocation + empty-track hide
+  - 03D L1 Composite Preview (`/preview/at_frame` 逐帧)
+  - **03D.1 Preview Runtime Cache（local resolution，零 per-frame HTTP）**
+    - `yroll/core/plan.py` — `PreviewPlan`/`PreviewLayer` + `build_preview_plan`/`active_layer_at`/`source_frame_at`/`source_seconds_at`
+    - `GET /preview/plan` endpoint
+    - `gui/src/preview-plan.ts` — `usePreviewPlan` hook + pure helpers
+    - PreviewPlayer 用 cached plan 解析 active layer，0 per-frame HTTP
+    - FrameClock 推 TimelineFrame，per-layer source timebase 算 media time
+- 沙盒工程：`projects/sanlihe-slice-30s/`（10 图 + 6 字幕 + 36s）
+- Core 测试：**553 passed + 1 skipped**
 - GUI 测试：**171 vitest** + Playwright gui-01 / gui-02
 
-### GUI-03D 关键设计决策
-1. **TimelineFrame 是唯一的 preview 时间坐标**。Source 媒体时间（v.currentTime）从 Core 的 `composite_preview_at_frame` 推出来，**永远不**作为 TimelineFrame 的 source of truth。
-2. **半开区间 `[s, e)`**：clip 结束帧不包含（img1 [0, 30) 与 img2 [30, 60) 紧邻但重叠检测为 False）。Frame 30 的 active layer 唯一是 img2。
-3. **Z-order 来自 track 列表顺序**：v1 创建顺序先于 v2 → img1 在 img2 之下。GUI 用 `zIndex: layer_index` 渲染。
-4. **Image clip 静态渲染**：`source_frame = 0`, `source_seconds = 0.0`，整个 TimelineFrameRange 显示同一帧（image asset 本身就是 1 帧）。
-5. **Video 渲染**：`v.currentTime = source_seconds`（asset source_fps 算出的），且**仅写不读**。
-6. **Audio 同步**：`el.currentTime = source_seconds`，play/pause 跟 FrameClock 状态同步。
-7. **Subtitle 文字叠加**：bottom-center，最新一个 active subtitle 显示。
+### GUI-03E 计划（用户已确认）
+拆 5 个小 batch：
+- **03E-1** Schema / migration（`project.timelines: list[Timeline]`、`default_timeline_id`、`active_timeline_id`、旧工程 `project.timeline` 自动迁移）
+- **03E-2** Core / Command / API（`add_timeline`、`fork_timeline`/重命名为 `duplicate_timeline`、`switch_active_timeline`、`delete_timeline`、mutation 强制带 `timeline_id`）
+- **03E-3** Timeline switcher GUI（顶部版本切换条：`[完整版] [种草版] [IP版] [抖音版] [+]`、当前版本高亮、点击切换 → refetch plan）
+- **03E-4** Fork / Duplicate（"复制为新版本"，UI 叫 Duplicate，底层 `derived_from=source.id`；共享 Asset；复制 Track/Clip/Marker/Beat/Timeline metadata；**不复制媒体**；最后一个 Timeline 不可删）
+- **03E-5** Revision / History scope 到 Timeline（第一版：每次 Timeline mutation 推 Project revision，mutation 必须带 `timeline_id`；未来：Timeline-local revision）
+
+### Revision 模型（用户已锁定）
+- 两层都有：Project global revision + Timeline local revision
+- 第一版：每次 Timeline mutation 推 Project revision（不要为了一开始完美把系统搞复杂）
+- Mutation 必须明确带 `timeline_id`
+- 以后再细分 Timeline-local revision
+
+### Timeline 打开顺序（已锁定）
+1. `active_timeline_id`
+2. `default_timeline_id`
+3. 第一个 Timeline
+
+### Asset 在 Multiple Timelines 间的共享（已锁定）
+- Asset / Research / Transcript / Generated：**全部共享**
+- Track / Clip / Marker / Beat / Timeline metadata：**复制**
+- 媒体文件本身：**永远不复制**（Asset 引用即可）
+
+### 待办
+- 03E-1（Schema/migration）→ 03E-2（Core/API）→ 03E-3（GUI 切换）→ 03E-4（Duplicate）→ 03E-5（Revision scope）
+- 然后再做一次真实生产测试：拿《三里河·陶鬶》做完整版 + 种草版 两条 timeline
+
+## 关键不变量（4 个 closure）
+1. Frame-native edit chain
+2. TimelineFrame / ClipFrame / SourceFrame 显式区分
+3. No GUI TimeMap 业务数学
+4. Source timebase 显式 + L1 Composite Preview + cached plan
+
+## 3 个静态架构护栏（绿灯）
+- `tests/test_no_js_round_in_edit.py`（ClipBlock-specific）
+- `tests/test_preview_player_frame_clock.py`（PreviewPlayer + FrameClock + server endpoint）
+- `tests/test_seconds_leakage.py`（global GUI edit surface）
 
 ### GUI-03C 关键设计决策
 1. **Track allocation 是 Core-owned**，不在 React 复制。GUI 和 Agent 走相同路径 → 同样的 Core state。
