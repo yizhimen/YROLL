@@ -30,6 +30,10 @@ export interface KeymapAction {
   description: string;
   /** For local nav: positive = forward, negative = back, in frames. */
   deltaFrames: number;
+  /** Original params from the keymap (e.g. {which: "in"} for I/O,
+   *  {direction: -1} for ArrowUp). The GUI decides how to interpret
+   *  them per binding name. */
+  params: Record<string, unknown>;
 }
 
 /** Read the Core keymap once. Returns a parsed list of typed
@@ -45,12 +49,13 @@ export function useCoreKeymap(): KeymapAction[] {
         if (cancelled) return;
         const parsed: KeymapAction[] = [];
         for (const b of data.bindings ?? []) {
-          const delta = Number((b.params as any)?.delta_frames ?? 0);
+          const delta = Number((b.params as { delta_frames?: number })?.delta_frames ?? 0);
           parsed.push({
             name: b.mutation_op,
             key: b.key,
             description: b.description,
             deltaFrames: Number.isFinite(delta) ? delta : 0,
+            params: b.params ?? {},
           });
         }
         setActions(parsed);

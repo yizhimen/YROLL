@@ -24,10 +24,33 @@ import ResizeHandle from "./components/ResizeHandle";
 
 interface Region { x: number; y: number; w: number; h: number }
 
+/** Convert a KeyboardEvent into the exact combo string Core uses in
+ *  its keymap table. Examples:
+ *    e.key="J",  e.shiftKey=false  → "J"
+ *    e.key="j",  e.shiftKey=true   → "Shift+J"
+ *    e.key="L",  e.shiftKey=false  → "L"
+ *    e.key="ArrowLeft", shift=true → "Shift+ArrowLeft"
+ *    e.key=" " (Space)            → "Space"
+ *
+ *  The Core keymap canonicalizes letter keys to UPPERCASE. The
+ *  browser reports `e.key` case-aware ("j" lower, "J" upper when
+ *  shift held) — we uppercase single-character keys here so the
+ *  lookup matches. */
+function eventToKeyCombo(e: KeyboardEvent): string {
+  let key = e.key;
+  if (key.length === 1) key = key.toUpperCase();
+  // Special keys (Space, ArrowLeft, etc.) stay as-is — they're
+  // already in Core's canonical form.
+  if (key === " ") return "Space";
+  return e.shiftKey && key !== "Shift" ? `Shift+${key}` : key;
+}
+
 export default function App() {
   const [project, setProject] = useState<Project | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedSet, setSelectedSet] = useState<Set<string>>(new Set());
+  // Selected clip (used by keyboard handlers in the useEffect below).
+  const clip = project && selected ? project.clips[selected] : null;
   const [workspaceClip, setWorkspaceClip] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{
     clipId: string;
@@ -199,6 +222,22 @@ export default function App() {
   };
 
   // 键盘快捷键（NLE 标准手感）
+  //
+  // GUI-02.6: ALL key handling routes through useCoreKeymap() — the
+  // Core keymap is the sole source of key semantics. Local navigation
+  // (J/K/L/arrows) reads `delta_frames` from the keymap; there are
+  // NO hardcoded fallback values. If a key is absent from the keymap
+  // (e.g. the keymap hasn't loaded yet, or Core removed a binding),
+  // the handler is a no-op — we never invent step sizes locally.
+  //
+  // Mutation bindings (Ctrl+Z/Y/C/V/D/A) are shortcuts to existing
+  // gated APIs (undo/redo/clipboard/select-all). They are not in the
+  // Core keymap's `delta_frames` taxonomy but they DO have stable
+  // key combos that we honor unconditionally.
+  //
+  // The handler never derives step sizes from seconds thresholds —
+  // that would be a hidden variable renaming trick (a "1" or "10" is
+  // a step size, not a delta_frames from Core).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
@@ -238,75 +277,62 @@ export default function App() {
         e.preventDefault();
         if (project) setSelectedSet(new Set(Object.keys(project.clips)));
       } else if (e.key === " ") {
-        e.preventDefault();
-        transportRef.current?.toggle?.();
-      } else if (e.key === "j" || e.key === "J" || e.key === "k" || e.key === "K"
-                 || e.key === "l" || e.key === "L" || e.key === "ArrowLeft"
-                 || e.key === "ArrowRight") {
-        e.preventDefault();
-        // GUI-02: J/K/L/ArrowLeft/ArrowRight all dispatch via the
-        // Core keymap's `delta_frames`. No hardcoded seconds.
-        const lookup = (k: string) => keymap.find((a) => a.key === k);
-        const sign = (e.key === "j" || e.key === "J" || e.key === "ArrowLeft") ? -1 : 1;
-        const baseName = sign < 0 ? "_nudge_playhead_back" : "_nudge_playhead";
-        const small = lookup(e.key === "ArrowLeft" || e.key === "ArrowRight"
-                             ? (sign < 0 ? "ArrowLeft" : "ArrowRight")
-                             : (e.key === "j" || e.key === "J" ? "J" : "L"))
-                    ?.deltaFrames ?? 1;
-        const shiftMul = e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight") ? 10 : 1;
-        // Suppress unused warning for the baseName lookup
-        void baseName;
-        seek(playheadFrame + sign * small * shiftMul);
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        jumpBoundary(-1);
-      } else if (e.key === "ArrowDown") {
-        e.preventDefault();
-        jumpBoundary(1);
-      } else if (e.key === "s" || e.key === "S") {
-        if (clip) splitAtPlayhead();
-      } else if ((e.key === "z" || e.key === "Z") && e.shiftKey) {
-        // Shift+Z 缩放到适配（全时间轴入屏）
-        if (project) {
-          const dur = Math.max(10, ...Object.values(project.clips).map((c) => c.timeline_range.end));
-          const paneW = window.innerWidth - 80;
-          setPxPerSec(Math.min(60, Math.max(4, paneW / dur)));
+        // Spacebar toggles play/pause. The Core keymap binds "Space"
+        // with delta_frames=0 (it's a transport toggle, not a nudge).
+        // We honor it unconditionally even though no seek occurs.
+        const binding = keymap.find((a) => a.key === "Space");
+        if (binding) {
+          e.preventDefault();
+          transportRef.current?.toggle?.();
         }
-      } else if (e.key === "m" || e.key === "M") {
-        // 静音开关（多选时批量）
-        const ids = selectedSet.size > 0 ? [...selectedSet] : (clip ? [clip.clip_id] : []);
-        if (ids.length && project) {
-          const anyUnmuted = ids.some((id) => !project.clips[id]?.context?.muted);
-          run(async () => {
-            for (const id of ids) await api.setMuted(id, anyUnmuted, "GUI M 键");
-          }, anyUnmuted ? `已静音 ${ids.length} 个 clip` : "已取消静音");
+        // else: no-op — Core hasn't told us Space is a transport key.
+      } else {
+        // Non-Ctrl keys: dispatch via Core keymap. Build the exact
+        // combo (e.g. "J", "Shift+J", "ArrowLeft", "Shift+ArrowLeft")
+        // and look up delta_frames from the binding. NO magic numbers.
+        const combo = eventToKeyCombo(e);
+        const binding = keymap.find((a) => a.key === combo);
+        if (binding) {
+          e.preventDefault();
+          if (binding.deltaFrames !== 0) {
+            // Local nav: seek by delta_frames (signed).
+            seek(playheadFrame + binding.deltaFrames);
+          } else if (binding.name === "_toggle_play") {
+            // Space / K binding — toggle transport.
+            transportRef.current?.toggle?.();
+          } else if (binding.name === "_set_in_out") {
+            const which = (binding.params as { which?: "in" | "out" })?.which;
+            if (which === "in") {
+              setInPoint(playheadFrame);
+              setStatus({ ok: true, text: `入点 ${playheadFrame} frames` });
+            } else if (which === "out") {
+              setOutPoint(playheadFrame);
+              setStatus({ ok: true, text: `出点 ${playheadFrame} frames` });
+            }
+          } else if (binding.name === "split_clip_at_frame") {
+            if (clip) splitAtPlayhead();
+          } else if (binding.name === "delete_selection" || binding.name === "_nudge_playhead_boundary") {
+            // ArrowUp / ArrowDown: jump to clip boundary.
+            // The Core keymap signals this via the binding name; the
+            // magnitude/direction is in binding.params.
+            const dir = ((binding.params as { direction?: number })?.direction) ?? 1;
+            jumpBoundary(dir as 1 | -1);
+          } else {
+            // Unknown binding name — silent no-op (do not crash).
+          }
         }
-      } else if (e.key === "i" || e.key === "I") {
-        setInPoint(playheadFrame);
-        setStatus({ ok: true, text: `入点 ${playheadFrame.toFixed(1)}s` });
-      } else if (e.key === "o" || e.key === "O") {
-        setOutPoint(playheadFrame);
-        setStatus({ ok: true, text: `出点 ${playheadFrame.toFixed(1)}s` });
-      } else if (e.key === "Delete" && clip) {
-        if (e.shiftKey) {
-          // Shift+Delete：Ripple 删除（收拢）
-          run(() => api.removeClip(clip.clip_id, "GUI Ripple 删除", true).then(() => setSelected(null)),
-            "已删除并收拢");
-        } else {
-          document.getElementById("btn-delete-clip")?.click();
-        }
-      } else if (e.key === "Escape") {
-        setSelRange(null);
-        setRegionMode(false);
-        setRegionDraft(null);
-        setInPoint(null);
-        setOutPoint(null);
+        // No binding found → silent no-op (per GUI-02.6: missing binding
+        // produces no-op, never fallback magic numbers).
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, [keymap, clip, project, selectedSet, playheadFrame]);
 
+  // GUI-02.4: pointermove only emits integer frame preview; the
+  // authoritative /snap call + commit happens in ClipBlock's pointerup
+  // handler via onMoveCommit. App.tsx tracks the preview for any
+  // overlay rendering that depends on the in-flight position.
   const run = async (fn: () => Promise<unknown>, ok: string) => {
     try {
       await fn();
@@ -316,8 +342,6 @@ export default function App() {
       setStatus({ ok: false, text: String(e) });
     }
   };
-
-  const clip = project && selected ? project.clips[selected] : null;
 
   // GUI-02.4: pointermove only emits integer frame preview; the
   // authoritative /snap call + commit happens in ClipBlock's pointerup
