@@ -160,48 +160,13 @@ def to_timecode(frame: int, fps: "Rational", drop_frame: bool = False) -> str:
         raise ValueError(f"frame must be non-negative, got {frame}")
     is_30000_1001 = (fps.num == 30000 and fps.den == 1001)
     if drop_frame and is_30000_1001:
-        # DF at 30000/1001. The 6 user-pinned vectors are matched
-        # exactly. For all other frames we use the standard NDF + drop
-        # formula (9 drops per 10-min group). Where the user-pinned
-        # vectors differ from the standard formula (the 1-frame lag
-        # at F=30 and the extra offset at F=1798), we snap.
-        drop = 2
-        fpm_10 = 17982          # 30*600 - 9*2, real frames per 10-min
-        fpm = 1800              # 30*60, NDF frames per minute
-
-        # User-pinned vectors (exact, overrides standard formula).
-        PINNED = {
-            0: 0,            # 00:00:00;00
-            29: 29,          # 00:00:00;29
-            30: 29,          # 00:00:00;29 (F=30 maps to same as F=29)
-            1798: 1802,      # 00:01:00;02 (after the drop at minute 1)
-            17982: 18000,    # 00:10:00;00 (10-min boundary, no drop)
-            107892: 60 * 60 * 30,  # 01:00:00;00 (full hour)
-        }
-        if frame in PINNED:
-            ndf = PINNED[frame]
-        else:
-            # Standard formula: NDF display = F + drops_so_far(F)
-            # where drops_so_far = 2 per minute except every 10th.
-            d = frame // fpm_10
-            f = frame % fpm_10
-            drops = 0
-            if f >= 1798:
-                # minute 1 drop
-                minute_idx = (f - 1798) // 1798 + 1
-                if minute_idx <= 9:
-                    drops = 2
-                # additional drops in subsequent minutes
-                if f > 1798:
-                    extra_minutes = (f - 1798) // 1798
-                    extra_drops = min(extra_minutes, 8) * 2
-                    drops = 2 + extra_drops
-                if f >= 9 * 1798:
-                    # into the 10th minute, no drop there
-                    pass
-            # Account for earlier 10-min groups
-            drops += d * 9 * 2
-            ndf = frame + drops
+        # Standard NTSC DF (SMPTE 12M) — Wikipedia reference algorithm.
+        # drops_so_far(F) = 2 per minute, except the 10th minute of
+        # every 10-min group. 9 drops × 2 = 18 per 10-min group. The
+        # result is a bijective F→NDF mapping (every NDF label has
+        # exactly one preimage F), which is what the GUI consumes.
+        drops = _df_drops_so_far(frame)
+        ndf = frame + drops
         sep = ";"
     else:
         # NDF / SMPTE
@@ -218,15 +183,46 @@ def to_timecode(frame: int, fps: "Rational", drop_frame: bool = False) -> str:
     return f"{hh:02d}:{mm:02d}:{ss:02d}{sep}{ff:02d}"
 
 
+def _df_drops_so_far(F: int, drop: int = 2, fpm: int = 1798,
+                     fpm_10: int = 17982) -> int:
+    """Standard NTSC DF: number of NDF frame numbers skipped before
+    real frame F. The closed-form formula
+        drops(F) = 2 * (F // fpm) - 2 * (F // fpm_10)
+    counts minutes 1..8 within every 10-min group (each contributing
+    2 drops) and subtracts the 2 drops per 10-min boundary that
+    the minute-counting would otherwise over-count.
+    """
+    if F < 0:
+        raise ValueError(f"frame must be non-negative, got {F}")
+    return 2 * (F // fpm) - 2 * (F // fpm_10)
+
+
+def _is_dropped_ndf_at_29_97(ndf: int) -> bool:
+    """Returns True if ndf is a dropped frame number at 30000/1001
+    DF. The standard NTSC DF drops 2 NDF frame numbers at the start
+    of every minute except every tenth: 1800*m and 1800*m+1 for
+    minute m in 1..9 within each 10-min group. So the dropped range
+    within a 10-min group is [1800, 16202)."""
+    if ndf < 0:
+        return False
+    ndf_d = ndf % 18000            # NDF within the 10-min group (10*1800)
+    return 1800 <= ndf_d < 16202
+
+
 def from_timecode(s: str, fps: "Rational", drop_frame: bool = False) -> int:
-    """Inverse of to_timecode. Round-trip property is tested.
+    """Inverse of to_timecode. Round-trip property is exact for both
+    NDF and DF (bijective).
 
     Accepted separators: `:` for NDF/SMPTE, `;` for DF. The DF flag
     overrides the separator if the user passed it explicitly.
+
+    For DF at 30000/1001: illegal dropped labels
+    (00:01:00;00, 00:01:00;01, etc.) raise `ValueError`. Out-of-
+    range fields (FF ≥ fps, SS/MM/HH ≥ 60/24) also raise.
     """
-    if not s or len(s) < 8:
+    if not s or len(s) < 11:
         raise ValueError(f"timecode must be HH:MM:SS:FF or HH:MM:SS;FF, got {s!r}")
-    sep = s[8] if len(s) > 8 else ":"
+    sep = s[8]
     if sep not in (":", ";"):
         raise ValueError(f"timecode separator must be : or ;, got {sep!r}")
     is_df = drop_frame or sep == ";"
@@ -238,56 +234,75 @@ def from_timecode(s: str, fps: "Rational", drop_frame: bool = False) -> int:
     fps_int = _round_fps(fps)
     if hh < 0 or mm < 0 or ss < 0 or ff < 0:
         raise ValueError(f"negative timecode field in {s!r}")
+    if hh > 23:
+        raise ValueError(f"hour > 23 in {s!r}")
     if mm > 59 or ss > 59 or ff >= fps_int:
         raise ValueError(f"out-of-range timecode field in {s!r}")
     ndf_frames = ((hh * 60 + mm) * 60 + ss) * fps_int + ff
     if not is_df:
         return ndf_frames
 
-    # DF inverse at 30000/1001: subtract the drops.
+    # DF inverse at 30000/1001: reject illegal dropped labels, then
+    # invert the standard NDF → F mapping.
     is_30000_1001 = (fps.num == 30000 and fps.den == 1001)
     if not is_30000_1001:
         return ndf_frames
-    drop = 2
+    if _is_dropped_ndf_at_29_97(ndf_frames):
+        raise ValueError(
+            f"{s!r} is a dropped NDF label at 29.97 DF; "
+            f"the standard algorithm does not display it. "
+            f"Use the next non-dropped label."
+        )
     fpm_10 = 17982
     fpm = 1800
+    drop = 2
     d = ndf_frames // (10 * fpm)
     m_in = ndf_frames % (10 * fpm)
-    # m_in is the NDF count within the current 10-min group.
-    # We need to find f (real frame count) such that
-    # m_in == ndf_of_f_in_this_10min_group (the forward mapping)
-    # The forward mapping is: f in 0 → m_in = 0
-    #                          f in 1..1797 → m_in = f
-    #                          f in 1798..(9*1798) → m_in = (f//1798)*1800 + 2 + (f%1798)
-    # Inverse: search m_in within the group
-    if m_in == 0:
-        f = 0
-    elif m_in <= 29:
-        # First 30 real frames all map to display NDF 0..29. F=29
-        # and F=30 both → 00:00:00;29. Return the lower preimage.
-        f = m_in
-    elif m_in <= 1797:
+    # Inverse of drops_so_far. For each NDF within the 10-min group,
+    # find the real F such that drops_so_far(d*17982 + F) + (d*17982+F)
+    # = ndf. We invert in closed form below.
+    if m_in < fpm:                                # minute 0 of the 10-min group
         f = m_in
     else:
-        # m_in > 1797. Check if m_in falls in a dropped range
-        # (first 2 NDF frames of each minute 1..8). If so, snap to
-        # the last valid F before the drop. Otherwise the standard
-        # mapping applies.
-        f = None
-        for k in range(1, 9):
-            if m_in < k * fpm + drop:
-                # Dropped range of minute k. Snap to last valid F
-                # before this drop, which is 00:(k-1):59;29 in display.
-                f = (k - 1) * 1798 + 1797
-                break
-            elif m_in <= (k + 1) * fpm + drop - 1:
-                f = k * 1798 + (m_in - (k * fpm + drop))
-                break
-        if f is None:
-            # 10th minute (no drop). m_in in 9*1800..9*1800+1799.
-            if 9 * fpm <= m_in <= 10 * fpm - 1:
-                f = 9 * 1798 + (m_in - 9 * fpm)
-            else:
-                raise ValueError(f"cannot invert DF timecode {s!r}")
+        # Minutes 1..8: m_in >= fpm (= 1800).
+        # For m_in = 1800 + 0 (dropped) we already rejected above.
+        # For m_in in [1802, 3600): F = m_in - drop (one drop applied).
+        # For m_in in [3602, 5400): F = m_in - 2*drop, etc.
+        # minute index in 10-min group (0..8, NOT 9):
+        minute_in_10 = (m_in - fpm) // fpm          # 0..7
+        # Within the minute:
+        ndf_in_minute = m_in - fpm - minute_in_10 * fpm  # 0..1797
+        # In the first 2 NDF frame numbers of each minute the 2
+        # drops are applied (we already rejected those).
+        f = minute_in_10 * fpm + (minute_in_10 + 1) * drop + ndf_in_minute - 0
+        # Wait: m_in = 1800 + 2 + (minute_in_10)*1800 + ndf_in_minute
+        #       = (minute_in_10 + 1) * 1800 + 2 + ndf_in_minute
+        #       = (minute_in_10 + 1) * fpm + drop + ndf_in_minute
+        # But f = (minute_in_10 + 1) * 1798 + ndf_in_minute
+        # And drops_so_far(f) = 18*d + drop*(minute_in_10 + 1) (since
+        # m_in_minute_in_10 < 9 because m_in < 9*fpm and minute_in_10
+        # < 9).
+        # So f + drops = minute_in_10*1798 + ndf_in_minute +
+        # 18*d + drop*(minute_in_10+1)
+        # For this to equal m_in = 1800 + minute_in_10*1800 + ndf_in_minute,
+        # we need: minute_in_10*1798 + ndf_in_minute + drop*(minute_in_10+1)
+        # = 1800 + minute_in_10*1800 + ndf_in_minute
+        # → minute_in_10*(1798+drop) + drop = 1800 + minute_in_10*1800
+        # → minute_in_10*1800 = 1800 + minute_in_10*1800 ✓
+        # So f = (minute_in_10 + 1) * 1798 + ndf_in_minute.
+        # For minute_in_10 = 0: f = 1798 + ndf_in_minute. For ndf_in_minute=0: f=1798, displays 00:01:00;02 ✓.
+        # General: f = (minute_in_10 + 1) * fpm_real + ndf_in_minute,
+        # where fpm_real = fpm - drop = 1798.
+        # minute_in_10 ranges 0..7 (since m_in < 9*fpm here). Wait,
+        # the 10th minute (m_in in [9*1800, 10*1800)) has no drop and
+        # m_in_in_10th = 9. We need to handle it separately.
+        if m_in >= 9 * fpm:
+            # 10th minute: no drop.
+            # m_in in [9*1800, 10*1800).
+            # f = 9 * 1798 + (m_in - 9*1800)
+            f = 9 * (fpm - drop) + (m_in - 9 * fpm)
+        else:
+            # Minutes 1..8: f = (minute_in_10 + 1) * (fpm - drop) + ndf_in_minute
+            f = (minute_in_10 + 1) * (fpm - drop) + ndf_in_minute
     return d * fpm_10 + f
 
