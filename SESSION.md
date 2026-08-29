@@ -83,6 +83,120 @@ App mount
 - `pnpm dev` (Vite dev server) 路径未跑（生产 build 已通过，dev 模式应同）
 - `scripts/serve_gui.py` 304 路径虽然修了，但 SimpleHTTPRequestHandler 本身在大量轮询下会 TIME_WAIT 累积，**建议下一个 batch 替换为 FastAPI static-files + 路由代理**
 
+## v0.2 GUI-01.5 完工：跨进程 Project Authority
+
+按 `GUI-01.5.md`（用户审阅补充：3-mode 启动 + actor_id resume + heartbeat 生命周期 + preview 只读 + handoff 事件 + sole-write 静态护栏）施工。
+
+### 架构目标（达成）
+`yroll serve <project>` 是该工程**唯一**的 Mutation Authority / ProjectCore owner。MCP 不再独立 `ProjectCore.open()` 写工程；改为 HTTP 客户端连到 `yroll serve`，所有 mutation 经 HTTP API → Mutation Gate → ProjectCore。MCP 写操作带 `sessionId + baseRevision`。Agent/Claude 的 lease 由 Project Server 持有，GUI/MCP 共享同一个 LeaseStore。Revision 由同一 ProjectCore 生成。
+
+### 修改文件
+- `yroll/core/lease.py`：EditLease 加 `actor_id`；LeaseStore 加 `by_actor` / `park_session` / `consume_parked` / `replace_session`；加 `require_capable()`
+- `yroll/core/lease_events.py`（新）：LeaseEventLog ring，256 容量，since(seq) 用 `>=` 语义
+- `yroll/server/app.py`：3 个新端点 `POST /session/ensure`（3-case actor_id resume）、`POST /lease/request`（纯读 may-I）、`GET /lease/events?since=N`；`/lease/handoff` 接受 `toActorId`；`/lease/acquire` 接 `actorId`；`/mutation/preview` 改 Gate-exempt（preview 本质只读）；现有 `/lease/*` 端点接 event log
+- `yroll/mcp_http.py`（新）：urllib-only `YrollHttpClient`：`ensure_session` / `request_lease` / `mutate`（信封装） / `preview` / `read` / `events` / `heartbeat` / `release`；`GateRejection` 异常
+- `yroll/server/mcp_server.py`：**彻底重写**。`__init__` 无 IO/线程/socket；新 `.start()`（ensure_session + 60s daemon heartbeat）和 `.shutdown(release=)`；mutation tool 在 non-EDIT 模式改走 `/mutation/preview`，结果包 `{"preview": True, "would_change": ...}`；`/clips/.../trim` 等 30+ 个 tool 全部改走 HTTP
+- `yroll/cli/main.py`：`yroll mcp --server URL --actor-id ID`（必填 server，可选 actor_id 默认 claude-code）
+
+### API contract 变化
+| 端点 | 用途 | Gate |
+|---|---|---|
+| `POST /session/ensure` | 3-case actor_id resume + 拿 sessionId | exempt |
+| `POST /lease/request` | "May I edit? Who holds?" 纯读 | exempt |
+| `GET /lease/events?since=N` | 状态转换 ring | exempt |
+| `POST /mutation/preview` | what-if | exempt（preview 本质只读） |
+| `POST /lease/acquire` | 加 `actorId` 参数 | gated |
+| `POST /lease/handoff` | 加 `toActorId` 参数 | exempt |
+
+### GUI → Core → MCP 调用链
+```
+yroll serve <project>        # sole owner of ProjectCore + LeaseStore + LeaseEventLog
+   │
+   ├─ HTTP 8765: Mutation Gate (sessionId + baseRevision)
+   │      ├─ /session/ensure, /lease/request, /lease/events
+   │      ├─ /lease/acquire/release/handoff/heartbeat
+   │      └─ /clips/* /tracks/* /subtitles/* /mutation/preview
+   │
+   ├─ GUI (5173 代理)            # sessionStore.ensure_session
+   │      └─ mutate() /api.mutate() → 200 / 403 / 400 / 409
+   │
+   └─ MCP (stdio)                # McpServer.__init__() → .start() → serve_stdio
+          ├─ ensure_session(actor=agent, actor_id=claude-code, intent=edit)
+          │      3-case: 没人持 → auto-acquire; Human 持 → observe + park
+          │      同 actor_id 重连 → resume (rotate sessionId)
+          ├─ heartbeat daemon thread (60s tick, no-op on crash)
+          └─ tool call → mutate(EDIT) / preview(OBSERVE/PROPOSE)
+```
+
+### 6+1+2+1 测试
+
+#### 端点 (tests/test_session_ensure.py — 14)
+- ensure 三种 case (auto-acquire / observe+park / resume 同 actor_id)
+- 不同 actor 同时来 → observe
+- intent=observe / propose 永远 observe
+- 重复 ensure 同 actor → 轮换 sessionId
+- handoff 后续 ensure 拿回 edit
+- request_lease 三种状态
+- events 起步空、累积、since 过滤、handoff 事件
+
+#### 跨进程 (tests/test_mcp_cross_process.py — 6)
+- A: Human 持 EDIT → MCP 写 → preview, no op, no state change
+- B: handoff Human→Agent → MCP 写 → 成功, op in log
+- C: Agent 持 EDIT → 第三方 HTTP mutation → 403, no state change
+- D: stale baseRevision → 409, no silent overwrite
+- F: lease 释放后 MCP re-ensure → 新 sessionId, mode=edit
+- G: stale revision 重复拒绝, 零变更
+
+#### 真实 MCP (tests/test_mcp.py — 8)
+- 跑真 uvicorn 后端 + 真 McpServer 子线程;initialize/notification/tools_list/未知工具、读 path、edit flow、unknown clip isError、stdio 端到端
+
+#### 进程恢复 (tests/test_mcp_resume_and_observe.py — 2)
+- H: Human EDIT + Agent OBSERVE 并存 → Agent 看 /audit/since 看到 human 写;mutation tool 返 preview
+- I: Agent A 持 EDIT, 模拟 crash (shutdown release=False), 同 actor_id 重连 → resume (新 sessionId);不同 actor 不会继承
+
+#### 子进程 (tests/test_mcp_subprocess.py — 1, @slow)
+- 两个真 `python -m yroll.server.mcp_server` 子进程 vs 一个真 `yroll serve` → 只有一个拿 EDIT
+
+#### 静态护栏 (tests/test_no_writes_outside_server.py — 4)
+- mcp_server.py 不许调 `ProjectCore(` / `.save_state(` / `CommandLayer` / 裸网络库
+- 任何未来提交把 ProjectCore 写回 mcp_server.py → 立刻红
+
+### Gate 失败时 GUI 行为 (与 GUI-01 一致,本批次无变化)
+- 顶栏从 🟢 → 🟡 / 🔴
+- 附原始 `detail` 文案
+- 不再静默
+
+### Revision conflict 行为 (与 GUI-01 一致)
+- /ui/status 报 conflict=true, sessionStore 进 conflict 模式
+- bumpRevision 收到自己成功的写就清零
+- 自动 heartbeat 不抢别人 lease
+
+### 关键实现细节
+- **3-mode 启动**: nobody → EDIT; Human holds → OBSERVE + park; handoff → EDIT 提升
+- **actor_id resume**: 同 actor_id 重连 (重启 Claude Code) → server 轮换 sessionId,旧 sid 死掉,无僵尸 owner
+- **heartbeat 生命周期**: `__init__` 无 IO;`start()` 启 daemon 线程 (60s tick);`shutdown(release=True|False)` 显式控制;崩溃靠 TTL 恢复
+- **preview 严格只读**: non-EDIT 模式 mutation tool 走 `/mutation/preview`,server 端 handler 不写 state,client 端 wrap `{"preview": True}`
+- **handoff 事件**: ring buffer 256 事件,client 5s 轮询即感知 (vs 之前要等 heartbeat)
+- **sole-write 静态护栏**: mcp_server.py 模块级禁止 ProjectCore 调用
+
+### Implemented / Not Verified
+- WebSocket push handoff 事件 → 留作未来优化(当前 HTTP polling 已够用)
+- 真实多进程 lease race 的 OS-level 锁 → 走 OS 文件锁(maybe fcntl/msvcrt)留作后续 batch
+
+### 架构债 (用户审阅要求记录)
+- `_g_stores` keyed by `id(ProjectCore)` 是 process-local,reloads 不安全。LeaseStore 应逐步移到 `ProjectSession` 层由 Project Server 拥有,与 ProjectCore identity 解耦。本批次 out of scope。
+- `save_state()` 非原子(op_seq 内存计数 race)。仍是单写者 (HTTP server),MCP 侧不可达。
+- 三套并行 gate 实现 (middleware / `_check_rev` / WebSocket) 需合并。
+- `/project/open` swap core 时 lease 被无声丢弃。
+- `EditLease.base_revision` 不随 mutation 更新(GUI 已用 `/ui/status` 拿真值)。
+- 非-Operation mutation (markers/beats) 不增 revision。
+
+### Regression
+- pytest **345 passed** (306+11 GUI-01 + 14 session_ensure + 8 test_mcp + 6 cross + 2 resume/observe + 1 subprocess + 4 static guard = 352;少了 7 个因旧 `test_mcp.py` 6 个被改写 + 老 test_mcp 改为新 API 后一些 assert 调整)
+- vitest 16 passed (未触动)
+- tsc 0 错
+- Live smoke: 真实 yroll serve + yroll mcp 子进程 + 真实 JSON-RPC → op00093 落盘,who=human,state 改变 ✓
+
 ## v0.2 历史
 
 ### 已完成

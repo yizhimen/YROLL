@@ -238,10 +238,14 @@ def main() -> None:
     v.set_defaults(func=lambda a: __import__("yroll.server.app", fromlist=["serve"]).serve(
         a.project, host=a.host, port=a.port))
 
-    m = sub.add_parser("mcp", help="启动 MCP Server（stdio，供外部 Agent 接入）")
-    m.add_argument("project", help="工程目录（含 current.json）")
+    m = sub.add_parser("mcp", help="启动 MCP Server（HTTP 客户端，连 yroll serve）")
+    m.add_argument("--server", required=True,
+                    help="运行中的 YROLL server URL（例 http://127.0.0.1:8765）")
+    m.add_argument("--actor-id", default="claude-code",
+                    help="Agent 稳定身份，用于 /session/ensure resume（默认 claude-code）")
     m.set_defaults(func=lambda a: __import__(
-        "yroll.server.mcp_server", fromlist=["McpServer"]).McpServer(a.project).serve_stdio())
+        "yroll.server.mcp_server", fromlist=["McpServer"]).McpServer(
+            a.server, actor_id=a.actor_id)._cli_run())
 
     args = parser.parse_args()
     args.func(args)

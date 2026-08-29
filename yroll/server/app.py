@@ -10,17 +10,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket
+from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket, Body, Query
 from pydantic import BaseModel
+import uuid as _uuid
 
 from yroll.core.commands import CommandError, CommandLayer
 from yroll.core.manifest import Actor, Region, TimeRange
 from yroll.core.lease import (
     LeaseStore, LeaseMode, Actor as LeaseActor,
     LeaseError, LeaseConflictError, LeaseExpiredError,
-    get_lease_store, require_edit_right, get_current_revision,
-    check_revision_match,
+    get_lease_store, require_edit_right, require_capable,
+    get_current_revision, check_revision_match,
 )
+from yroll.core.lease_events import get_lease_event_log, LeaseEvent
 from yroll.core.revision import (
     RevisionConflictError as ProjectRevisionConflict,
     check_project_revision,
@@ -127,6 +129,22 @@ class ChatReq(BaseModel):
     baseRevision: int | None = None
 
 
+# GUI-01.5: request schemas for /session/ensure and /lease/request.
+# Module-level so Pydantic can resolve the ForwardRef. create_app()
+# uses these via Body(...) below.
+class SessionEnsureReq(BaseModel):
+    actor: str = "agent"
+    actor_id: str = ""
+    intent: str = "edit"   # edit | propose | observe
+    base_revision: int = -1
+
+
+class LeaseRequestReq(BaseModel):
+    actor: str = "agent"
+    actor_id: str = ""
+    intent: str = "edit"
+
+
 class ProblemReq(BaseModel):
     description: str
     category: str  # temporal/audio/text/visual/spatial_object/semantic/consistency
@@ -179,6 +197,17 @@ class _MutationGateMiddleware:
             await self.app(scope, receive, send)
             return
         if path.startswith('/lease') or path == '/mutation/check':
+            await self.app(scope, receive, send)
+            return
+        # GUI-01.5: /mutation/preview is a read despite being POST — it
+        # never logs an operation, never advances revision, never writes
+        # state. The Mutation Gate would refuse it for observe-mode
+        # callers (who need it most), so it is exempt. The handler is
+        # still responsible for not mutating.
+        if path == '/mutation/preview':
+            await self.app(scope, receive, send)
+            return
+        if path == '/session/ensure':
             await self.app(scope, receive, send)
             return
         # 工程生命周期管理：初始化/切换无需 lease（创建新工程本身不可能持有该工程的 lease）
@@ -592,25 +621,32 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
     @app.get("/lease")
     def get_lease():
         ls = get_lease_store(st.core).get(st.core.project.project_id)
+        log = get_lease_event_log(st.core)
         if ls is None:
             return {"heldBy": None, "sessionId": None, "mode": None,
                     "actor": None, "baseRevision": get_current_revision(st.core),
-                    "isAlive": False, "humanLabel": ""}
+                    "isAlive": False, "humanLabel": "", "actorId": ""}
         return {"heldBy": ls.actor.value, "sessionId": ls.session_id,
                 "mode": ls.mode.value, "actor": ls.actor.value,
                 "baseRevision": ls.base_revision, "isAlive": ls.is_alive(LeaseStore.HEARTBEAT_TTL),
-                "humanLabel": ls.human_label,
+                "humanLabel": ls.human_label, "actorId": ls.actor_id,
                 "acquiredAt": ls.acquired_at, "lastHeartbeat": ls.last_heartbeat}
 
     @app.post("/lease/acquire")
     def acquire_lease(actor: str = "human", mode: str = "edit",
-                       baseRevision: int = -1, humanLabel: str = ""):
+                       baseRevision: int = -1, humanLabel: str = "",
+                       actorId: str = ""):
         if baseRevision < 0:
             baseRevision = get_current_revision(st.core)
         try:
             ls = get_lease_store(st.core).acquire(
                 st.core.project.project_id,
-                LeaseActor(actor), LeaseMode(mode), baseRevision, humanLabel)
+                LeaseActor(actor), LeaseMode(mode), baseRevision, humanLabel,
+                actor_id=actorId)
+            get_lease_event_log(st.core).record(
+                "acquired", actor_id=actorId, session_id=ls.session_id,
+                to_actor=ls.actor.value, to_mode=ls.mode.value,
+                project_id=ls.project_id)
             return {"ok": True, "sessionId": ls.session_id,
                     "actor": ls.actor.value, "mode": ls.mode.value,
                     "baseRevision": ls.base_revision}
@@ -619,7 +655,14 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
 
     @app.post("/lease/release")
     def release_lease(sessionId: str):
-        ok = get_lease_store(st.core).release(st.core.project.project_id, sessionId)
+        store = get_lease_store(st.core)
+        ls = store.get(st.core.project.project_id)
+        ok = store.release(st.core.project.project_id, sessionId)
+        if ok and ls:
+            get_lease_event_log(st.core).record(
+                "released", actor_id=ls.actor_id, session_id=ls.session_id,
+                from_actor=ls.actor.value, from_mode=ls.mode.value,
+                project_id=ls.project_id)
         return {"ok": ok}
 
     @app.post("/lease/heartbeat")
@@ -629,11 +672,28 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
 
     @app.post("/lease/handoff")
     def handoff_lease(fromSessionId: str, toActor: str = "agent",
-                       toMode: str = "edit", toLabel: str = ""):
+                       toMode: str = "edit", toLabel: str = "",
+                       toActorId: str = Query("", alias="toActorId")):
         try:
+            # If toActorId has a parked session, prefer promoting it.
+            parked = (get_lease_store(st.core).consume_parked(toActorId)
+                      if toActorId else None)
+            from_ls = get_lease_store(st.core).get(st.core.project.project_id)
+            from_actor_val = from_ls.actor.value if from_ls else ""
+            from_mode_val = from_ls.mode.value if from_ls else ""
             ls = get_lease_store(st.core).handoff(
                 st.core.project.project_id, fromSessionId,
-                LeaseActor(toActor), LeaseMode(toMode), toLabel)
+                LeaseActor(toActor), LeaseMode(toMode), toLabel,
+                to_actor_id=toActorId)
+            get_lease_event_log(st.core).record(
+                "promote_parked" if parked else "handed_off",
+                actor_id=toActorId, session_id=ls.session_id,
+                from_actor=from_actor_val, to_actor=ls.actor.value,
+                from_mode=from_mode_val, to_mode=ls.mode.value,
+                project_id=ls.project_id,
+                detail=f"session {ls.session_id[:8]} promoted from parked"
+                       if parked else f"to {toActor} {toMode}",
+            )
             return {"ok": True, "sessionId": ls.session_id,
                     "actor": ls.actor.value, "mode": ls.mode.value,
                     "humanLabel": ls.human_label}
@@ -650,6 +710,141 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         except (LeaseError, LeaseConflictError) as e:
             return {"ok": False, "error": str(e),
                     "currentRevision": get_current_revision(st.core)}
+
+    # ---------- GUI-01.5: Cross-process project authority --------------
+    #
+    # Three endpoints that turn the LeaseStore into something MCP and GUI
+    # can share safely across processes. All are Gate-exempt: they don't
+    # mutate the project model — they only mutate lease state, which is
+    # itself per-actor and the gate's job is to guard writes to the
+    # project model, not lease plumbing.
+    @app.post("/session/ensure")
+    def session_ensure(req: SessionEnsureReq = Body(...)):
+        """Per GUI-01.5 spec, 3-case actor_id resume.
+
+        - Live lease's actor_id == req.actor_id → resume (the requester
+          presents a new sessionId; the old is invalidated).
+        - Live lease belongs to someone else (or nobody) and
+          intent == "edit" with nobody holding → auto-acquire EDIT.
+        - Live lease belongs to someone else and intent == "edit" →
+          return mode=observe, park the new sessionId for later promotion.
+        - intent == "observe" → always mode=observe, no acquire, no park.
+        """
+        store = get_lease_store(st.core)
+        log = get_lease_event_log(st.core)
+        current = store.get(st.core.project.project_id)
+        actor = LeaseActor(req.actor)
+        intent = req.intent
+        actor_id = req.actor_id or ""
+
+        base_rev = (req.base_revision
+                    if req.base_revision >= 0
+                    else get_current_revision(st.core))
+
+        # Case A: same actor_id is alive → resume (rotate sessionId)
+        if actor_id and current and current.actor_id == actor_id:
+            new_sid = _uuid.uuid4().hex
+            rotated = store.replace_session(
+                current.project_id, current.session_id, new_sid)
+            if rotated is None:
+                # Race: lease died between get() and replace_session().
+                # Fall through to the auto-acquire branch below.
+                current = None
+            else:
+                log.record("ensure_resume", actor_id=actor_id,
+                           session_id=new_sid, to_actor=rotated.actor.value,
+                           to_mode=rotated.mode.value,
+                           project_id=rotated.project_id)
+                return {
+                    "sessionId": new_sid,
+                    "mode": rotated.mode.value,
+                    "owner": rotated.actor.value,
+                    "actor_id": rotated.actor_id,
+                    "revision": get_current_revision(st.core),
+                    "pending_agent": False,
+                }
+
+        # Case B: nobody holds + intent == edit → auto-acquire
+        if current is None and intent == "edit":
+            ls = store.acquire(st.core.project.project_id, actor,
+                                LeaseMode.EDIT, base_rev,
+                                human_label=actor_id, actor_id=actor_id)
+            log.record("ensure_edit", actor_id=actor_id,
+                       session_id=ls.session_id,
+                       to_actor=ls.actor.value, to_mode=ls.mode.value,
+                       project_id=ls.project_id)
+            return {
+                "sessionId": ls.session_id,
+                "mode": "edit",
+                "owner": ls.actor.value,
+                "actor_id": ls.actor_id,
+                "revision": get_current_revision(st.core),
+                "pending_agent": False,
+            }
+
+        # Case C: someone else holds (or intent != edit) → observe + park
+        new_sid = _uuid.uuid4().hex
+        if actor_id and intent == "edit":
+            store.park_session(actor_id, new_sid)
+            log.record("ensure_parked", actor_id=actor_id, session_id=new_sid,
+                       from_actor=(current.actor.value if current else ""),
+                       to_actor=actor.value, to_mode="observe",
+                       project_id=st.core.project.project_id,
+                       detail="waiting for handoff to actor_id")
+        else:
+            log.record("ensure_observe", actor_id=actor_id, session_id=new_sid,
+                       to_actor=actor.value, to_mode="observe",
+                       project_id=st.core.project.project_id)
+        return {
+            "sessionId": new_sid,
+            "mode": "observe",
+            "owner": (current.actor.value if current else "free"),
+            "actor_id": (current.actor_id if current else ""),
+            "revision": get_current_revision(st.core),
+            "pending_agent": bool(actor_id and intent == "edit"),
+        }
+
+    @app.post("/lease/request")
+    def lease_request(req: LeaseRequestReq = Body(...)):
+        """Pure read: 'may I edit? who holds? what mode would I get?'
+
+        No side effect on the lease store or the event log.
+        """
+        store = get_lease_store(st.core)
+        current = store.get(st.core.project.project_id)
+        if current is None:
+            return {
+                "can_acquire": req.intent == "edit",
+                "current_holder": None,
+                "current_actor_id": "",
+                "current_mode": None,
+                "would_get_mode": ("edit" if req.intent == "edit" else req.intent),
+            }
+        would = "observe" if req.intent == "edit" else req.intent
+        return {
+            "can_acquire": False,
+            "current_holder": current.actor.value,
+            "current_actor_id": current.actor_id,
+            "current_mode": current.mode.value,
+            "would_get_mode": would,
+        }
+
+    @app.get("/lease/events")
+    def lease_events(since: int = 0):
+        events, next_seq = get_lease_event_log(st.core).since(since)
+        return {
+            "events": [
+                {
+                    "seq": e.seq, "kind": e.kind, "at": e.at,
+                    "actor_id": e.actor_id, "session_id": e.session_id,
+                    "from_actor": e.from_actor, "to_actor": e.to_actor,
+                    "from_mode": e.from_mode, "to_mode": e.to_mode,
+                    "project_id": e.project_id, "detail": e.detail,
+                }
+                for e in events
+            ],
+            "next_seq": next_seq,
+        }
 
 
     # ---------- 本地字体导入 ----------
