@@ -11,6 +11,7 @@ from yroll.core.commands import CommandLayer
 from yroll.core.manifest import Actor
 from yroll.core.models import Asset, AssetIdentity, AssetType
 from yroll.core.project import ProjectCore
+from yroll.core.timebase import Rational
 
 
 def test_frame_api_add_clip_30fps(tmp_path):
@@ -38,8 +39,8 @@ def test_frame_api_add_clip_24fps(tmp_path):
     core.project.assets.append(Asset(
         asset_id="fa", type=AssetType.VIDEO, path="x.mp4", origin="unknown",
         identity=AssetIdentity(md5="b" * 32, size_bytes=1, duration_sec=5.0)))
-    core.project.fps_num = 24
-    core.project.fps_den = 1
+    # GUI-02: use the canonical Sequence to set fps.
+    core.project.sequence.fps = Rational(24, 1)
     core.save_state()
     layer = CommandLayer(core, who=Actor.HUMAN)
     # 24 fps: 2 seconds = 48 frames
@@ -54,8 +55,8 @@ def test_frame_api_2997_ntsc(tmp_path):
     core.project.assets.append(Asset(
         asset_id="fa", type=AssetType.VIDEO, path="x.mp4", origin="unknown",
         identity=AssetIdentity(md5="c" * 32, size_bytes=1, duration_sec=5.0)))
-    core.project.fps_num = 30000
-    core.project.fps_den = 1001
+    # GUI-02: use the canonical Sequence to set fps.
+    core.project.sequence.fps = Rational(30000, 1001)
     core.save_state()
     layer = CommandLayer(core, who=Actor.HUMAN)
     # 1 second = 30 frames

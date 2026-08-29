@@ -617,6 +617,22 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         from yroll.core.presets import all_presets
         return all_presets()
 
+    # ---------- GUI-02: Sequence (canonical timebase accessor) ----------
+    @app.get("/sequence")
+    def get_sequence():
+        """Returns the canonical timebase plus the project revision
+        so the GUI can invalidate caches when either changes."""
+        return {
+            "sequence_id": st.core.project.sequence.sequence_id,
+            "fps": {"num": st.core.project.sequence.fps.num,
+                     "den": st.core.project.sequence.fps.den},
+            "width": st.core.project.sequence.width,
+            "height": st.core.project.sequence.height,
+            "timecode_format": st.core.project.sequence.timecode_format,
+            "drop_frame": st.core.project.sequence.drop_frame,
+            "project_revision": get_current_revision(st.core),
+        }
+
     # ---------- Edit Lease (P0-10): editing-rights management ----------
     @app.get("/lease")
     def get_lease():

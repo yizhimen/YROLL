@@ -11,11 +11,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
+import uuid
 
 from pydantic import BaseModel, Field
 
 from yroll.core.models import Asset
+from yroll.core.timebase import Rational
 
 
 # ---------- 枚举 ----------
@@ -63,6 +65,43 @@ class ProblemSource(str, Enum):
 class Actor(str, Enum):
     HUMAN = "human"
     AI = "ai"
+
+
+class Sequence(BaseModel):
+    """GUI-02: canonical timebase accessor for a project.
+
+    Project.sequence is the single source of truth for the GUI's
+    time/frame concerns. The flat fps_num / fps_den / width /
+    height fields on Project are synchronized denormalized storage
+    for on-disk back-compat with v0.1 project files.
+
+    `timecode_format` and `drop_frame` are explicit — DF vs NDF is
+    never inferred from the 30000/1001 fraction alone. NDF is a
+    valid choice for 30000/1001 workflows.
+    """
+    sequence_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    fps: Rational = Field(default_factory=lambda: Rational(30, 1))
+    width: int = 1920
+    height: int = 1080
+    timecode_format: Literal["SMPTE", "DF", "NDF"] = "SMPTE"
+    drop_frame: bool = False
+
+    def sync_to_project(self, project: "Project") -> None:
+        """Write canonical values into the flat denormalized fields."""
+        project.fps_num = self.fps.num
+        project.fps_den = self.fps.den
+        project.width = self.width
+        project.height = self.height
+
+    @classmethod
+    def from_project(cls, project: "Project") -> "Sequence":
+        """Build a Sequence from a project. Used when opening v0.1 files
+        that lack `sequence`."""
+        return cls(
+            fps=Rational(project.fps_num, project.fps_den or 1),
+            width=project.width,
+            height=project.height,
+        )
 
 
 # ---------- 基础值对象 ----------
@@ -240,6 +279,9 @@ class Project(BaseModel):
     name: str
     created_at: datetime = Field(default_factory=datetime.now)
     intent: dict[str, str] = Field(default_factory=dict)  # goal/audience/style
+    # GUI-02: Sequence is the canonical accessor; the flat fields
+    # below are denormalized storage kept in sync with Sequence.
+    sequence: Sequence = Field(default_factory=Sequence)
     fps_num: int = 30
     fps_den: int = 1
     width: int = 1920

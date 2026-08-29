@@ -375,6 +375,24 @@ export const api = {
       visual_cue: { color: string; text: string };
     }>("/ui/status" + (clientKnownRevision !== undefined
         ? `?client_known_revision=${clientKnownRevision}` : "")),
+  // GUI-02: canonical timebase accessor
+  getSequence: () =>
+    req<{
+      sequence_id: string;
+      fps: { num: number; den: number };
+      width: number; height: number;
+      timecode_format: "SMPTE" | "DF" | "NDF";
+      drop_frame: boolean;
+      project_revision: number;
+    }>("/sequence"),
+  // GUI-02: Core keymap (semantic binding, no execute endpoint)
+  getKeymap: () =>
+    req<{ bindings: Array<{
+      key: string;
+      description: string;
+      mutation_op: string;
+      params: Record<string, unknown>;
+    }> }>("/keyboard/keymap"),
   getLease: () =>
     req<{ heldBy: string | null; sessionId: string | null; mode: string | null;
            actor: string | null; baseRevision: number; isAlive: boolean;

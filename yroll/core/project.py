@@ -77,12 +77,25 @@ class ProjectCore:
     @classmethod
     def open(cls, path: str | Path) -> "ProjectCore":
         path = Path(path)
-        project = Project.model_validate(
-            json.loads((path / "current.json").read_text(encoding="utf-8"))
-        )
+        raw = json.loads((path / "current.json").read_text(encoding="utf-8"))
+        # GUI-02: backwards compat — v0.1 project files lack `sequence`.
+        # Build it from the flat fields on the fly.
+        if "sequence" not in raw and "fps_num" in raw:
+            raw["sequence"] = {
+                "fps": {"num": raw.get("fps_num", 30),
+                         "den": raw.get("fps_den", 1) or 1},
+                "width": raw.get("width", 1920),
+                "height": raw.get("height", 1080),
+            }
+        project = Project.model_validate(raw)
+        # Ensure the flat fields match Sequence (denormalized sync).
+        project.sequence.sync_to_project(project)
         return cls(path, project)
 
     def save_state(self) -> None:
+        # GUI-02: sync canonical Sequence → flat fields on save so
+        # legacy v0.1 readers still see fps_num/fps_den correctly.
+        self.project.sequence.sync_to_project(self.project)
         (self.path / "current.json").write_text(
             self.project.model_dump_json(indent=2), encoding="utf-8"
         )
