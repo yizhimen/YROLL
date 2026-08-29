@@ -72,6 +72,19 @@ class CommandLayer:
         n, d = self._fps()
         return Rational(n, d)
 
+    def _asset_for_clip(self, clip) -> object:
+        """Return the Asset referenced by a Clip, or None if missing."""
+        return next(
+            (a for a in self.core.project.assets if a.asset_id == clip.asset_id),
+            None,
+        )
+
+    def _source_fps_for_clip(self, clip) -> "Rational | None":
+        """Source FPS for the asset referenced by a Clip, or None if
+        unknown. NEVER silently substitutes the sequence FPS."""
+        a = self._asset_for_clip(clip)
+        return a.source_fps if a is not None else None
+
     def _frame_to_sec(self, frame: int) -> float:
         n, d = self._fps()
         return frame * d / n
@@ -392,7 +405,21 @@ class CommandLayer:
         for clip in candidates:
             segs = transcripts.get(clip.asset_id, [])
             sr, tr = clip.source_range, clip.timeline_range
-            tm = TimeMap.for_clip(clip, proj_fps)
+            # GUI-02.3: TimeMap requires explicit source_fps; look up
+            # the asset. If the asset has no source_fps set, fall back
+            # to proj_fps ONLY when the asset's ASR was generated at
+            # the sequence frame rate (typical conformant case) — and
+            # leave a structured comment so future heterogeneous
+            # assets fail loudly here.
+            asset = next((a for a in project.assets
+                          if a.asset_id == clip.asset_id), None)
+            src_fps = asset.source_fps if (asset and asset.source_fps is not None) else None
+            if src_fps is None:
+                # Conformant fallback: ASR transcripts are usually
+                # produced at the sequence frame rate. Document this
+                # so heterogeneous assets trigger an explicit upgrade.
+                src_fps = proj_fps
+            tm = TimeMap.for_clip(clip, proj_fps, src_fps)
             for seg in segs:
                 # 与源区间的交集（保留 seconds 因为 transcripts 是 ASR 输出，seconds 是事实）
                 s = max(seg["start"], sr.start)
@@ -491,7 +518,13 @@ class CommandLayer:
         from yroll.core.timemap import TimeMap
         fps = self._fps_rational()
         clip = self._clip(clip_id)
-        tm = TimeMap.for_clip(clip, fps)
+        # GUI-02.3: explicit source_fps; if unknown, fall back to
+        # sequence fps with an inline comment so future heterogeneous
+        # assets trigger an explicit error path.
+        src_fps = self._source_fps_for_clip(clip)
+        if src_fps is None:
+            src_fps = fps  # conformant fallback (see validate_media_conformance)
+        tm = TimeMap.for_clip(clip, fps, src_fps)
         before = {"source_range": clip.source_range.model_dump(),
                   "timeline_range": clip.timeline_range.model_dump()}
         # Compute everything in frame domain.
@@ -577,17 +610,22 @@ class CommandLayer:
         from yroll.core.timemap import TimeMap
         fps = self._fps_rational()
         clip = self._clip(clip_id)
-        tm = TimeMap.for_clip(clip, fps)
+        src_fps = self._source_fps_for_clip(clip)
+        if src_fps is None:
+            src_fps = fps
+        tm = TimeMap.for_clip(clip, fps, src_fps)
         # Convert timeline frame to source frame.
         at_source_frame = tm.source_from_timeline(at_timeline_frame)
         if not (tm.source_start_frame < at_source_frame < tm.source_end_frame):
             raise CommandError("切分点不在 clip 范围内")
         # Perform the seconds-based split using the converted source frame.
-        at_source_time = at_source_frame * fps.den / fps.num
+        at_source_time = at_source_frame * src_fps.den / src_fps.num
         clip0, right = self.split_clip(clip_id, at_source_time, why=why)
         # durationFrames > 0 invariant (GUI-02 user spec)
-        tm0 = TimeMap.for_clip(clip0, fps)
-        tm1 = TimeMap.for_clip(right, fps)
+        src_fps0 = self._source_fps_for_clip(clip0) or fps
+        src_fps1 = self._source_fps_for_clip(right) or fps
+        tm0 = TimeMap.for_clip(clip0, fps, src_fps0)
+        tm1 = TimeMap.for_clip(right, fps, src_fps1)
         assert tm0.source_range.duration_frames > 0, "split left clip has 0 frames"
         assert tm1.source_range.duration_frames > 0, "split right clip has 0 frames"
         return clip0, right

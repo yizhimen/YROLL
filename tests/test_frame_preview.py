@@ -16,13 +16,18 @@ FPS_30 = Rational(30, 1)
 
 def _build(tmp_path: Path) -> ProjectCore:
     core = ProjectCore.create(tmp_path, "frame-preview-test")
+    # GUI-02.3: assets declare their source timebase explicitly so
+    # frame_preview can resolve source frames without assuming
+    # sequence fps.
     core.project.assets.append(Asset(
         asset_id="a1", type=AssetType.VIDEO, path="/tmp/v.mp4",
         identity=AssetIdentity(md5="x" * 32, size_bytes=1, duration_sec=60.0),
+        source_fps=FPS_30, source_is_cfr=True, source_frame_count=1800,
     ))
     core.project.assets.append(Asset(
         asset_id="a2", type=AssetType.AUDIO, path="/tmp/v.mp3",
         identity=AssetIdentity(md5="y" * 32, size_bytes=1, duration_sec=60.0),
+        source_fps=FPS_30, source_is_cfr=True, source_frame_count=1800,
     ))
     cmd = CommandLayer(core, who=Actor.HUMAN)
     cmd.add_clip("a1", 0.0, 10.0, timeline_start=0.0)         # video 0..10s
@@ -69,6 +74,7 @@ def test_resolve_respects_speed(tmp_path):
     core.project.assets.append(Asset(
         asset_id="a1", type=AssetType.VIDEO, path="/tmp/v.mp4",
         identity=AssetIdentity(md5="x" * 32, size_bytes=1, duration_sec=60.0),
+        source_fps=FPS_30, source_is_cfr=True, source_frame_count=1800,
     ))
     cmd = CommandLayer(core, who=Actor.HUMAN)
     cmd.add_clip("a1", 0.0, 10.0, timeline_start=0.0)

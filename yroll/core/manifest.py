@@ -16,7 +16,7 @@ import uuid
 
 from pydantic import BaseModel, Field
 
-from yroll.core.models import Asset
+from yroll.core.models import Asset, AssetConformanceResult
 from yroll.core.timebase import Rational
 
 
@@ -295,3 +295,127 @@ class Project(BaseModel):
     generations: list[Generation] = Field(default_factory=list)
     publishing: Publishing = Field(default_factory=Publishing)
     extensions: dict[str, Any] = Field(default_factory=dict)
+
+    # ----------------------------------------------------------------
+    # GUI-02.3: Media conformance
+    # ----------------------------------------------------------------
+
+    def validate_media_conformance(
+        self, sequence_fps: Optional[Rational] = None,
+    ) -> list[AssetConformanceResult]:
+        """Classify every asset against the project sequence timebase.
+
+        Returns one `AssetConformanceResult` per asset. The taxonomy is:
+          - "frame_editable":   source FPS matches sequence FPS AND CFR
+          - "needs_conform":    FPS mismatch OR VFR — transcode recommended
+          - "unsupported":      source timebase unknown — ffprobe first
+
+        The default `sequence_fps` is `self.sequence.fps`. Callers may
+        override to preview what would change under a new sequence
+        frame rate without mutating the project.
+
+        This method does NOT mutate project state. It does NOT convert
+        any SourceFrame to a TimelineFrame — it only reports status.
+        Per the GUI-02.3 invariant, the GUI's frame-native edit path
+        MUST inspect these results before any clip referencing an
+        asset that is not "frame_editable" is touched.
+        """
+        seq_fps = sequence_fps if sequence_fps is not None else self.sequence.fps
+        return [_classify_asset(a, seq_fps) for a in self.assets]
+
+    def frame_editable_asset_ids(
+        self, sequence_fps: Optional[Rational] = None,
+    ) -> list[str]:
+        """Convenience: asset_ids of all assets currently frame-editable
+        against the sequence. Use this to filter Clip.asset_id lookups
+        before invoking frame-native operations."""
+        return [
+            r.asset_id for r in self.validate_media_conformance(sequence_fps)
+            if r.is_frame_editable
+        ]
+
+    def unsupported_asset_ids(
+        self, sequence_fps: Optional[Rational] = None,
+    ) -> list[str]:
+        """Convenience: asset_ids of all assets that cannot be
+        frame-edited (VFR, FPS mismatch, or unknown source timebase)."""
+        return [
+            r.asset_id for r in self.validate_media_conformance(sequence_fps)
+            if not r.is_frame_editable
+        ]
+
+
+def _classify_asset(
+    asset: Asset, sequence_fps: Rational,
+) -> AssetConformanceResult:
+    """Single-asset classifier used by Project.validate_media_conformance.
+
+    Order of checks (most specific first):
+      1. No source FPS  → "unsupported" (must run ffprobe first)
+      2. VFR detected   → "needs_conform" (VFR editing is out of scope)
+      3. FPS mismatch   → "needs_conform" (transcode recommended; TimeMap
+                                      will still map correctly but every
+                                      cross-timebase boundary will be a
+                                      fractional frame)
+      4. CFR + FPS match → "frame_editable"
+
+    The check is deliberately NOT named "FPS-only" — it covers
+    missing timebase, VFR, and FPS mismatch under a single
+    AssetConformanceResult so future checks (resolution, codec,
+    color space) can extend it without renaming.
+    """
+    base = {
+        "asset_id": asset.asset_id,
+        "sequence_fps": sequence_fps,
+        "source_fps": asset.source_fps,
+        "source_is_cfr": asset.source_is_cfr,
+    }
+    if asset.source_fps is None:
+        return AssetConformanceResult(
+            **base,
+            status="unsupported",
+            reason=(
+                f"asset {asset.asset_id!r} has no source FPS set; "
+                f"frame-native editing requires an explicit source timebase"
+            ),
+            recommended_action=(
+                "run ffprobe/mediainfo on the source media and set "
+                "Asset.source_fps + Asset.source_is_cfr before editing"
+            ),
+        )
+    if asset.source_is_cfr is False:
+        return AssetConformanceResult(
+            **base,
+            status="needs_conform",
+            reason=(
+                f"asset {asset.asset_id!r} source is VFR; "
+                f"frame-native editing requires CFR source media"
+            ),
+            recommended_action=(
+                "transcode source to CFR at the sequence FPS, then reload"
+            ),
+        )
+    if asset.source_fps != sequence_fps:
+        return AssetConformanceResult(
+            **base,
+            status="needs_conform",
+            reason=(
+                f"asset {asset.asset_id!r} source FPS "
+                f"{asset.source_fps.num}/{asset.source_fps.den} "
+                f"differs from sequence FPS "
+                f"{sequence_fps.num}/{sequence_fps.den}"
+            ),
+            recommended_action=(
+                "transcode to sequence FPS, OR accept heterogeneous "
+                "editing via TimeMap (fractional-frame boundaries)"
+            ),
+        )
+    return AssetConformanceResult(
+        **base,
+        status="frame_editable",
+        reason=(
+            f"asset {asset.asset_id!r} is CFR at sequence FPS "
+            f"{sequence_fps.num}/{sequence_fps.den}"
+        ),
+        recommended_action=None,
+    )

@@ -12,11 +12,14 @@ Project / Asset / Shot / Transcript / Understanding。
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
+
+from yroll.core.timebase import Rational
 
 
 class AssetOrigin(str, Enum):
@@ -58,6 +61,131 @@ class Asset(BaseModel):
     tags: list[str] = Field(default_factory=list)
     # 外部 AI 产物生成链（§4 Adapter：prompt/model/seed/source_tool）
     gen: Optional[dict] = None
+
+    # ----------------------------------------------------------------
+    # GUI-02.3: Explicit source timebase.
+    #
+    # Frame-native editing requires the asset's SOURCE timebase to be
+    # explicit. The asset's source timebase is independent of the
+    # project's sequence timebase — they may match (conformant) or
+    # differ (heterogeneous).
+    #
+    # These fields are the unified accessors; legacy fps_num/fps_den
+    # on AssetIdentity (already there for some assets) are migrated
+    # here when the project is opened. None means "unknown" — the
+    # asset's container did not declare a frame rate (VFR detection
+    # in progress, missing metadata, etc.).
+    # ----------------------------------------------------------------
+    source_fps: Optional[Rational] = None        # asset's source FPS, None = unknown
+    source_is_cfr: Optional[bool] = None         # True = CFR, False = VFR, None = unknown
+    source_frame_count: Optional[int] = None     # total source frames (when known)
+
+    @property
+    def source_fps_rational(self) -> Rational:
+        """Strict accessor for the asset's source timebase.
+
+        Raises ValueError if the source FPS is unknown. Per the
+        GUI-02.3 invariant, frame-native editing NEVER silently falls
+        back to the project sequence FPS — that would relabel a
+        SourceFrame as a TimelineFrame and lose the conversion that
+        TimeMap is supposed to perform.
+
+        Use `Project.validate_media_conformance()` to discover which
+        assets need their source FPS supplied (e.g. via
+        ffprobe/mediainfo) before relying on this accessor.
+        """
+        if self.source_fps is None:
+            raise ValueError(
+                f"asset {self.asset_id!r} has no source FPS set; "
+                f"frame-native editing requires an explicit source "
+                f"timebase (run ffprobe / set Asset.source_fps)"
+            )
+        return self.source_fps
+
+    @property
+    def is_vfr(self) -> bool:
+        """True iff the asset has been positively identified as VFR.
+        Returns False for CFR or unknown — use Project.validate_media_
+        conformance() to disambiguate unknown."""
+        return self.source_is_cfr is False
+
+    @property
+    def source_timebase_known(self) -> bool:
+        """True iff the asset's source timebase is fully known:
+        source_fps set AND source_is_cfr known."""
+        return self.source_fps is not None and self.source_is_cfr is not None
+
+
+# ---------------------------------------------------------------------------
+# GUI-02.3: Media conformance result.
+#
+# validate_media_conformance() returns one AssetConformanceResult per
+# asset. The status taxonomy is deliberately open — it covers FPS
+# mismatch, VFR, and missing source timebase under the SAME result
+# type, so future checks (resolution, codec, color space, …) can be
+# added without renaming this check.
+# ---------------------------------------------------------------------------
+
+# The set of possible status values. Kept narrow on purpose; new
+# statuses (e.g. "needs_color_convert") can be added without
+# breaking old callers because callers should always inspect the
+# `reason` and `recommended_action` fields rather than switch on
+# status strings. We do NOT name this "FPS-only" because VFR
+# detection, codec mismatch, resolution mismatch, etc. all fall
+# under "needs_conform" / "unsupported".
+AssetConformanceStatus = Literal[
+    "frame_editable",     # source FPS matches sequence FPS AND source is CFR
+    "needs_conform",      # source FPS mismatch OR VFR — transcode recommended
+    "unsupported",        # source timebase unknown — resolve via ffprobe first
+]
+
+
+@dataclass(frozen=True)
+class AssetConformanceResult:
+    """Result of conformance check for a single asset.
+
+    Produced by `Project.validate_media_conformance()`. Each asset in
+    the project gets exactly one result.
+
+    Fields:
+      asset_id:            the asset's identity
+      status:              one of frame_editable / needs_conform / unsupported
+      reason:              human-readable explanation (English)
+      sequence_fps:        the project sequence FPS used for the check
+      source_fps:          the asset's source FPS, None iff unknown
+      source_is_cfr:       True = CFR, False = VFR, None = unknown
+      recommended_action:  remediation hint (e.g. "transcode to sequence FPS
+                           then reload", "run ffprobe to extract source FPS")
+
+    `frame_editable` means the asset can be used in frame-native
+    editing as-is. `needs_conform` means the asset's source timebase
+    differs from the sequence; YROLL will still allow the clip via
+    TimeMap speed mapping, but the recommendation is to transcode to
+    the sequence FPS first to avoid fractional-frame boundaries.
+    `unsupported` means the source timebase is unknown; resolve before
+    editing. Full VFR editing is OUT OF SCOPE per the GUI-02.3
+    invariant — VFR assets return `needs_conform` with a transcode
+    recommendation.
+    """
+    asset_id: str
+    status: AssetConformanceStatus
+    reason: str
+    sequence_fps: Rational
+    source_fps: Optional[Rational]
+    source_is_cfr: Optional[bool]
+    recommended_action: Optional[str]
+
+    @property
+    def is_frame_editable(self) -> bool:
+        return self.status == "frame_editable"
+
+    @property
+    def needs_conform(self) -> bool:
+        return self.status == "needs_conform"
+
+    @property
+    def is_unsupported(self) -> bool:
+        return self.status == "unsupported"
 
 
 class TranscriptSegment(BaseModel):

@@ -20,9 +20,12 @@ FPS = Rational(30, 1)
 
 def _build(tmp_path: Path) -> ProjectCore:
     core = ProjectCore.create(tmp_path, "l1-test")
+    # GUI-02.3: assets declare their source timebase so frame_preview
+    # can resolve source frames without falling back to sequence fps.
     core.project.assets.append(Asset(
         asset_id="a1", type=AssetType.VIDEO, path="/tmp/v.mp4",
         identity=AssetIdentity(md5="x" * 32, size_bytes=1, duration_sec=60.0),
+        source_fps=FPS, source_is_cfr=True, source_frame_count=1800,
     ))
     cmd = CommandLayer(core, who=Actor.HUMAN)
     cmd.add_clip("a1", 0.0, 10.0, timeline_start=0.0)  # video 0..10s

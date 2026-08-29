@@ -155,7 +155,13 @@ class SnapEngine:
                     continue
                 # Transcripts may be a flat list of segments with words inside
                 # OR a flat list of words. Handle both shapes.
-                tm = TimeMap.for_clip(c, fps)
+                # GUI-02.3: explicit source_fps; word boundaries are
+                # source-frame-aligned so we need the asset's source fps.
+                asset = next((a for a in project.assets
+                              if a.asset_id == c.asset_id), None)
+                src_fps = (asset.source_fps if asset and asset.source_fps is not None
+                           else fps)
+                tm = TimeMap.for_clip(c, fps, src_fps)
                 for seg in words:
                     if "words" in seg:  # segment-level with embedded words
                         for w in seg["words"]:

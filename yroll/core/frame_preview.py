@@ -30,6 +30,7 @@ class FramePreview:
     video_source_frame: Optional[int] = None
     video_asset_path: Optional[str] = None
     video_track_id: Optional[str] = None
+    video_source_fps: Optional[Rational] = None  # asset's source FPS (NOT sequence)
 
     # Audio
     audio_clip_ids: list[str] = field(default_factory=list)
@@ -49,7 +50,13 @@ class FramePreview:
 
 def resolve_frame(project: Project, timeline_frame: int,
                   fps: Rational) -> FramePreview:
-    """Resolve what covers a single timeline frame."""
+    """Resolve what covers a single timeline frame.
+
+    `fps` is the project sequence timebase. For each clip, the
+    asset's source_fps is looked up explicitly via
+    `asset.source_fps_rational` (raises if unset) — never silently
+    substituted with sequence fps.
+    """
     pv = FramePreview(timeline_frame=timeline_frame, fps=fps)
 
     for track in project.timeline.tracks:
@@ -64,13 +71,19 @@ def resolve_frame(project: Project, timeline_frame: int,
                 if tl_s_f <= timeline_frame < tl_e_f:
                     pv.video_clip_id = cid
                     pv.video_track_id = track.track_id
-                    tm = TimeMap.for_clip(c, fps)
+                    asset = next((a for a in project.assets
+                                  if a.asset_id == c.asset_id), None)
+                    if asset is None or asset.source_fps is None:
+                        # Per GUI-02.3: do NOT silently fall back to
+                        # sequence fps. Skip the clip; caller can
+                        # surface this via validate_media_conformance.
+                        break
+                    tm = TimeMap.for_clip(c, fps, asset.source_fps)
                     # Convert timeline_frame → clip-local → source
                     clip_frame = tm.clip_from_timeline(timeline_frame)
                     pv.video_source_frame = tm.source_from_clip(clip_frame)
-                    asset = next((a for a in project.assets
-                                  if a.asset_id == c.asset_id), None)
-                    pv.video_asset_path = asset.path if asset else None
+                    pv.video_asset_path = asset.path
+                    pv.video_source_fps = asset.source_fps
                     break  # one video wins on each track; first match
         elif track.kind == TrackKind.AUDIO:
             for cid in track.clip_ids:
@@ -80,14 +93,16 @@ def resolve_frame(project: Project, timeline_frame: int,
                 tl_s_f = FrameTime.from_seconds(c.timeline_range.start, fps).frame
                 tl_e_f = FrameTime.from_seconds(c.timeline_range.end, fps).frame
                 if tl_s_f <= timeline_frame < tl_e_f:
-                    tm = TimeMap.for_clip(c, fps)
+                    asset = next((a for a in project.assets
+                                  if a.asset_id == c.asset_id), None)
+                    if asset is None or asset.source_fps is None:
+                        continue
+                    tm = TimeMap.for_clip(c, fps, asset.source_fps)
                     clip_frame = tm.clip_from_timeline(timeline_frame)
                     src_frame = tm.source_from_clip(clip_frame)
                     pv.audio_clip_ids.append(cid)
                     pv.audio_source_frames.append(src_frame)
-                    asset = next((a for a in project.assets
-                                  if a.asset_id == c.asset_id), None)
-                    pv.audio_asset_paths.append(asset.path if asset else "")
+                    pv.audio_asset_paths.append(asset.path)
         elif track.kind == TrackKind.TEXT:
             for cid in track.clip_ids:
                 c = project.clips.get(cid)

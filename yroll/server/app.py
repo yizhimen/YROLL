@@ -334,6 +334,50 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
     def get_project():
         return st.core.project
 
+    # ----------------------------------------------------------------
+    # GUI-02.3: Media conformance — gate-exempt (read-only).
+    # ----------------------------------------------------------------
+    @app.get("/project/validate_media_conformance")
+    def validate_media_conformance():
+        """Return AssetConformanceResult for every asset.
+
+        Read-only — does NOT mutate project state. The GUI uses
+        this to display "frame-editable" badges per clip and to
+        warn the user before touching clips whose assets are
+        VFR / FPS-mismatched / unknown-source.
+        """
+        from yroll.core.models import AssetConformanceResult
+        results = st.core.project.validate_media_conformance()
+        return {
+            "sequence_fps": {
+                "num": st.core.project.sequence.fps.num,
+                "den": st.core.project.sequence.fps.den,
+            },
+            "results": [
+                {
+                    "asset_id": r.asset_id,
+                    "status": r.status,
+                    "reason": r.reason,
+                    "sequence_fps": {
+                        "num": r.sequence_fps.num, "den": r.sequence_fps.den,
+                    },
+                    "source_fps": (
+                        {"num": r.source_fps.num, "den": r.source_fps.den}
+                        if r.source_fps is not None else None
+                    ),
+                    "source_is_cfr": r.source_is_cfr,
+                    "recommended_action": r.recommended_action,
+                }
+                for r in results
+            ],
+            "frame_editable_asset_ids": [
+                r.asset_id for r in results if r.is_frame_editable
+            ],
+            "unsupported_asset_ids": [
+                r.asset_id for r in results if not r.is_frame_editable
+            ],
+        }
+
     @app.get("/operations")
     def get_operations():
         return st.core.operations()
@@ -476,11 +520,23 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         )))
 
     @app.get("/clip/{clip_id}/timemap")
-    def get_timemap(clip_id: str, fps_num: int = None, fps_den: int = None):
-        """GUI-02: returns TimeMap.for_clip(clip, fps) as a JSON object.
-        The GUI must not construct TimeMap locally; it consumes Core's
-        result via this endpoint. If fps_num/fps_den are not given,
-        the project's fps is used."""
+    def get_timemap(clip_id: str, fps_num: int = None, fps_den: int = None,
+                    src_fps_num: int = None, src_fps_den: int = None):
+        """GUI-02: returns TimeMap.for_clip(clip, fps, source_fps) as a
+        JSON object. The GUI must not construct TimeMap locally; it
+        consumes Core's result via this endpoint.
+
+        GUI-02.3: the response now includes BOTH sequence_fps (the
+        project's timeline timebase) and source_fps (the asset's
+        source timebase). The two are explicitly distinct; the GUI
+        must not assume they are equal.
+
+        If `src_fps_num`/`src_fps_den` are not given, the asset's
+        source_fps is used (resolved via `asset.source_fps_rational`).
+        If the asset has no source FPS set, an explicit 422 is
+        returned — frame-native editing never assumes source_fps ==
+        sequence_fps.
+        """
         from yroll.core.timebase import Rational
         from yroll.core.timemap import TimeMap
         clip = st.core.project.clips.get(clip_id)
@@ -489,12 +545,30 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         num = fps_num if fps_num is not None else st.core.project.fps_num
         den = fps_den if fps_den is not None else (st.core.project.fps_den or 1)
         fps = Rational(num or 30, den)
-        tm = TimeMap.for_clip(clip, fps)
+        # Resolve source_fps: explicit query params → asset's stored
+        # source_fps → 422 if neither available.
+        if src_fps_num is not None and src_fps_den is not None:
+            src_fps = Rational(src_fps_num, src_fps_den)
+        else:
+            asset = next((a for a in st.core.project.assets
+                          if a.asset_id == clip.asset_id), None)
+            if asset is None or asset.source_fps is None:
+                raise HTTPException(
+                    422,
+                    f"asset for clip {clip_id!r} has no source FPS set; "
+                    f"call /project/validate_media_conformance and "
+                    f"populate Asset.source_fps before frame-native edits",
+                )
+            src_fps = asset.source_fps
+        tm = TimeMap.for_clip(clip, fps, src_fps)
         return {
             "source_start_frame": tm.source_start_frame,
             "source_end_frame": tm.source_end_frame,
             "timeline_start_frame": tm.timeline_start_frame,
             "speed": tm.speed,
+            "sequence_fps": {"num": fps.num, "den": fps.den},
+            "source_fps": {"num": src_fps.num, "den": src_fps.den},
+            # legacy alias for `fps` — prefer sequence_fps above
             "fps": {"num": num, "den": den},
             "duration_frames": tm.source_range.duration_frames,
         }
@@ -1470,7 +1544,16 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             c = st.core.project.clips.get(cid)
             if not c:
                 continue
-            tm = TimeMap.for_clip(c, fps)
+            # GUI-02.3: snap is timeline-frame work; source_fps is not
+            # needed for CLIP_START (uses timeline_start_frame directly).
+            # For CLIP_END we use source_end_frame which IS in source_fps
+            # — pass the asset's source_fps (fall back to sequence fps
+            # only in the conformant case where the two are equal).
+            asset = next((a for a in st.core.project.assets
+                          if a.asset_id == c.asset_id), None)
+            src_fps = (asset.source_fps if asset and asset.source_fps is not None
+                       else fps)
+            tm = TimeMap.for_clip(c, fps, src_fps)
             # clip boundaries in TIMELINE frames
             candidates.append(SnapTarget(tm.timeline_start_frame, SnapKind.CLIP_START, cid, cid))
             candidates.append(SnapTarget(tm.timeline_from_source(tm.source_end_frame), SnapKind.CLIP_END, cid, cid))
@@ -1483,7 +1566,11 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
                 c = st.core.project.clips.get(cid)
                 if not c:
                     continue
-                tm = TimeMap.for_clip(c, fps)
+                asset = next((a for a in st.core.project.assets
+                              if a.asset_id == c.asset_id), None)
+                src_fps = (asset.source_fps if asset and asset.source_fps is not None
+                           else fps)
+                tm = TimeMap.for_clip(c, fps, src_fps)
                 candidates.append(SnapTarget(tm.timeline_start_frame, SnapKind.CLIP_START, cid, cid))
                 candidates.append(SnapTarget(tm.timeline_from_source(tm.source_end_frame), SnapKind.CLIP_END, cid, cid))
         # Markers
