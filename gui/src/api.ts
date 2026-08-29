@@ -11,6 +11,11 @@ export interface Asset {
   origin?: "camera" | "generated" | "screen_record" | "unknown";
   gen?: Record<string, unknown> | null;
   identity: { duration_sec?: number; width?: number; height?: number };
+  // GUI-02.3: explicit source timebase (asset's frame rate). May be
+  // null if the asset's container has no fps metadata. Distinct
+  // from sequence fps (project's timeline timebase).
+  source_fps?: { num: number; den: number } | null;
+  source_is_cfr?: boolean | null;
 }
 
 export interface Clip {
@@ -74,6 +79,19 @@ export interface Project {
   assets: Asset[];
   timeline: { timeline_id: string; tracks: Track[] };
   clips: Record<string, Clip>;
+  // GUI-02: canonical timebase accessor. Falls back to fps_num/fps_den
+  // for legacy v0.1 projects that lack `sequence`.
+  sequence?: {
+    sequence_id?: string;
+    fps: { num: number; den: number };
+    width?: number;
+    height?: number;
+    timecode_format?: "SMPTE" | "DF" | "NDF";
+    drop_frame?: boolean;
+    project_revision?: number;
+  };
+  fps_num?: number;
+  fps_den?: number;
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -422,9 +440,30 @@ export const api = {
       source_end_frame: number;
       timeline_start_frame: number;
       speed: number;
+      sequence_fps?: { num: number; den: number };
+      source_fps?: { num: number; den: number };
       fps: { num: number; den: number };
       duration_frames: number;
     }>(`/clip/${clipId}/timemap`),
+  // Raw fetch helpers — used by timemap-cache.ts so the cache layer
+  // can build a typed URL with explicit src_fps query params.
+  getTimemapRaw: (path: string) =>
+    req<{
+      source_start_frame: number;
+      source_end_frame: number;
+      timeline_start_frame: number;
+      speed: number;
+      sequence_fps?: { num: number; den: number };
+      source_fps?: { num: number; den: number };
+      fps: { num: number; den: number };
+      duration_frames: number;
+    }>(path),
+  getTimemapAtFrameRaw: (path: string) =>
+    req<{
+      source_frame: number;
+      timeline_frame: number;
+      source_fps: { num: number; den: number };
+    }>(path),
   getLease: () =>
     req<{ heldBy: string | null; sessionId: string | null; mode: string | null;
            actor: string | null; baseRevision: number; isAlive: boolean;

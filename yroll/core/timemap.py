@@ -91,9 +91,15 @@ class TimeMap:
     @property
     def timeline_range(self) -> FrameRange:
         """Timeline-frame FrameRange tagged with sequence_fps.
-        Half-open: [timeline_start_frame, timeline_start_frame + clip_duration/speed)."""
+        Half-open: [timeline_start_frame, timeline_start_frame + clip_duration_in_tl_frames).
+        FPS-aware: clip_duration (source frames) is converted to timeline
+        frames via the same formula as timeline_from_clip."""
         clip_duration = self.source_end_frame - self.source_start_frame
-        tl_duration = round(clip_duration / self.speed)
+        # Same formula as timeline_from_clip (relative offset from
+        # timeline_start, no offset to add here):
+        num = clip_duration * self.sequence_fps.num * self.source_fps.den
+        den = self.speed * self.source_fps.num * self.sequence_fps.den
+        tl_duration = round(num / den)
         return FrameRange(
             self.timeline_start_frame,
             self.timeline_start_frame + tl_duration,
@@ -115,22 +121,49 @@ class TimeMap:
         return self.source_start_frame + clip_frame
 
     # ---------- Clip Local ↔ Timeline (sequence_fps) ----------
+    #
+    # The FPS-aware conversion. speed=N means the clip plays at Nx:
+    # 1 second of source becomes N seconds of timeline (for N>1).
+    # Equivalently:
+    #   clip_seconds      = clip_frame / source_fps
+    #   timeline_seconds  = clip_seconds / speed   (speed=2 → half)
+    #   timeline_frames   = timeline_seconds * sequence_fps
+    #                     = clip_frame * sequence_fps / (speed * source_fps)
+    #
+    # For the conformant case (sequence_fps == source_fps), this
+    # collapses to the legacy `clip_frame / speed` formula. For
+    # heterogeneous FPS (e.g. seq=30, src=60, speed=1), the factor
+    # is 0.5 — 1 timeline frame corresponds to 2 source frames.
+    #
+    # The closed-form rational math avoids float drift:
+    #   timeline_frames_offset =
+    #       clip_frame * seq_fps.num * src_fps.den
+    #     / (speed * src_fps.num * seq_fps.den)
 
     def timeline_from_clip(self, clip_frame: int) -> int:
-        """Clip-local frame → timeline frame (accounting for speed).
+        """Clip-local frame → timeline frame (FPS-aware).
 
-        The clip duration is `clip_frame / speed` frames in sequence_fps
-        (rounded to integer). The result is a TimelineFrame in sequence_fps.
+        Both FPS values come from the TimeMap construction; the
+        caller has no way to override them per-call (and shouldn't —
+        mixing FPS would silently relabel TimelineFrame integers as
+        SourceFrame integers).
         """
         if clip_frame < 0:
             return self.timeline_start_frame
-        return round(self.timeline_start_frame + clip_frame / self.speed)
+        num = clip_frame * self.sequence_fps.num * self.source_fps.den
+        den = self.speed * self.source_fps.num * self.sequence_fps.den
+        return self.timeline_start_frame + round(num / den)
 
     def clip_from_timeline(self, timeline_frame: int) -> int:
-        """Timeline frame → clip-local frame. Result is integer in source_fps."""
+        """Timeline frame → clip-local frame. FPS-aware.
+
+        Inverse of timeline_from_clip. Result is integer in source_fps.
+        """
         if timeline_frame < self.timeline_start_frame:
             return 0
-        return round((timeline_frame - self.timeline_start_frame) * self.speed)
+        num = (timeline_frame - self.timeline_start_frame) * self.speed * self.source_fps.num * self.sequence_fps.den
+        den = self.sequence_fps.num * self.source_fps.den
+        return round(num / den)
 
     # ---------- Source ↔ Timeline (the user-facing mapping) ----------
 

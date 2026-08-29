@@ -1,11 +1,63 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态
-- **GUI-01（Session + Mutation Gate + Revision）已完整交付**（详见下"v0.2 GUI-01"）
-- **GUI-02 Closure 02-1（Core 标准 NTSC DF）+ 02-2（TS mirror）+ 02-3（Source Timebase & Conformance）+ 02-4（ClipBlock Frame-Native Refactor）已完成**
+## 当前状态（2026-08-29 commit 待 push）
+- **GUI-01（Session + Mutation Gate + Revision）已完整交付**
+- **GUI-02 Closure** 02-1 → 02-5 已完成（push 待执行）：
+  - 02-1 `f674a56` 标准 NTSC DF + reject dropped labels
+  - 02-2 `3cdfc5c` TS mirror standard NTSC DF
+  - 02-3 `884eba1` Source Timebase & Conformance
+  - 02-4 `20be59f` ClipBlock frame-only refactor
+  - **02-5 (新)** FrameClock + PreviewPlayer `performance.now()` refactor + TimeMap heterogeneous FPS math fix
 - 工程：sanlihe-story（38 clip + 18 字幕 + 40 资产 + 91 op）
-- Core v0.2 测试：466 passed + 1 skipped
-- GUI 测试：140 vitest + Playwright 端到端冒烟通过
+- Core v0.2 测试：**477 passed + 1 skipped**
+- GUI 测试：**163 vitest** + Playwright 端到端冒烟通过
+
+### 已交付（02-5）
+- `gui/src/frame-clock.ts` — 单一 playback clock 抽象（performance.now() + startFrame/startTime）
+- `gui/src/timemap-cache.ts` — Core TimeMap 响应缓存
+- `gui/src/components/PreviewPlayer.tsx` — 移除 setInterval，改用 RAF；TimelineFrame→SourceFrame 经 Core TimeMap；v.currentTime 仅外部 I/O；无 video.timeupdate→playhead 反馈
+- `yroll/server/app.py` — 新端点 `GET /clip/{id}/timemap/at_frame` 走 Core's TimeMap
+- `yroll/core/timemap.py` — **关键修复**：FPS-aware math（heterogeneous seq≠src 之前有 bug，02-3 漏修了）
+
+## 关键文件清单（GUI-02 已交付/待交付）
+
+### 已交付（02-1 → 02-4）
+- `yroll/core/timeframe.py` — 标准 SMPTE 12M NTSC DF（闭合公式）
+- `yroll/core/models.py` — `Asset.source_fps / source_is_cfr / source_frame_count` + `AssetConformanceResult`（frozen dataclass）
+- `yroll/core/manifest.py` — `Project.validate_media_conformance()`
+- `yroll/core/timemap.py` — TimeMap 显式 `sequence_fps` + `source_fps`
+- `yroll/core/commands.py` / `frame_preview.py` / `snap.py` — 显式 source_fps 传递
+- `yroll/server/app.py` — `/clip/{id}/timemap` 返回 `sequence_fps + source_fps`；`/project/validate_media_conformance` 新端点
+- `gui/src/frames.ts` — 标准 NTSC DF（闭合公式，TS mirror）
+- `gui/src/components/ClipBlock.tsx` — pxPerFrame + onMoveCommit + 整数 frame intent + 零本地 TimeMap 业务数学
+- `tests/test_source_fps_conformance.py`（16 tests）
+- `tests/test_no_sequence_fps_as_source_fps.py`（6 tests）
+- `tests/test_no_js_round_in_edit.py`（4 tests）
+- `gui/src/components/ClipBlock.test.tsx`（15 tests）
+
+### 计划但未实现（02-5 起）
+- `gui/src/frame-clock.ts` — playback clock 抽象（02-5）
+- `gui/src/timemap-cache.ts` — Core TimeMap 缓存（02-5+）
+- PreviewPlayer `performance.now()` refactor（02-5）
+- App keyboard via keymap only（02-6）
+- `tests/test_seconds_leakage.py` 跨文件架构护栏（02-6）
+- `gui/smoke/gui-02.mjs` Playwright（02-7）
+
+### Static 架构护栏（已绿）
+- `tests/test_no_js_round_in_edit.py` — ClipBlock 不允许 pxPerSec / Math.round / * clip.speed
+- `tests/test_no_sequence_fps_as_source_fps.py` — yroll/ 不允许 project.fps_num 乘 source_frame
+
+### 用户的强制 invariants（per 02-3/02-4 specs）
+1. Frame-native through entire edit chain (frames never silently converted to seconds)
+2. TimelineFrame / ClipFrame / SourceFrame 显式区分
+3. No GUI TimeMap 业务数学（`* clip.speed` / `/ clip.speed` 在 ClipBlock 已清零）
+4. Source timebase 显式（Asset.source_fps + source_is_cfr）
+5. No local seconds-based snap math（已用 `DEFAULT_SNAP_RADIUS_FRAMES = 8`）
+6. `roundHalfAwayFromZero` 是唯一 edit-coordinate rounding（`Math.round` 已禁）
+7. PreviewPlayer playback clock = `performance.now()`（setInterval 已禁 — 02-5 待做）
+8. Standard NTSC DF（PINNED dict 已删）
+9. `from_timecode` rejects dropped labels
+10. Seconds-leakage architectural guard（局部 ClipBlock 已做，全局 02-6 待做）
 
 ## v0.2 GUI-01 完工（2026-08-29）
 

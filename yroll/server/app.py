@@ -573,6 +573,46 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             "duration_frames": tm.source_range.duration_frames,
         }
 
+    @app.get("/clip/{clip_id}/timemap/at_frame")
+    def timemap_at_frame(clip_id: str, timeline_frame: int,
+                          fps_num: int = None, fps_den: int = None,
+                          src_fps_num: int = None, src_fps_den: int = None):
+        """GUI-02.5: resolve a TimelineFrame → SourceFrame using Core's
+        TimeMap. The GUI must NOT compute this locally (forbidden
+        TimeMap business math). Per-call lookup; modern browsers
+        buffer video so this is not on the per-frame critical path
+        for playback.
+
+        Reuses the same source_fps resolution rules as /clip/{id}/timemap.
+        """
+        from yroll.core.timebase import Rational
+        from yroll.core.timemap import TimeMap
+        clip = st.core.project.clips.get(clip_id)
+        if clip is None:
+            raise HTTPException(404, f"clip 不存在: {clip_id}")
+        num = fps_num if fps_num is not None else st.core.project.fps_num
+        den = fps_den if fps_den is not None else (st.core.project.fps_den or 1)
+        fps = Rational(num or 30, den)
+        if src_fps_num is not None and src_fps_den is not None:
+            src_fps = Rational(src_fps_num, src_fps_den)
+        else:
+            asset = next((a for a in st.core.project.assets
+                          if a.asset_id == clip.asset_id), None)
+            if asset is None or asset.source_fps is None:
+                raise HTTPException(
+                    422,
+                    f"asset for clip {clip_id!r} has no source FPS set",
+                )
+            src_fps = asset.source_fps
+        tm = TimeMap.for_clip(clip, fps, src_fps)
+        sf = tm.source_from_timeline(timeline_frame)
+        return {
+            "source_frame": sf,
+            "timeline_frame": timeline_frame,
+            "source_fps": {"num": src_fps.num, "den": src_fps.den},
+            "sequence_fps": {"num": fps.num, "den": fps.den},
+        }
+
     @app.post("/clips/{clip_id}/speed")
     def speed(clip_id: str, req: SpeedReq):
         return guard(lambda: st.cmd.set_speed(clip_id, **req.model_dump()))

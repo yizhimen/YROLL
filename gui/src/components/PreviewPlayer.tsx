@@ -1,10 +1,39 @@
 // 预览播放器：即时模式（直读源素材）/ 成片模式（渲染结果）。
 //
-// 即时模式 = 抓主视频轨播放头下的 clip，直接播它的源文件区间。
-// 视窗比例：16:9/9:16/1:1/4:3/3:4，CSS 比例决定容器形状。
+// GUI-02.5 closure invariants:
+//
+//   - Authoritative time = TimelineFrame (integer). The FrameClock
+//     derives the integer from performance.now() + a start anchor —
+//     NEVER from setInterval accumulation, NEVER from
+//     video.currentTime, NEVER from video.timeupdate.
+//   - requestAnimationFrame is render cadence only; the clock is
+//     derived independently on each tick.
+//   - HTMLMediaElement.currentTime is EXTERNAL MEDIA I/O only. The
+//     GUI writes it from Core's TimeMap response (TimelineFrame →
+//     SourceFrame via the cached timemap-cache, then
+//     SourceFrame → seconds via asset source_fps). The GUI never
+//     reads v.currentTime as TimelineFrame state.
+//   - No video.timeupdate → playheadFrame feedback loop. The
+//     onTimeUpdate handler is only for end-of-clip detection (an
+//     orthogonal event), never for state derivation.
 
 import { useEffect, useRef, useState } from "react";
 import { Project } from "../api";
+import {
+  type FrameClock,
+  createFrameClock,
+  currentFrame as frameClockCurrentFrame,
+  pause as frameClockPause,
+  play as frameClockPlay,
+  seek as frameClockSeek,
+  togglePlay as frameClockTogglePlay,
+} from "../frame-clock";
+import {
+  fetchTimeMap,
+  sourceFromTimeline,
+  sourceFrameToMediaSeconds,
+  type TimeMapCacheEntry,
+} from "../timemap-cache";
 
 export type AspectRatio = "16:9" | "9:16" | "1:1" | "4:3" | "3:4";
 
@@ -36,36 +65,76 @@ export default function PreviewPlayer({
   durationHint = 120,
 }: Props) {
   const [mode, setMode] = useState<"instant" | "rendered">("instant");
+
+  // Canonical sequence (timebase). Falls back to flat fps_num/fps_den
+  // for legacy v0.1 projects that lack `sequence`. Treat absent
+  // sequence as 30fps default so the player still mounts.
+  const seq = project.sequence ?? {
+    fps: { num: project.fps_num ?? 30, den: project.fps_den ?? 1 },
+    project_revision: 0,
+  };
+  const seqFps = { num: seq.fps.num, den: seq.fps.den };
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // 内部播放控制：用 setInterval 推进 playheadFrame，无论有没有 video 元素
-  const [playing, setPlaying] = useState(false);
-  const playStartRef = useRef<{ startTime: number; startHead: number } | null>(null);
+  // FrameClock: single playback-clock abstraction. We re-create it
+  // when durationHint changes (timeline bounds) so the endFrame
+  // clamp is correct. The clock is the authoritative TimelineFrame
+  // source — see currentFrame(c, performance.now()).
+  const clockRef = useRef<FrameClock | null>(null);
+  if (clockRef.current === null) {
+    clockRef.current = createFrameClock({
+      startFrame: playheadFrame,
+      fps: seqFps,
+      endFrame: Math.round(durationHint * seqFps.num / seqFps.den),
+    });
+  }
 
+  // [playing] is a UI state mirror; the FrameClock's `playing` is the
+  // source of truth. We sync from clock to UI on every render via
+  // a useEffect-free read (the render reads clockRef.current.playing).
+  const [_, forceRender] = useState(0);
+  const playing = clockRef.current.playing;
+
+  // RAF render loop. Computes the integer TimelineFrame from the
+  // FrameClock (pure function of performance.now()), pushes it via
+  // onPlayhead, and re-renders. The clock itself never accumulates
+  // from RAF — RAF is purely a render trigger.
   useEffect(() => {
-    if (!playing) return;
-    playStartRef.current = { startTime: performance.now(), startHead: playheadFrame };
-    const timer = setInterval(() => {
-      const s = playStartRef.current;
-      if (!s) return;
-      const elapsed = (performance.now() - s.startTime) / 1000;
-      const newHead = s.startHead + elapsed;
-      if (newHead >= durationHint) {
-        onPlayhead(durationHint);
-        setPlaying(false);
-        clearInterval(timer);
+    let rafId = 0;
+    const tick = () => {
+      const c = clockRef.current;
+      if (c && c.playing) {
+        const f = frameClockCurrentFrame(c);
+        onPlayhead(f);
+        // End-of-timeline: stop the clock if we've hit the end.
+        if (f >= c.endFrame) {
+          frameClockPause(c);
+        }
+        forceRender((n) => n + 1);
+        rafId = requestAnimationFrame(tick);
       } else {
-        onPlayhead(newHead);
+        forceRender((n) => n + 1);
       }
-    }, 33);  // 30 fps
-    return () => clearInterval(timer);
-  }, [playing]);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [onPlayhead]);
 
-  // 同步 video 元素：play/pause 跟 playing 状态走
+  // When the user drags the playhead externally (e.g. clicking on
+  // the timeline ruler), the prop playheadFrame changes. We sync
+  // the clock by seeking to that frame, preserving play state.
+  useEffect(() => {
+    const c = clockRef.current;
+    if (!c) return;
+    const clamped = frameClockSeek(c, playheadFrame);
+    if (clamped !== playheadFrame) onPlayhead(clamped);
+  }, [playheadFrame, onPlayhead]);
+
+  // Sync HTML media element play/pause with the clock.
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (playing) v.play().catch(() => undefined);
+    if (clockRef.current?.playing) v.play().catch(() => undefined);
     else v.pause();
   }, [playing]);
 
@@ -73,55 +142,102 @@ export default function PreviewPlayer({
     if (renderedUrl) setMode("rendered");
   }, [renderedUrl]);
 
+  // Find the clip covering the current playheadFrame (TimelineFrame
+  // integer). The find is over the project's clip list — no time
+  // math beyond the half-open interval check.
   const vtrack = project.timeline.tracks.find((t) => t.kind === "video");
   const clips = (vtrack?.clip_ids ?? [])
     .map((id) => project.clips[id])
     .filter(Boolean)
     .sort((a, b) => a.timeline_range.start - b.timeline_range.start);
   const clip = clips.find(
-    (c) => playheadFrame >= c.timeline_range.start && playheadFrame < c.timeline_range.end
+    (c) => playheadFrame >= c.timeline_range.start && playheadFrame < c.timeline_range.end,
   ) ?? null;
   const asset = clip
     ? project.assets.find((a) => a.asset_id === clip.asset_id)
     : null;
 
-  const srcTime = clip
-    ? clip.source_range.start + (playheadFrame - clip.timeline_range.start) * clip.speed
-    : 0;
+  // SourceFrame integer (per-asset source timebase) for the current
+  // TimelineFrame. RESOLVED VIA CORE'S TimeMap (cached) — we never
+  // compute this locally. The timemap-cache returns Core's answer;
+  // we mirror it into React state for the sync effect below.
+  const [sourceFrame, setSourceFrame] = useState<number | null>(null);
+  const [timeMapEntry, setTimeMapEntry] = useState<TimeMapCacheEntry | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!clip) {
+      setSourceFrame(null);
+      setTimeMapEntry(null);
+      return;
+    }
+    const assetFps = asset?.source_fps
+      ? { num: asset.source_fps.num, den: asset.source_fps.den }
+      : undefined;
+    const revision = seq.project_revision ?? 0;
+    (async () => {
+      try {
+        const entry = await fetchTimeMap(clip.clip_id, revision, seqFps, assetFps);
+        if (cancelled) return;
+        setTimeMapEntry(entry);
+        const sf = await sourceFromTimeline(entry, playheadFrame);
+        if (cancelled) return;
+        setSourceFrame(sf);
+      } catch (e) {
+        // If Core rejects (422 — no source fps), we leave sourceFrame
+        // null; the video element is hidden / shows a placeholder.
+        if (!cancelled) {
+          setSourceFrame(null);
+          setTimeMapEntry(null);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [clip?.clip_id, playheadFrame, asset?.source_fps?.num, asset?.source_fps?.den,
+      seqFps.num, seqFps.den]);
+
+  // Sync HTML media currentTime from Core's SourceFrame + asset
+  // source_fps. NEVER read v.currentTime as state.
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (mode === "instant" && clip) {
-      if (Math.abs(v.currentTime - srcTime) > 0.4) v.currentTime = srcTime;
+    if (mode === "instant" && clip && sourceFrame !== null && timeMapEntry) {
+      // SourceFrame → media seconds via the asset's source timebase
+      // (NOT the sequence FPS — per the closure invariant).
+      const mediaSeconds = sourceFrameToMediaSeconds(sourceFrame, timeMapEntry.sourceFps);
+      if (Math.abs(v.currentTime - mediaSeconds) > 0.4) {
+        v.currentTime = mediaSeconds;
+      }
       v.playbackRate = clip.speed;
       v.volume = Math.min(1, clip.volume);
     } else if (mode === "rendered") {
-      if (Math.abs(v.currentTime - playheadFrame) > 0.4) v.currentTime = playheadFrame;
+      // Rendered mode: the timeline time = media time (renderer
+      // output is at sequence fps). This is the ONE place where
+      // sequence FPS and media FPS align — explicitly because the
+      // rendered file's frame rate matches the project.
+      if (Math.abs(v.currentTime - playheadFrame) > 0.4) {
+        v.currentTime = playheadFrame;
+      }
       v.playbackRate = 1;
       v.volume = 1;
     }
-  }, [playheadFrame, mode, clip?.clip_id]);
+  }, [sourceFrame, timeMapEntry, mode, clip?.clip_id, playheadFrame]);
 
+  // No-op: video.timeupdate is intentionally NOT used to derive
+  // playheadFrame. We keep an `onTimeUpdate` hook only for the
+  // rendered mode "hit the end of the rendered file" detection
+  // (orthogonal to TimelineFrame state).
   const onTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const v = e.currentTarget;
-    if (mode === "rendered") {
-      onPlayhead(v.currentTime);
-      return;
-    }
-    if (!clip) return;
-    const t = clip.timeline_range.start + (v.currentTime - clip.source_range.start) / clip.speed;
-    if (v.currentTime >= clip.source_range.end - 0.05) {
-      const next = clips.find((c) => c.timeline_range.start >= clip.timeline_range.end - 0.01
-        && c.clip_id !== clip.clip_id);
-      if (next) {
-        onPlayhead(next.timeline_range.start);
-      } else {
-        v.pause();
-        onPlayhead(clip.timeline_range.end);
+    if (mode !== "rendered") return;
+    // Detect end-of-file in rendered mode and stop the clock if
+    // we haven't already.
+    if (v.duration > 0 && v.currentTime >= v.duration - 0.05) {
+      const c = clockRef.current;
+      if (c && c.playing) {
+        frameClockPause(c);
+        forceRender((n) => n + 1);
       }
-    } else {
-      onPlayhead(Math.max(clip.timeline_range.start, t));
     }
   };
 
@@ -134,13 +250,46 @@ export default function PreviewPlayer({
     : [];
 
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const audioSourceFrames = useRef<Map<string, number>>(new Map());
+
+  // Audio: same pattern as video — Core's TimeMap resolves the
+  // SourceFrame; we mirror it to media seconds using the asset's
+  // source timebase.
+  useEffect(() => {
+    let cancelled = false;
+    const revision = seq.project_revision ?? 0;
+    (async () => {
+      for (const c of audioNow) {
+        const a = project.assets.find((x) => x.asset_id === c.asset_id);
+        const assetFps = a?.source_fps
+          ? { num: a.source_fps.num, den: a.source_fps.den } : undefined;
+        try {
+          const entry = await fetchTimeMap(c.clip_id, revision, seqFps, assetFps);
+          const sf = await sourceFromTimeline(entry, playheadFrame);
+          if (!cancelled) audioSourceFrames.current.set(c.clip_id, sf);
+        } catch {
+          // Audio clip without source fps; skip.
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [audioNow.map((c) => c.clip_id).join(","), playheadFrame,
+      seqFps.num, seqFps.den]);
 
   useEffect(() => {
     for (const c of audioNow) {
       const el = audioRefs.current.get(c.clip_id);
       if (!el) continue;
-      const t = c.source_range.start + (playheadFrame - c.timeline_range.start) * c.speed;
-      if (Math.abs(el.currentTime - t) > 0.4) el.currentTime = t;
+      const sf = audioSourceFrames.current.get(c.clip_id);
+      if (sf === undefined) continue;
+      const assetFps = project.assets.find((a) => a.asset_id === c.asset_id)?.source_fps;
+      const srcFps = assetFps
+        ? { num: assetFps.num, den: assetFps.den }
+        : seqFps;
+      const mediaSeconds = sourceFrameToMediaSeconds(sf, srcFps);
+      if (Math.abs(el.currentTime - mediaSeconds) > 0.4) {
+        el.currentTime = mediaSeconds;
+      }
       el.volume = Math.min(1, c.volume);
       el.playbackRate = c.speed;
       if (playing && el.paused) el.play().catch(() => undefined);
@@ -148,7 +297,6 @@ export default function PreviewPlayer({
     }
   }, [playheadFrame, playing, audioNow.map((c) => c.clip_id).join(",")]);
 
-  // 视窗比例：外层 stage 全填，内层 frame 用 aspect-ratio
   const stageStyle: React.CSSProperties = {
     width: "100%",
     height: "100%",
@@ -169,7 +317,6 @@ export default function PreviewPlayer({
     alignItems: "center",
     justifyContent: "center",
   };
-
   const videoStyle: React.CSSProperties = {
     width: "100%",
     height: "100%",
@@ -202,7 +349,12 @@ export default function PreviewPlayer({
       <div className="preview-toolbar">
         <button
           className="play-btn"
-          onClick={() => setPlaying((p) => !p)}
+          onClick={() => {
+            const c = clockRef.current;
+            if (!c) return;
+            frameClockTogglePlay(c);
+            forceRender((n) => n + 1);
+          }}
           title="播放/暂停（空格键）"
         >
           {playing ? "⏸" : "▶"}
@@ -229,7 +381,7 @@ export default function PreviewPlayer({
           {mode === "rendered" && renderedUrl ? (
             <video key={renderedUrl} ref={videoRef} src={renderedUrl}
               controls onTimeUpdate={onTimeUpdate} style={videoStyle} />
-          ) : clip && asset ? (
+          ) : clip && asset && sourceFrame !== null && timeMapEntry ? (
             asset.type === "image" ? (
               <img style={videoStyle} src={`/assets/${asset.asset_id}/file`} alt="" />
             ) : (
@@ -237,13 +389,28 @@ export default function PreviewPlayer({
                 src={`/assets/${asset.asset_id}/file`}
                 controls autoPlay muted
                 onTimeUpdate={onTimeUpdate}
-                onPlay={() => setPlaying(true)}
-                onPause={() => setPlaying(false)}
+                onPlay={() => {
+                  const c = clockRef.current;
+                  if (c && !c.playing) {
+                    frameClockPlay(c);
+                    forceRender((n) => n + 1);
+                  }
+                }}
+                onPause={() => {
+                  const c = clockRef.current;
+                  if (c && c.playing) {
+                    frameClockPause(c);
+                    forceRender((n) => n + 1);
+                  }
+                }}
                 onLoadedMetadata={(e) => {
-                  e.currentTarget.currentTime = srcTime;
+                  const sf = sourceFrame;
+                  const entry = timeMapEntry;
+                  if (sf === null || !entry) return;
+                  e.currentTarget.currentTime =
+                    sourceFrameToMediaSeconds(sf, entry.sourceFps);
                   e.currentTarget.playbackRate = clip.speed;
                   e.currentTarget.volume = Math.min(1, clip.volume);
-                  // 确保自动播放（muted 是浏览器要求）
                   e.currentTarget.play().catch(() => undefined);
                 }}
                 style={videoStyle} />
@@ -252,12 +419,11 @@ export default function PreviewPlayer({
             <div className="placeholder">
               {clips.length === 0
                 ? "📭 时间轴是空的——从素材库拖到 V1 轨"
-                : `⏰ 播放头在间隙里（${playheadFrame.toFixed(1)}s）`}
+                : `⏰ 播放头在间隙里（${playheadFrame} frames）`}
             </div>
           )}
         </div>
       </div>
-      {/* 即时模式音频轨 */}
       {audioNow.map((c) => (
         <audio key={c.clip_id}
           ref={(el) => {

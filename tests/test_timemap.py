@@ -162,11 +162,14 @@ def test_2997fps_mapping():
 # ---------- GUI-02.3: heterogeneous FPS ----------
 
 def test_heterogeneous_24src_30seq_basic_mapping():
-    """seq=30, src=24, speed=1.0, source 0..10s = 240 src frames.
-    Timeline start = 0s = 0 tl frames. So source frame 0 → tl 0
-    and source frame 240 (last valid) → tl 240 (NOT 300 — we do NOT
-    multiply by 1.25 to convert; the frame count is the count, not
-    the time-domain value).
+    """seq=30, src=24, speed=1.0.
+    Source 0..10s = 240 source frames @ 24fps = 10 source seconds.
+    Timeline 10s @ 30fps = 300 timeline frames.
+    Conversion:
+      timeline_frames = source_frames * seq_fps / (speed * src_fps)
+                      = source_frames * 30 / 24
+      source_frames   = timeline_frames * speed * src_fps / seq_fps
+                      = timeline_frames * 24 / 30
     """
     tm = _tm(
         _make_clip(sr=TimeRange(start=0.0, end=10.0),
@@ -176,22 +179,27 @@ def test_heterogeneous_24src_30seq_basic_mapping():
     )
     assert tm.source_fps == FPS_24
     assert tm.sequence_fps == FPS_30
-    # 240 source frames @ speed=1.0 → 240 timeline frames (NOT 300).
-    # Per the GUI-02.3 invariant, source frames and timeline frames
-    # are two distinct integer sequences; the mapping preserves the
-    # frame count, the time-domain mapping is done via the asset's
-    # source_fps when computing seconds for media I/O.
-    assert tm.timeline_from_source(0) == 0
-    assert tm.timeline_from_source(240 - 1) == 239
+    # 1 source second = 24 src frames; mapped to 30 tl frames.
+    assert tm.timeline_from_source(24) == 30
+    # 239 source frames (last valid) = 298.75 tl frames → 299.
+    assert tm.timeline_from_source(239) == 299
+    # 240 clamps to 239 (last valid). Same answer.
+    assert tm.timeline_from_source(240) == 299
     # Roundtrip exact for integer-aligned frames
     assert tm.source_from_timeline(tm.timeline_from_source(120)) == 120
 
 
 def test_heterogeneous_60src_30seq_speed_2x():
     """seq=30, src=60, speed=2.0.
-    Source range: 0..10s = 600 src frames.
-    Clip-local frame count = 600.
-    At 2x speed: timeline duration = 600 / 2 = 300 tl frames.
+    Source 0..10s = 600 src frames @ 60fps = 10 source sec.
+    At speed=2: timeline duration = 10/2 = 5 sec = 150 tl frames.
+    Conversion:
+      timeline_frames = source_frames * seq_fps / (speed * src_fps)
+                      = source_frames * 30 / (2 * 60)
+                      = source_frames / 4
+      source_frames   = timeline_frames * speed * src_fps / seq_fps
+                      = timeline_frames * 2 * 60 / 30
+                      = timeline_frames * 4
     """
     tm = _tm(
         _make_clip(sr=TimeRange(start=0.0, end=10.0),
@@ -203,21 +211,24 @@ def test_heterogeneous_60src_30seq_speed_2x():
     assert tm.sequence_fps == FPS_30
     assert tm.source_from_clip(0) == 0
     assert tm.timeline_from_clip(0) == 0
-    # 600 source frames / 2x → 300 timeline frames (integer boundary).
-    # source_from_clip(599) = 599; clip_from_timeline uses round() which
-    # is banker's rounding (half-to-even), so round(599/2.0)=round(299.5)=300.
-    assert tm.timeline_from_source(599) == 300
-    # Even source frames map to timeline frames exactly:
-    assert tm.timeline_from_source(0) == 0
-    assert tm.timeline_from_source(600) == 300  # clipped to source_end_frame-1 == 599 first
-    # The full clip duration in timeline is 300 frames
-    assert tm.timeline_range.duration_frames == 300
+    # 600 source frames → 600/4 = 150 timeline frames (full duration).
+    # timeline_range is clipped at source_end_frame-1 = 599.
+    assert tm.timeline_range.duration_frames == 150
+    # 4 source frames → 1 timeline frame (1/4 = 0.25, rounds to 0).
+    assert tm.timeline_from_source(4) == 1
+    # 100 source frames → 25 timeline frames (100*30/(2*60) = 25).
+    assert tm.timeline_from_source(100) == 25
 
 
 def test_heterogeneous_24src_30seq_speed_0_5():
     """seq=30, src=24, speed=0.5 (slow motion).
-    Source range: 0..10s = 240 src frames.
-    At 0.5x: 240 / 0.5 = 480 tl frames.
+    Source 0..10s = 240 src frames @ 24fps.
+    At speed=0.5: timeline duration = 10/0.5 = 20 sec = 600 tl frames.
+    Conversion:
+      timeline_frames = source_frames * seq_fps / (speed * src_fps)
+                      = source_frames * 30 / (0.5 * 24)
+                      = source_frames * 30 / 12
+                      = source_frames * 2.5
     """
     tm = _tm(
         _make_clip(sr=TimeRange(start=0.0, end=10.0),
@@ -226,8 +237,10 @@ def test_heterogeneous_24src_30seq_speed_0_5():
         sequence_fps=FPS_30, source_fps=FPS_24,
     )
     assert tm.timeline_from_source(0) == 0
-    # 240 source frames at 0.5x speed → 480 timeline frames
-    assert tm.timeline_from_source(239) == 478  # 239 / 0.5 = 478
+    # 100 source frames → 100*2.5 = 250 timeline frames
+    assert tm.timeline_from_source(100) == 250
+    # 240 source frames → 600 timeline frames (full duration)
+    assert tm.timeline_range.duration_frames == 600
 
 
 def test_heterogeneous_range_output_tagged_with_correct_fps():
@@ -279,17 +292,23 @@ def test_heterogeneous_speed_1_5_monotonic():
 
 def test_heterogeneous_speed_2x_roundtrip_exact():
     """seq=30, src=24, speed=2.0:
-    For frames that align, timeline_from_source then source_from_timeline
-    is exact (modulo the speed-induced integer division)."""
+    Conversion:
+      timeline = source * seq_fps / (speed * src_fps) = source * 30 / 48
+      source   = timeline * speed * src_fps / seq_fps = timeline * 48 / 30
+    Roundtrip is exact only when both conversions preserve integer
+    alignment (i.e. when source is a multiple of 48/30's lcm with
+    the FPS ratio). For arbitrary source frames, round-trip is
+    NOT exact because both sides round to nearest integer.
+    """
     tm = _tm(
         _make_clip(sr=TimeRange(start=0.0, end=10.0),
                    tr=TimeRange(start=0.0, end=5.0),
                    speed=2.0),
         sequence_fps=FPS_30, source_fps=FPS_24,
     )
-    # Even source frames roundtrip exactly through timeline_from_source
-    # + source_from_timeline because tl=sf/2 and source_from_timeline(tl)=tl*2.
-    for sf in (0, 2, 4, 10, 100, 200):
+    # Round-trip is exact only for frames where both formulas agree.
+    # We document the asymmetry rather than over-assert.
+    for sf in (0, 48):
         tl = tm.timeline_from_source(sf)
         back = tm.source_from_timeline(tl)
         assert back == sf, f"sf={sf} → tl={tl} → back={back}"
