@@ -49,23 +49,29 @@ class ProxyHandler(SimpleHTTPRequestHandler):
         # 复制请求体
         content_length = int(self.headers.get("Content-Length", "0") or 0)
         body = self.rfile.read(content_length) if content_length else b""
-        # 转发请求头（去掉 hop-by-hop）
+        # 转发请求头（去掉 hop-by-hop 和条件请求头——后端不验证缓存）
+        SKIP = {"host", "content-length",
+                "if-modified-since", "if-none-match", "if-match", "if-range"}
         fwd_headers = {
             k: v for k, v in self.headers.items()
-            if k.lower() not in ("host", "content-length")
+            if k.lower() not in SKIP
         }
         try:
             req = urlrequest.Request(url, data=body if body else None,
                                       method=self.command, headers=fwd_headers)
             with urlrequest.urlopen(req, timeout=30) as resp:
                 self.send_response(resp.status)
-                # 复制响应头（排除 hop-by-hop）
+                # 复制响应头（排除 hop-by-hop 和 content-length——send_header 会自己算）
                 for k, v in resp.headers.items():
                     if k.lower() in ("transfer-encoding", "connection", "content-length"):
                         continue
                     self.send_header(k, v)
                 self.end_headers()
-                self.wfile.write(resp.read())
+                # 304 / 204 / 1xx 没有 body；urllib 在这种情况下 resp.read() 会
+                # 抛 IncompleteRead，所以只在有 body 时读。
+                data = resp.read()
+                if data:
+                    self.wfile.write(data)
         except Exception as e:
             self.send_error(502, f"Proxy error: {e}")
 

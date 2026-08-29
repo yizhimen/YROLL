@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, Clip, Project } from "./api";
+import { sessionStore } from "./session";
 import Timeline from "./components/Timeline";
 import ChatPanel from "./components/ChatPanel";
 import ClipWorkspace from "./components/ClipWorkspace";
@@ -120,6 +121,16 @@ export default function App() {
 
   useEffect(() => {
     refresh();
+  }, []);
+
+  // GUI-01: session lifecycle. initLocal() restores our sessionId from
+  // localStorage; startPolling() reconciles owner/revision/conflict against
+  // /ui/status and heartbeats the lease. api.mutate() reads the same store,
+  // so every write carries the Gate.
+  useEffect(() => {
+    sessionStore.initLocal();
+    sessionStore.startPolling();
+    return () => sessionStore.stopPolling();
   }, []);
 
   // 时间轴 seek → 预览跟随（PreviewPlayer 按模式映射源时间/成片时间）
@@ -541,9 +552,7 @@ export default function App() {
         }}
         onGenerateSubtitles={() =>
           run(async () => {
-            const r = await fetch("/subtitles/generate?why=GUI 自动字幕", { method: "POST" });
-            if (!r.ok) throw new Error(await r.text());
-            const op = await r.json();
+            const op = await api.generateSubtitles();
             setStatus({ ok: true, text: `已生成 ${op.after?.count ?? 0} 条字幕（重渲染后可见）` });
           }, "自动字幕完成")}
         onRegionMode={() => { setRegionMode((m) => !m); setRegionDraft(null); }}

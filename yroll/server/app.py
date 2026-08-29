@@ -235,6 +235,18 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
     _STATE["default"] = st
     app = FastAPI(title="YROLL Server", version="0.1.0")
     app.add_middleware(_MutationGateMiddleware)
+    # GUI-01 smoke test loads the built bundle from disk (file://) and
+    # calls the API at 127.0.0.1:8765 — different origins. Permissive CORS
+    # is fine: the server only binds to localhost in this dev workflow.
+    try:
+        from fastapi.middleware.cors import CORSMiddleware
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"], allow_methods=["*"],
+            allow_headers=["*"], allow_credentials=False,
+        )
+    except ImportError:  # pragma: no cover
+        pass
 
     @app.post("/project/open")
     def open_project(path: str):

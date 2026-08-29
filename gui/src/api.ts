@@ -1,6 +1,6 @@
 // YROLL Manifest v0.1 对应的 TS 类型（与 yroll/core/manifest.py 对齐）
 
-import { sessionStore, refreshSessionFromServer, currentGate } from "./session";
+import { sessionStore, currentGate, GateError } from "./session";
 
 export interface TimeRange { start: number; end: number }
 
@@ -87,23 +87,82 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 // --- Mutation Gate envelope (YROLL-Editor-Foundation-v0.2.md §二) ---
 //
-// Every mutation MUST go through this envelope so sessionId +
-// baseRevision are injected automatically. Components no longer
-// compose URLs that include those — the envelope owns it.
+// Every write goes through mutate(). It injects sessionId + baseRevision
+// so a new mutation can never be added without the Gate — that was the
+// whole point of §二.2 ("增加一个新的 mutation，忘了传 Gate 参数").
 //
-// Behavior:
-//   - 200/2xx: bump local revision from server's `currentRevision`
-//     (or by fetching /operations if response doesn't carry it).
-//   - 403 (no sessionId): surface to UI as "lease required".
-//   - 409 (revision conflict): mark session conflict for top bar.
-//   - other 4xx: rethrow as before.
+// Mirrors _MutationGateMiddleware in yroll/server/app.py:
+//   403 "sessionId required for mutations"   -> no_session
+//   400 "baseRevision query param required"  -> no_revision
+//   403 "lease rejected: ..."                -> lease_rejected
+//   409 "revision conflict: ..."             -> revision_conflict
+// On success the local revision is re-read from /ui/status, because a
+// single call can log more than one operation (ripple delete, split).
 
-interface MutationResult<R> {
-  ok: boolean;
-  status: number;
-  data?: R;
-  gateError?: "no_session" | "no_revision" | "revision_conflict"
-              | "lease_rejected" | null;
+/** A Mutation Gate rejection, carrying the machine-readable reason so the
+ *  top bar can offer the right recovery ("获取编辑权" vs "刷新"). */
+export class GateRejection extends Error {
+  readonly kind: Exclude<GateError, null>;
+  readonly status: number;
+  constructor(kind: Exclude<GateError, null>, status: number, detail: string) {
+    super(detail);
+    this.name = "GateRejection";
+    this.kind = kind;
+    this.status = status;
+  }
+}
+
+function classifyGate(status: number, detail: string): Exclude<GateError, null> | null {
+  if (status === 409 || detail.includes("revision mismatch")
+      || detail.includes("revision conflict")) return "revision_conflict";
+  if (status === 403 && detail.includes("sessionId required")) return "no_session";
+  if (status === 403 && detail.includes("lease rejected")) return "lease_rejected";
+  if (status === 400 && detail.includes("baseRevision")) return "no_revision";
+  return null;
+}
+
+/** Re-read the server's current revision after a successful write. */
+async function syncRevision(): Promise<void> {
+  try {
+    const r = await fetch("/ui/status");
+    if (!r.ok) return;
+    const st = await r.json();
+    if (typeof st?.base_revision === "number") {
+      sessionStore.bumpRevision(st.base_revision);
+    }
+  } catch {
+    /* the mutation already landed; a stale local revision self-heals on
+       the next poll, and the worst case is one retryable 409 */
+  }
+}
+
+/** Shared core: gate params in, gate errors out, revision resynced. */
+async function gated<R>(path: string, init: RequestInit): Promise<R> {
+  const { sessionId, baseRevision } = currentGate();
+  const url = new URL(path, window.location.origin);
+  if (sessionId) url.searchParams.set("sessionId", sessionId);
+  url.searchParams.set("baseRevision", String(baseRevision));
+
+  let r: Response;
+  try {
+    r = await fetch(url.toString().slice(url.origin.length), init);
+  } catch (e: any) {
+    throw new Error(`network: ${e?.message ?? e}`);
+  }
+
+  if (!r.ok) {
+    const detail = await r.text();
+    const kind = classifyGate(r.status, detail);
+    if (kind) {
+      sessionStore.noteGateError(kind, detail);
+      throw new GateRejection(kind, r.status, detail);
+    }
+    throw new Error(`${r.status}: ${detail}`);
+  }
+
+  await syncRevision();
+  const text = await r.text();
+  return (text ? JSON.parse(text) : null) as R;
 }
 
 async function mutate<R>(
@@ -111,99 +170,61 @@ async function mutate<R>(
   path: string,
   body?: unknown,
 ): Promise<R> {
-  const { sessionId, baseRevision } = currentGate();
-  const url = new URL(path, window.location.origin);
-  if (sessionId) url.searchParams.set("sessionId", sessionId);
-  url.searchParams.set("baseRevision", String(baseRevision));
-  let init: RequestInit = {
+  return gated<R>(path, {
     method,
     headers: { "Content-Type": "application/json" },
     body: body !== undefined ? JSON.stringify(body) : undefined,
-  };
-  let r: Response;
-  try {
-    r = await fetch(url.toString(), init);
-  } catch (e: any) {
-    throw new Error(`network: ${e?.message ?? e}`);
-  }
-  if (!r.ok) {
-    // Translate gate errors into structured info for UI
-    if (r.status === 403) {
-      const text = await r.text();
-      if (text.includes("sessionId required")) {
-        refreshSessionFromServer(null);
-        throw new Error("gate: session required (call /lease/acquire first)");
-      }
-      if (text.includes("lease rejected")) {
-        throw new Error(`gate: ${text}`);
-      }
-    }
-    if (r.status === 400) {
-      const text = await r.text();
-      if (text.includes("baseRevision query param required")) {
-        throw new Error("gate: baseRevision required");
-      }
-    }
-    if (r.status === 409) {
-      refreshSessionFromServer(null);
-      throw new Error(`gate: revision conflict (${await r.text()})`);
-    }
-    throw new Error(`${r.status}: ${await r.text()}`);
-  }
-  // Best-effort revision refresh: read /operations to count.
-  try {
-    const ops = await fetch("/operations").then((rr) => rr.ok ? rr.json() : null);
-    if (Array.isArray(ops)) refreshSessionFromServer(ops.length);
-  } catch { /* ignore */ }
-  return r.json() as Promise<R>;
+  });
 }
+
 
 export const api = {
   project: () => req<Project>("/project"),
   operations: () => req<Operation[]>("/operations"),
   trim: (clipId: string, newSourceStart?: number, newSourceEnd?: number, why = "") =>
-    req(`/clips/${clipId}/trim`, {
-      method: "POST",
-      body: JSON.stringify({ new_source_start: newSourceStart ?? null, new_source_end: newSourceEnd ?? null, why }),
+    mutate(`POST`, `/clips/${clipId}/trim`, {
+      new_source_start: newSourceStart ?? null, new_source_end: newSourceEnd ?? null, why,
     }),
   split: (clipId: string, atSourceTime: number, why = "") =>
-    req(`/clips/${clipId}/split`, { method: "POST", body: JSON.stringify({ at_source_time: atSourceTime, why }) }),
+    mutate("POST", `/clips/${clipId}/split`, { at_source_time: atSourceTime, why }),
   move: (clipId: string, newTimelineStart: number, why = "", trackId?: string) =>
-    req(`/clips/${clipId}/move`, { method: "POST", body: JSON.stringify({ new_timeline_start: newTimelineStart, new_track_id: trackId ?? null, why }) }),
+    mutate("POST", `/clips/${clipId}/move`,
+      { new_timeline_start: newTimelineStart, new_track_id: trackId ?? null, why }),
   speed: (clipId: string, speed: number, why = "") =>
-    req(`/clips/${clipId}/speed`, { method: "POST", body: JSON.stringify({ speed, why }) }),
+    mutate("POST", `/clips/${clipId}/speed`, { speed, why }),
   volume: (clipId: string, volume: number, why = "") =>
-    req(`/clips/${clipId}/volume`, { method: "POST", body: JSON.stringify({ volume, why }) }),
+    mutate("POST", `/clips/${clipId}/volume`, { volume, why }),
   removeClip: (clipId: string, why = "", ripple = false) =>
-    req(`/clips/${clipId}?why=${encodeURIComponent(why)}${ripple ? "&ripple=true" : ""}`, { method: "DELETE" }),
-  commit: (note: string) => req(`/versions?note=${encodeURIComponent(note)}`, { method: "POST" }),
+    mutate("DELETE",
+      `/clips/${clipId}?why=${encodeURIComponent(why)}${ripple ? "&ripple=true" : ""}`),
+  commit: (note: string) => mutate("POST", `/versions?note=${encodeURIComponent(note)}`),
   render: (burnSubtitles = false, width = 1080, name = "preview.mp4") =>
-    req<{ preview: string }>(
-      `/render?burn_subtitles=${burnSubtitles}&width=${width}&name=${encodeURIComponent(name)}`,
-      { method: "POST" }),
+    mutate<{ preview: string }>("POST",
+      `/render?burn_subtitles=${burnSubtitles}&width=${width}&name=${encodeURIComponent(name)}`),
+  // Chat is the *other* mutation path (audit §6.5). The middleware reads the
+  // gate from the query string; harness.runtime.Task re-checks it from the
+  // body, so both must carry it.
   chat: (message: string, selectedClip: string | null, playhead: number) =>
-    req<{
+    mutate<{
       reply: string;
       applied: string[];
       errors: Array<{ error: string }>;
       problems_reported: Array<{ problem: Problem; solutions: Solution[] }>;
-    }>("/chat", {
-      method: "POST",
-      body: JSON.stringify({ message, selected_clip: selectedClip, playhead }),
+    }>("POST", "/chat", {
+      message, selected_clip: selectedClip, playhead,
+      sessionId: currentGate().sessionId,
+      baseRevision: currentGate().baseRevision,
     }),
   reportProblem: (description: string, category: string, targetClip: string | null,
                   timeRange?: TimeRange) =>
-    req<{ problem: Problem; solutions: Solution[] }>("/problems", {
-      method: "POST",
-      body: JSON.stringify({ description, category, target_clip: targetClip, time_range: timeRange ?? null }),
+    mutate<{ problem: Problem; solutions: Solution[] }>("POST", "/problems", {
+      description, category, target_clip: targetClip, time_range: timeRange ?? null,
     }),
   problems: () => req<{ problems: Problem[]; solutions: Solution[] }>("/problems"),
   executeSolution: (solutionId: string) =>
-    req<{ status: string; operation_id?: string; message?: string }>("/solutions/execute", {
-      method: "POST",
-      body: JSON.stringify({ solution_id: solutionId }),
-    }),
-  inferLinks: () => req<{ inferred: number; total: number }>("/links/infer", { method: "POST" }),
+    mutate<{ status: string; operation_id?: string; message?: string }>(
+      "POST", "/solutions/execute", { solution_id: solutionId }),
+  inferLinks: () => mutate<{ inferred: number; total: number }>("POST", "/links/infer"),
   impact: (clipId: string, op = "remove") =>
     req<{
       op: string;
@@ -212,80 +233,76 @@ export const api = {
       untouched: Array<{ clip_id: string; kind: string; text: string }>;
     }>(`/clips/${clipId}/impact?op=${op}`),
   delogo: (clipId: string, region: { x: number; y: number; w: number; h: number }, why = "") =>
-    req(`/clips/${clipId}/delogo?why=${encodeURIComponent(why)}`, {
-      method: "POST",
-      body: JSON.stringify(region),
-    }),
+    mutate("POST", `/clips/${clipId}/delogo?why=${encodeURIComponent(why)}`, region),
   denoise: (clipId: string, strength = 12, why = "") =>
-    req(`/clips/${clipId}/denoise?strength=${strength}&why=${encodeURIComponent(why)}`, { method: "POST" }),
+    mutate("POST", `/clips/${clipId}/denoise?strength=${strength}&why=${encodeURIComponent(why)}`),
   loudness: (clipId: string) =>
-    req<{ after: { mean_db: number; max_db: number } }>(`/clips/${clipId}/loudness`, { method: "POST" }),
+    mutate<{ after: { mean_db: number; max_db: number } }>(
+      "POST", `/clips/${clipId}/loudness`),
   silenceRemove: (clipId: string, why = "") =>
-    req(`/clips/${clipId}/silence-remove?why=${encodeURIComponent(why)}`, { method: "POST" }),
-  importAsset: async (file: File) => {
+    mutate("POST", `/clips/${clipId}/silence-remove?why=${encodeURIComponent(why)}`),
+  // Multipart: same gate, but the browser must set its own Content-Type
+  // boundary, so this goes through gated() rather than mutate().
+  importAsset: (file: File) => {
     const fd = new FormData();
     fd.append("file", file);
-    const r = await fetch("/assets/import", { method: "POST", body: fd });
-    if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
-    return r.json() as Promise<{ asset: Asset; clip: Clip | null; deduped: boolean }>;
+    return gated<{ asset: Asset; clip: Clip | null; deduped: boolean }>(
+      "/assets/import", { method: "POST", body: fd });
   },
   addClip: (assetId: string, sourceStart: number, sourceEnd: number,
             timelineStart: number, trackId: string, why = "") =>
-    req<Clip>("/clips", {
-      method: "POST",
-      body: JSON.stringify({
-        asset_id: assetId, source_start: sourceStart, source_end: sourceEnd,
-        timeline_start: timelineStart, track_id: trackId, why,
-      }),
+    mutate<Clip>("POST", "/clips", {
+      asset_id: assetId, source_start: sourceStart, source_end: sourceEnd,
+      timeline_start: timelineStart, track_id: trackId, why,
     }),
   revert: (operationId: string, why = "") =>
-    req("/revert", { method: "POST", body: JSON.stringify({ operation_id: operationId, why }) }),
+    mutate("POST", "/revert", { operation_id: operationId, why }),
   volumeRange: (clipId: string, volume: number, start: number, end: number, why = "") =>
-    req(`/clips/${clipId}/volume-range?volume=${volume}&start=${start}&end=${end}&why=${encodeURIComponent(why)}`,
-      { method: "POST" }),
+    mutate("POST",
+      `/clips/${clipId}/volume-range?volume=${volume}&start=${start}&end=${end}&why=${encodeURIComponent(why)}`),
   removeAdjustment: (clipId: string, adjustmentId: string, why = "") =>
-    req(`/clips/${clipId}/adjustments/${adjustmentId}?why=${encodeURIComponent(why)}`,
-      { method: "DELETE" }),
+    mutate("DELETE",
+      `/clips/${clipId}/adjustments/${adjustmentId}?why=${encodeURIComponent(why)}`),
   editSubtitle: (clipId: string, text: string, why = "") =>
-    req(`/clips/${clipId}/subtitle?text=${encodeURIComponent(text)}&why=${encodeURIComponent(why)}`,
-      { method: "POST" }),
+    mutate("POST",
+      `/clips/${clipId}/subtitle?text=${encodeURIComponent(text)}&why=${encodeURIComponent(why)}`),
   setSubtitleStyle: (clipId: string, style: Record<string, unknown>, why = "") =>
-    req(`/clips/${clipId}/subtitle-style?why=${encodeURIComponent(why)}`, {
-      method: "POST", body: JSON.stringify(style),
-    }),
+    mutate("POST", `/clips/${clipId}/subtitle-style?why=${encodeURIComponent(why)}`, style),
   addSubtitle: (text: string, start: number, end: number, why = "") =>
-    req<Clip>(`/subtitles?text=${encodeURIComponent(text)}&start=${start}&end=${end}&why=${encodeURIComponent(why)}`,
-      { method: "POST" }),
+    mutate<Clip>("POST",
+      `/subtitles?text=${encodeURIComponent(text)}&start=${start}&end=${end}&why=${encodeURIComponent(why)}`),
+  generateSubtitles: (why = "GUI 自动字幕") =>
+    mutate<{ after?: { count?: number } }>("POST",
+      `/subtitles/generate?why=${encodeURIComponent(why)}`),
   addTrack: (kind: string, trackId?: string) =>
-    req<Track>(`/tracks?kind=${kind}${trackId ? `&track_id=${trackId}` : ""}`, { method: "POST" }),
+    mutate<Track>("POST", `/tracks?kind=${kind}${trackId ? `&track_id=${trackId}` : ""}`),
   setTransform: (clipId: string, transform: Record<string, number>, why = "") =>
-    req(`/clips/${clipId}/transform?why=${encodeURIComponent(why)}`, {
-      method: "POST", body: JSON.stringify(transform),
-    }),
+    mutate("POST", `/clips/${clipId}/transform?why=${encodeURIComponent(why)}`, transform),
   setFade: (clipId: string, fadeIn: number, fadeOut: number, why = "") =>
-    req(`/clips/${clipId}/fade?fade_in=${fadeIn}&fade_out=${fadeOut}&why=${encodeURIComponent(why)}`,
-      { method: "POST" }),
+    mutate("POST",
+      `/clips/${clipId}/fade?fade_in=${fadeIn}&fade_out=${fadeOut}&why=${encodeURIComponent(why)}`),
   setDissolve: (clipId: string, duration: number, kind = "fade", why = "") =>
-    req(`/clips/${clipId}/dissolve?duration=${duration}&kind=${kind}&why=${encodeURIComponent(why)}`,
-      { method: "POST" }),
+    mutate("POST",
+      `/clips/${clipId}/dissolve?duration=${duration}&kind=${kind}&why=${encodeURIComponent(why)}`),
   searchTranscripts: (q: string) =>
     req<{ results: Array<{ clip_id: string; timeline: number; text: string; track_id: string }> }>(
       `/search-transcripts?q=${encodeURIComponent(q)}`),
   setMuted: (clipId: string, muted: boolean, why = "") =>
-    req(`/clips/${clipId}/mute?muted=${muted}&why=${encodeURIComponent(why)}`, { method: "POST" }),
+    mutate("POST", `/clips/${clipId}/mute?muted=${muted}&why=${encodeURIComponent(why)}`),
   renderRange: (start: number, end: number, burnSubtitles: boolean, width: number, name: string) =>
-    req<{ preview: string }>(
-      `/render?start=${start}&end=${end}&burn_subtitles=${burnSubtitles}&width=${width}&name=${encodeURIComponent(name)}`,
-      { method: "POST" }),
+    mutate<{ preview: string }>("POST",
+      `/render?start=${start}&end=${end}&burn_subtitles=${burnSubtitles}&width=${width}&name=${encodeURIComponent(name)}`),
   renderStatus: () =>
     req<{ status: string; step: string; done: number; total: number; error: string; preview: string }>(
       "/render/status"),
   setTrackMuted: (trackId: string, muted: boolean, why = "") =>
-    req(`/tracks/${trackId}/mute?muted=${muted}&why=${encodeURIComponent(why)}`, { method: "POST" }),
+    mutate("POST", `/tracks/${trackId}/mute?muted=${muted}&why=${encodeURIComponent(why)}`),
   setTrackLocked: (trackId: string, locked: boolean, why = "") =>
-    req(`/tracks/${trackId}/lock?locked=${locked}&why=${encodeURIComponent(why)}`, { method: "POST" }),
+    mutate("POST", `/tracks/${trackId}/lock?locked=${locked}&why=${encodeURIComponent(why)}`),
   setTrackHidden: (trackId: string, hidden: boolean, why = "") =>
-    req(`/tracks/${trackId}/hide?hidden=${hidden}&why=${encodeURIComponent(why)}`, { method: "POST" }),
+    mutate("POST", `/tracks/${trackId}/hide?hidden=${hidden}&why=${encodeURIComponent(why)}`),
+  // /project/open and /project/new are Gate-exempt by design: you cannot
+  // hold a lease on a project you have not opened yet.
   openProject: (path: string) =>
     req<{ project: string; path: string }>(`/project/open?path=${encodeURIComponent(path)}`, { method: "POST" }),
   newProject: (root: string, name: string, goal = "") =>
@@ -296,22 +313,24 @@ export const api = {
     req<Array<{ version_id: string; parent: string | null; operation_ids: string[]; note: string; created_at: string }>>(
       "/versions"),
   voiceReplace: (clipId: string, text: string, why = "") =>
-    req(`/clips/${clipId}/voice-replace?text=${encodeURIComponent(text)}&why=${encodeURIComponent(why)}`,
-      { method: "POST" }),
+    mutate("POST",
+      `/clips/${clipId}/voice-replace?text=${encodeURIComponent(text)}&why=${encodeURIComponent(why)}`),
   setColor: (clipId: string, params: Record<string, number>, why = "") =>
-    req(`/clips/${clipId}/color?why=${encodeURIComponent(why)}`, { method: "POST", body: JSON.stringify(params) }),
+    mutate("POST", `/clips/${clipId}/color?why=${encodeURIComponent(why)}`, params),
   setFlip: (clipId: string, horizontal: boolean, vertical: boolean, why = "") =>
-    req(`/clips/${clipId}/flip?horizontal=${horizontal}&vertical=${vertical}&why=${encodeURIComponent(why)}`, { method: "POST" }),
+    mutate("POST",
+      `/clips/${clipId}/flip?horizontal=${horizontal}&vertical=${vertical}&why=${encodeURIComponent(why)}`),
   setOpacity: (clipId: string, opacity: number, why = "") =>
-    req(`/clips/${clipId}/opacity?opacity=${opacity}&why=${encodeURIComponent(why)}`, { method: "POST" }),
+    mutate("POST", `/clips/${clipId}/opacity?opacity=${opacity}&why=${encodeURIComponent(why)}`),
   setCrop: (clipId: string, left: number, top: number, right: number, bottom: number, why = "") =>
-    req(`/clips/${clipId}/crop?left=${left}&top=${top}&right=${right}&bottom=${bottom}&why=${encodeURIComponent(why)}`, { method: "POST" }),
+    mutate("POST",
+      `/clips/${clipId}/crop?left=${left}&top=${top}&right=${right}&bottom=${bottom}&why=${encodeURIComponent(why)}`),
   setReverse: (clipId: string, why = "") =>
-    req(`/clips/${clipId}/reverse?why=${encodeURIComponent(why)}`, { method: "POST" }),
+    mutate("POST", `/clips/${clipId}/reverse?why=${encodeURIComponent(why)}`),
   setTransform2d: (clipId: string, params: Record<string, number | boolean>, why = "") =>
-    req(`/clips/${clipId}/transform2d?why=${encodeURIComponent(why)}`, { method: "POST", body: JSON.stringify(params) }),
+    mutate("POST", `/clips/${clipId}/transform2d?why=${encodeURIComponent(why)}`, params),
   resetVisual: (clipId: string, why = "") =>
-    req(`/clips/${clipId}/reset-visual?why=${encodeURIComponent(why)}`, { method: "POST" }),
+    mutate("POST", `/clips/${clipId}/reset-visual?why=${encodeURIComponent(why)}`),
   costs: () =>
     req<{ total: number; currency: string; by_tool: Record<string, { count: number; cost: number }>; by_who: Record<string, number> }>("/costs"),
   exportPackage: (cfg: {
@@ -319,14 +338,13 @@ export const api = {
     description: string; tags: string; platform: string;
     cover_offset_sec: number;
   }) =>
-    req<{ started: boolean }>(
+    mutate<{ started: boolean }>("POST",
       `/export/package?width=${cfg.width}&burn_subtitles=${cfg.burn_subtitles}` +
       `&title=${encodeURIComponent(cfg.title)}` +
       `&description=${encodeURIComponent(cfg.description)}` +
       `&tags=${encodeURIComponent(cfg.tags)}` +
       `&platform=${encodeURIComponent(cfg.platform)}` +
-      `&cover_offset_sec=${cfg.cover_offset_sec}`,
-      { method: "POST" }),
+      `&cover_offset_sec=${cfg.cover_offset_sec}`),
   presets: () =>
     req<{
       fonts: Array<{ id: string; name: string; file: string; category: string; weight: number }>;
@@ -341,9 +359,22 @@ export const api = {
       aspect_ratios: Array<{ id: string; name: string; w: number; h: number; use: string }>;
     }>("/presets"),
   importJianying: (draftDir: string) =>
-    req<{ assets: number; clips: number; tracks: number; skipped: number }>(
-      `/import/jianying?draft_dir=${encodeURIComponent(draftDir)}`, { method: "POST" }),
-  // === Edit Lease (P0-10) ===
+    mutate<{ assets: number; clips: number; tracks: number; skipped: number }>(
+      "POST", `/import/jianying?draft_dir=${encodeURIComponent(draftDir)}`),
+  // === Session / Lease (P0-10, v0.2 §24-27) ===
+  // All Gate-exempt: /lease* and /mutation/check bypass the middleware,
+  // /ui/status is a GET.
+  uiStatus: (clientKnownRevision?: number) =>
+    req<{
+      actor: "human" | "agent" | "observe" | "free" | "conflict";
+      human_label: string; agent_label: string;
+      session_id: string | null; alive: boolean;
+      base_revision: number; client_last_known_revision: number | null;
+      conflict: boolean;
+      ai_affected: Array<{ start_frame: number; end_frame: number; reason: string }>;
+      visual_cue: { color: string; text: string };
+    }>("/ui/status" + (clientKnownRevision !== undefined
+        ? `?client_known_revision=${clientKnownRevision}` : "")),
   getLease: () =>
     req<{ heldBy: string | null; sessionId: string | null; mode: string | null;
            actor: string | null; baseRevision: number; isAlive: boolean;
@@ -357,6 +388,8 @@ export const api = {
       { method: 'POST' }),
   releaseLease: (sessionId: string) =>
     req<{ ok: boolean }>('/lease/release?sessionId=' + sessionId, { method: 'POST' }),
+  heartbeatLease: (sessionId: string) =>
+    req<{ ok: boolean }>('/lease/heartbeat?sessionId=' + sessionId, { method: 'POST' }),
   handoffLease: (fromSessionId: string, toActor: 'human' | 'agent' = 'agent',
                   toMode: 'edit' | 'propose' | 'observe' = 'edit', toLabel: string = 'Claude') =>
     req<{ ok: boolean; sessionId?: string; actor?: string; mode?: string; humanLabel?: string }>(
