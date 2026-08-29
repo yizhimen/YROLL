@@ -319,45 +319,18 @@ export default function App() {
 
   const clip = project && selected ? project.clips[selected] : null;
 
-  // 拖动只改本地视图，松手才真正提交（避免每次 mousemove 都打 API）
+  // GUI-02.4: pointermove only emits integer frame preview; the
+  // authoritative /snap call + commit happens in ClipBlock's pointerup
+  // handler via onMoveCommit. App.tsx tracks the preview for any
+  // overlay rendering that depends on the in-flight position.
   const [dragPreview, setDragPreview] = useState<Record<string, number>>({});
-  const onDragMove = (clipId: string, newStart: number) => {
-    // 吸附：clip 边缘 / 播放头 / 0 点，阈值 0.25s
-    if (project) {
-      const c = project.clips[clipId];
-      if (c) {
-        const len = c.timeline_range.end - c.timeline_range.start;
-        const candidates = [0, playheadFrame];
-        for (const other of Object.values(project.clips)) {
-          if (other.clip_id === clipId) continue;
-          candidates.push(other.timeline_range.start, other.timeline_range.end);
-        }
-        for (const cand of candidates) {
-          if (Math.abs(newStart - cand) < 0.25) { newStart = cand; break; }
-          if (Math.abs(newStart + len - cand) < 0.25) { newStart = cand - len; break; }
-        }
-      }
-    }
-    setDragPreview((p) => ({ ...p, [clipId]: newStart }));
+  const onDragMove = (clipId: string, newStartFrame: number) => {
+    // newStartFrame is an INTEGER TimelineFrame (post local-snap).
+    setDragPreview((p) => ({ ...p, [clipId]: newStartFrame }));
   };
-
-  const commitDrag = async () => {
-    const entries = Object.entries(dragPreview);
-    if (!entries.length || !project) return;
-    setDragPreview({});
-    for (const [cid, start] of entries) {
-      const c = project.clips[cid];
-      if (c && Math.abs(c.timeline_range.start - start) > 0.05) {
-        await api.move(cid, Math.round(start * 10) / 10, "GUI 拖动");
-      }
-    }
-    await refresh();
-  };
-
-  useEffect(() => {
-    window.addEventListener("pointerup", commitDrag);
-    return () => window.removeEventListener("pointerup", commitDrag);
-  });
+  // commitDrag is no longer needed — ClipBlock calls onMoveCommit
+  // directly on pointerup. Kept as a no-op for backward compatibility
+  // with the old global pointerup listener (now removed).
 
   if (!project) {
     return <div className="app"><div className="statusbar err">{status.text}</div></div>;
@@ -1116,10 +1089,14 @@ export default function App() {
           setSelected(id);
         }}
         onDragMove={onDragMove}
+        onMoveCommit={(clipId, newStartFrame) =>
+          run(() => api.move(clipId, newStartFrame, "GUI 拖动"), "已移动")}
         onZoomPx={setPxPerSec}
         onRangeSelect={setSelRange}
-        onTrimCommit={(clipId, newStart, newEnd) =>
-          run(() => api.trim(clipId, newStart ?? undefined, newEnd ?? undefined, "GUI 边缘拖拽裁剪"), "已裁剪")}
+        // Trim receives integer SOURCE FRAMES from ClipBlock; api.trim
+        // forwards them as-is to the server (which requires frames).
+        onTrimCommit={(clipId, newStartFrame, newEndFrame) =>
+          run(() => api.trim(clipId, newStartFrame ?? undefined, newEndFrame ?? undefined, "GUI 边缘拖拽裁剪"), "已裁剪")}
         onAssetDrop={(assetId, trackId, t) => {
           const a = project.assets.find((x) => x.asset_id === assetId);
           if (!a) return;

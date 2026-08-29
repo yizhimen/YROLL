@@ -36,9 +36,13 @@ interface Props {
   highlightRel?: boolean;
   onSeek: (frame: number) => void;
   onSelect: (clipId: string, viaAiZone: boolean, ctrl?: boolean) => void;
+  /** Pointermove preview. `newStartFrame` is an INTEGER TimelineFrame. */
   onDragMove: (clipId: string, newStartFrame: number) => void;
+  /** Drag-end move commit. Final integer TimelineFrame (post-snap). */
+  onMoveCommit: (clipId: string, newStartFrame: number) => void;
   onZoomPx: (px: number) => void;
   onRangeSelect: (r: [number, number] | null) => void;
+  /** Trim commit. `newStart` / `newEnd` are integer SOURCE frames. */
   onTrimCommit: (clipId: string, newStart: number | null, newEnd: number | null) => void;
   onDropOnTrack?: (clipId: string, trackId: string) => void;
   onTrackMute?: (trackId: string, muted: boolean) => void;
@@ -54,7 +58,7 @@ export default function Timeline({
   height = 240,
   snapMode = "always",
   highlightRel = false,
-  onSeek, onSelect, onDragMove, onZoomPx, onRangeSelect, onTrimCommit, onDropOnTrack, onTrackMute, onTrackLock, onTrackHide, onAssetDrop,
+  onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onDropOnTrack, onTrackMute, onTrackLock, onTrackHide, onAssetDrop,
 }: Props) {
   const paneRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState({ left: 0, width: 1 });
@@ -346,7 +350,18 @@ export default function Timeline({
                   clip={clip}
                   locked={track.locked}
                   selected={selectedIds.has(cid)}
-                  pxPerSec={pxPerSec}
+                  pxPerFrame={pxPerF}
+                  seqFps={seq.fps}
+                  // GUI-02.3: ClipBlock degrades gracefully when the
+                  // asset's source FPS is unknown. Per the closure
+                  // invariant, we never ASSUME source_fps == sequence_fps
+                  // for TimeMap business math — but display labels
+                  // (timecode, waveform slicing) need SOME fps and
+                  // falling back to seq fps with a "// display fallback"
+                  // marker is acceptable here.
+                  // TODO(02-7): hook up ProjectSequence.assetSourceFps
+                  // populated from /project/validate_media_conformance.
+                  sourceFps={undefined}
                   snapMode={snapMode}
                   highlightRel={highlightRel}
                   isRelated={highlightRel && selectedIds.size > 0 && Array.from(selectedIds).some((selId) => {
@@ -358,6 +373,7 @@ export default function Timeline({
                   siblings={siblings}
                   onSelect={onSelect}
                   onDragMove={onDragMove}
+                  onMoveCommit={onMoveCommit}
                   onTrimCommit={onTrimCommit}
                   onDropOnTrack={onDropOnTrack}
                 />

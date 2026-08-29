@@ -1,7 +1,55 @@
-import { useEffect, useRef, useState } from "react";
-import { Clip } from "../api";
+// GUI-02.4: ClipBlock is FRAME-ONLY.
+//
+// All user edits are expressed as integer frame intent. No local
+// source/timeline TimeMap business math. Three frame spaces, always
+// explicit:
+//
+//   TimelineFrame — position in the project sequence timebase
+//   ClipFrame     — position inside a clip's source range (asset's source FPS)
+//   SourceFrame   — position in the source asset (asset's source FPS)
+//
+// The GUI never computes `* clip.speed` or / `* clip.speed` to convert
+// between them. Core's TimeMap owns that conversion.
+//
+//   pixelDeltaToFrameDelta() and roundHalfAwayFromZero() are the only
+//   coordinate-rounding primitives used here. Math.round() is forbidden
+//   for edit coordinates.
+//
+// Edit geometry:
+//   - Drag move: pointermove computes integer TimelineFrame candidate;
+//     drag-end performs the authoritative /snap call and commits the
+//     final frame mutation. No HTTP per pointermove.
+//   - Trim:      pointermove computes integer source-frame deltas (no
+//     `* clip.speed`); drag-end commits via the existing onTrimCommit
+//     callback. The visual preview reflects the source-frame delta;
+//     timeline geometry stays stable until Core commits.
+//
+// Sequence-fps parameter (seqFps) is used ONLY for display labels
+// (framesToTimecode) and pxPerFrame derivation at the parent — never
+// for source-frame math (asset.source_fps would be needed there).
 
-// 波形缓存：同一素材全工程共享一份（AI 分析一次长期使用，波形也是）
+import { useEffect, useRef, useState } from "react";
+import { api, Clip } from "../api";
+import {
+  framesToTimecode,
+  pixelDeltaToFrameDelta,
+  roundHalfAwayFromZero,
+} from "../frames";
+
+/** Local helper: convert a pixel delta to a frame delta given the
+ *  ALREADY-DERIVED pxPerFrame (frame-domain parameter naming). This
+ *  avoids the legacy `pxPerSec` variable name leaking into the
+ *  ClipBlock scope. The pxPerFrame is already in the destination
+ *  timebase (e.g. timeline frames per pixel), so no FPS conversion
+ *  is needed here. The caller is responsible for choosing which
+ *  timebase's pxPerFrame to pass in (timeline or source). */
+function pxPerFrameToFrameDelta(
+  pixelDelta: number, pxPerFrame: number,
+): number {
+  return roundHalfAwayFromZero(pixelDelta / pxPerFrame);
+}
+
+// Waveform cache — same shape as before.
 const waveCache = new Map<string, Promise<{ peaks: number[]; duration: number | null }>>();
 
 function loadWave(assetId: string) {
@@ -20,52 +68,110 @@ interface Props {
   clip: Clip;
   selected: boolean;
   locked?: boolean;
-  pxPerSec: number;
+  /** Pixels per TIMELINE frame (sequence-fps based). Replaces the old
+   *  pxPerSec prop — layout is in frame coordinates. Subpixel precision
+   *  is permitted (per GUI-02.4 invariant). */
+  pxPerFrame: number;
+  /** Sequence FPS — used ONLY for display labels (framesToTimecode). */
+  seqFps: { num: number; den: number };
+  /** Asset's source FPS — used for waveform slicing math (the
+   *  waveform index is a normalized source position) and for the
+   *  thumbnail `t=` query. NEVER assumed equal to seqFps. */
+  sourceFps?: { num: number; den: number };
   snapMode?: "always" | "alt" | "off";
   highlightRel?: boolean;
-  /** 同轨其他 clip（用于拖动时检测重叠边界，不弹回） */
   siblings?: Array<{ id: string; start: number; end: number }>;
-  /** 是否被跨轨关联高亮（来自 Timeline 的 highlightRel + semantic link） */
   isRelated?: boolean;
   onSelect: (clipId: string, viaAiZone: boolean, ctrl?: boolean) => void;
-  onDragMove: (clipId: string, deltaSec: number) => void;
-  onTrimCommit: (clipId: string, newStart: number | null, newEnd: number | null) => void;
+  /** Pointermove preview. `newTimelineStartFrame` is an INTEGER
+   *  TimelineFrame. The parent uses this for visual feedback only;
+   *  the authoritative commit happens via onMoveCommit. */
+  onDragMove: (clipId: string, newTimelineStartFrame: number) => void;
+  /** Drag-end move commit. The final TimelineFrame (post-snap) is
+   *  passed; the parent forwards to `api.move`. */
+  onMoveCommit: (clipId: string, newTimelineStartFrame: number) => void;
+  /** Trim commit. `srcStartFrame` / `srcEndFrame` are integer
+   *  SourceFrame values (NOT seconds). Either may be null meaning
+   *  "don't change this edge". */
+  onTrimCommit: (
+    clipId: string,
+    srcStartFrame: number | null,
+    srcEndFrame: number | null,
+  ) => void;
   onDropOnTrack?: (clipId: string, trackId: string) => void;
 }
 
-/**
- * Clip 上下双层（蓝图 §3.1）：
- * 上 1/3 = AI Context 区（点击 → 打开 Clip Workspace，后续接 Y 轴）
- * 下 2/3 = 普通编辑区（点击选中、拖动移动、左右边缘拖拽 Trim）
- */
+/** GUI-02.4 invariant: the edit-coordinate snap radius is in FRAMES.
+ *  Default 8 frames = ~0.27s at 30fps. Per the spec, snap thresholds
+ *  must be expressed in the same coordinate space as the edit. */
+const DEFAULT_SNAP_RADIUS_FRAMES = 8;
+
+/** Minimum trim delta in source frames. Below this we ignore the
+ *  drag (noise filter). 1 frame is the meaningful quantum. */
+const MIN_TRIM_DELTA_FRAMES = 1;
+
 export default function ClipBlock({
-  clip, selected, locked, pxPerSec, siblings = [],
+  clip, selected, locked, pxPerFrame, seqFps, sourceFps,
   snapMode = "always", highlightRel = false, isRelated = false,
-  onSelect, onDragMove, onTrimCommit, onDropOnTrack,
+  siblings = [],
+  onSelect, onDragMove, onMoveCommit, onTrimCommit, onDropOnTrack,
 }: Props) {
-  // 边缘 Trim 的本地预览（松手才提交 API）
+  // ---- Trim preview state -------------------------------------------------
+  // Source-frame deltas (integer ClipFrame). The visual preview applies
+  // these to the source range ONLY — timeline geometry does not update
+  // during drag (Core TimeMap owns the source↔timeline mapping on
+  // commit).
   const [trimDelta, setTrimDelta] = useState<{ dStart: number; dEnd: number } | null>(null);
 
   const dStart = trimDelta?.dStart ?? 0;
   const dEnd = trimDelta?.dEnd ?? 0;
-  // trim 头：源起点 +dStart，时间轴起点同步 +dStart/speed；trim 尾：时间轴终点 -dEnd/speed
-  const tlStart = clip.timeline_range.start + dStart / clip.speed;
-  const tlEnd = clip.timeline_range.end + dEnd / clip.speed;
-  const left = tlStart * pxPerSec;
-  const width = Math.max(8, (tlEnd - tlStart) * pxPerSec);
 
+  // ---- Layout (integer frames; subpixel allowed at the px layer) ---------
+  // tlStart / tlEnd are the COMMITTED timeline positions — they stay
+  // stable during trim. Trim only changes the source range preview.
+  // roundHalfAwayFromZero is the spec-mandated rounding primitive
+  // (symmetric tie-breaking); Math.round is forbidden even for
+  // layout conversions from the legacy seconds model.
+  const tlStartFrame = roundHalfAwayFromZero(
+    clip.timeline_range.start * seqFps.num / seqFps.den,
+  );
+  const tlEndFrame = roundHalfAwayFromZero(
+    clip.timeline_range.end * seqFps.num / seqFps.den,
+  );
+  const srcStartFrame = roundHalfAwayFromZero(
+    clip.source_range.start * (sourceFps?.num ?? seqFps.num)
+      / (sourceFps?.den ?? seqFps.den),
+  ) + dStart;
+  const srcEndFrame = roundHalfAwayFromZero(
+    clip.source_range.end * (sourceFps?.num ?? seqFps.num)
+      / (sourceFps?.den ?? seqFps.den),
+  ) + dEnd;
+
+  // Layout uses pxPerFrame (which may be subpixel). Integer frames
+  // multiplied by a float pxPerFrame gives subpixel pixel positions —
+  // this is intentional per the GUI-02.4 invariant.
+  const left = tlStartFrame * pxPerFrame;
+  const width = Math.max(8, (tlEndFrame - tlStartFrame) * pxPerFrame);
+
+  // ---- Visual classes / labels -------------------------------------------
   const kindClass = clip.track_id.startsWith("t")
     ? "kind-text"
     : clip.track_id.startsWith("a")
       ? "kind-audio"
       : "";
 
+  // Source range as timecode (display only). uses source FPS.
+  const sFps = sourceFps ?? seqFps;
+  const srcStartTc = framesToTimecode(srcStartFrame, sFps, false);
+  const srcEndTc = framesToTimecode(srcEndFrame, sFps, false);
+  const tlDurTc = framesToTimecode(tlEndFrame - tlStartFrame, seqFps, false);
+
   const label =
     clip.context?.text ||
     clip.context?.scene ||
-    `${clip.source_range.start.toFixed(1)}-${clip.source_range.end.toFixed(1)}s`;
+    `${srcStartTc}-${srcEndTc}`;
 
-  // 波形背景（视频/音频 clip）：按源区间从全素材波形里切片
+  // ---- Waveform background (display only) --------------------------------
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const isMedia = clip.asset_id !== "";
   useEffect(() => {
@@ -80,11 +186,21 @@ export default function ClipBlock({
       const h = (canvas.height = canvas.clientHeight || 20);
       ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = "rgba(126, 201, 126, 0.55)";
+      // Waveform index math: normalized source position. The wave is
+      // sampled at the asset's source FPS (or seq FPS if unknown).
+      // NOTE: This is a display-only slicing — it does not enter
+      // edit coordinates.
       const dur = duration || clip.source_range.end;
-      const i0 = Math.floor((clip.source_range.start / dur) * peaks.length);
-      const i1 = Math.max(i0 + 1, Math.ceil((clip.source_range.end / dur) * peaks.length));
+      const srcDurF = roundHalfAwayFromZero(
+        clip.source_range.end * sFps.num / sFps.den,
+      );
+      const srcStartF = roundHalfAwayFromZero(
+        clip.source_range.start * sFps.num / sFps.den,
+      );
+      const i0 = Math.floor((srcStartF / Math.max(1, srcDurF)) * peaks.length);
+      const i1 = Math.max(i0 + 1, Math.ceil((srcEndFrame / Math.max(1, srcDurF)) * peaks.length));
       const slice = peaks.slice(i0, i1);
-      const barW = w / slice.length;
+      const barW = w / Math.max(1, slice.length);
       slice.forEach((p, i) => {
         const bh = Math.max(1, p * h);
         ctx.fillRect(i * barW, (h - bh) / 2, Math.max(1, barW - 0.5), bh);
@@ -92,86 +208,119 @@ export default function ClipBlock({
     });
     return () => { dead = true; };
   }, [clip.asset_id, clip.source_range.start, clip.source_range.end,
-      pxPerSec, isMedia, width]);
+      sFps.num, sFps.den, isMedia, width, srcEndFrame]);
 
+  // ---------------------------------------------------------------------
+  // MOVE drag
+  // ---------------------------------------------------------------------
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).classList.contains("ai-zone")) return;
     if ((e.target as HTMLElement).classList.contains("trim-handle")) return;
     onSelect(clip.clip_id, false, e.ctrlKey || e.metaKey);
     if (locked) return;  // 轨道锁定：禁拖动
     const startX = e.clientX;
-    const origStart = clip.timeline_range.start;
-    const origEnd = clip.timeline_range.end;
-    const len = origEnd - origStart;
-    // 计算同轨其他 clip 的位置（用于碰撞边界检测）
+    const origStartFrame = tlStartFrame;
+    const lenFrames = tlEndFrame - tlStartFrame;
+
+    // Other-clip boundaries (TimelineFrames). Convert from the
+    // legacy seconds at the boundary using seqFps — this is
+    // sequence-fps math, not TimeMap business math.
     const otherRanges = siblings
       .filter((s) => s.id !== clip.clip_id)
-      .map((s) => ({ start: s.start, end: s.end }))
+      .map((s) => ({
+        start: roundHalfAwayFromZero(s.start * seqFps.num / seqFps.den),
+        end: roundHalfAwayFromZero(s.end * seqFps.num / seqFps.den),
+      }))
       .sort((a, b) => a.start - b.start);
 
-    /** 把尝试的 newStart 限制到不重叠的范围（剪映/Premiere 行为：拖到边界即停）。
-
-        方向感知：向右拖撞到右边 clip → snap before；向左拖撞到左边 clip → snap after。 */
-    const clamp = (tryStart: number) => {
-      const tryEnd = tryStart + len;
+    /** Clamp to non-overlapping range. Direction-aware: drag right →
+     * snap before the next clip; drag left → snap after the previous. */
+    const clamp = (tryStart: number): number => {
+      const tryEnd = tryStart + lenFrames;
       const conflicts = otherRanges.filter(
-        (r) => tryStart < r.end && r.start < tryEnd
+        (r) => tryStart < r.end && r.start < tryEnd,
       );
       if (conflicts.length === 0) return Math.max(0, tryStart);
-
-      if (tryStart >= origStart) {
-        // 向右拖：snap 到第一个冲突 clip 的左侧（r.start - len）
+      if (tryStart >= origStartFrame) {
         const first = conflicts.reduce((a, b) => a.start < b.start ? a : b);
-        return Math.max(0, first.start - len);
+        return Math.max(0, first.start - lenFrames);
       } else {
-        // 向左拖：snap 到最后一个冲突 clip 的右侧（r.end）
         const last = conflicts.reduce((a, b) => a.end > b.end ? a : b);
         return Math.max(0, last.end);
       }
     };
 
-    /** 按住 Alt 时：磁吸到邻居边界 / 播放头 / 0 点（剪映/Premiere 行为）。 */
-    const SNAP_RADIUS_SEC = 0.3;
-    const snap = (tryStart: number) => {
-      // 候选磁吸点：自己两端的左右 + 所有邻居两端的左右 + 0
-      const candidates: number[] = [0];
-      candidates.push(origStart);  // 保留原位（拖回去时吸附）
+    /** Local snap (frame domain). Radius is FRAMES, not seconds. */
+    const snap = (tryStart: number): number | null => {
+      const candidates: number[] = [0, origStartFrame];
       for (const r of otherRanges) {
         candidates.push(r.start, r.end);
       }
-      const tryEnd = tryStart + len;
-      // 检查起点的吸附
+      const tryEnd = tryStart + lenFrames;
       for (const cand of candidates) {
-        if (Math.abs(tryStart - cand) < SNAP_RADIUS_SEC) return cand;
+        if (Math.abs(tryStart - cand) <= DEFAULT_SNAP_RADIUS_FRAMES) return cand;
       }
-      // 检查终点的吸附（让右边缘也能磁吸到邻居左边缘）
       for (const cand of candidates) {
-        if (Math.abs(tryEnd - cand) < SNAP_RADIUS_SEC) return cand - len;
+        if (Math.abs(tryEnd - cand) <= DEFAULT_SNAP_RADIUS_FRAMES) return cand - lenFrames;
       }
       return null;
     };
 
+    // The local pointermove handler computes an INTEGER TimelineFrame
+    // candidate and emits it for visual feedback. No HTTP, no
+    // TimeMap math, no Math.round on edit coordinates.
+    //
+    //   deltaFrame = roundHalfAwayFromZero(pixelDelta / pxPerFrame)
+    //              = roundHalfAwayFromZero(pixelDelta * fps.num / (pxPerFrame * fps.den))
+    //
+    // We inline the pxPerFrame inversion here rather than routing
+    // through pixelDeltaToFrameDelta (which expects a perceived
+    // pxPerSec input) — this keeps the variable naming frame-domain.
     const move = (ev: PointerEvent) => {
-      const delta = (ev.clientX - startX) / pxPerSec;
-      const want = origStart + delta;
-      let next: number;
+      const pixelDelta = ev.clientX - startX;
+      const deltaFrame = pxPerFrameToFrameDelta(pixelDelta, pxPerFrame);
+      // Skip pure-zero deltas (no-op move) — emit the original frame
+      // unchanged so the parent can still track active-drag state.
+      let candidate = origStartFrame + deltaFrame;
       const allowSnap = snapMode === "always" || (snapMode === "alt" && ev.altKey);
       if (allowSnap) {
-        const snapTarget = snap(want);
-        if (snapTarget !== null) {
-          next = snapTarget;
-        } else {
-          next = Math.max(0, want);
-        }
+        const snapTarget = snap(candidate);
+        if (snapTarget !== null) candidate = snapTarget;
       } else {
-        next = clamp(want);
+        candidate = clamp(candidate);
       }
-      onDragMove(clip.clip_id, next);
+      onDragMove(clip.clip_id, candidate);
     };
-    const up = (ev: PointerEvent) => {
+
+    // Drag-end: perform the authoritative /snap call against Core,
+    // then commit the final frame mutation. The local snap above is
+    // only a visual aid during drag; Core's SnapEngine is the
+    // authority on commit.
+    const up = async (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      // 竖向拖轨：松手位置落在别的轨道行 → 换轨
+      // The current candidate is the last `candidate` we computed in
+      // `move`. We don't have it here directly, so recompute via the
+      // same formula (deterministic pure function of clientX, startX,
+      // pxPerFrame, seqFps, origStartFrame — no side effects, no
+      // business time mapping).
+      const pixelDelta = ev.clientX - startX;
+      const deltaFrame = pxPerFrameToFrameDelta(pixelDelta, pxPerFrame);
+      let finalFrame = origStartFrame + deltaFrame;
+      finalFrame = clamp(finalFrame);
+      // Authoritative snap on commit.
+      try {
+        const ctx = {
+          playhead_frame: 0, // parent can inject via a prop later if needed
+          clip_ids: [clip.clip_id],
+        };
+        const { snapped_frame } = await api.snap(finalFrame, ctx, DEFAULT_SNAP_RADIUS_FRAMES);
+        if (snapped_frame !== null) finalFrame = snapped_frame;
+      } catch {
+        // Snap is best-effort; commit the unsnapped frame on error.
+      }
+      // Track-drop is orthogonal; the parent decides via onDropOnTrack.
+      onMoveCommit(clip.clip_id, finalFrame);
       const row = document.elementsFromPoint(ev.clientX, ev.clientY)
         .find((el) => (el as HTMLElement).dataset?.trackId) as HTMLElement | undefined;
       const tid = row?.dataset.trackId;
@@ -183,35 +332,64 @@ export default function ClipBlock({
     window.addEventListener("pointerup", up);
   };
 
+  // ---------------------------------------------------------------------
+  // TRIM drag (no `* clip.speed` anywhere)
+  // ---------------------------------------------------------------------
   const onEdgeDown = (e: React.PointerEvent, edge: "left" | "right") => {
     e.stopPropagation();
     onSelect(clip.clip_id, false, e.ctrlKey || e.metaKey);
     if (locked) return;  // 轨道锁定：禁裁剪
     const startX = e.clientX;
     let cur = { dStart: 0, dEnd: 0 };
+    // Compute the asset's source-frame bounds at drag start. The
+    // trim drag emits SOURCE-FRAME intent — Core's TimeMap converts
+    // back to timeline on commit.
+    const assetFps = sourceFps ?? seqFps;
+    const srcStartF0 = roundHalfAwayFromZero(clip.source_range.start * assetFps.num / assetFps.den);
+    const srcEndF0 = roundHalfAwayFromZero(clip.source_range.end * assetFps.num / assetFps.den);
+    const srcDurF = srcEndF0 - srcStartF0;
+
     const move = (ev: PointerEvent) => {
-      const delta = ((ev.clientX - startX) / pxPerSec) * clip.speed; // 时间轴秒 → 源秒
+      // pixelDelta → source-frame delta. NO * clip.speed, NO / clip.speed.
+      //
+      // The source-timebase pxPerFrame is derived from the timeline
+      // pxPerFrame and the two FPS values:
+      //
+      //   pxPerFrame_source = pxPerFrame × (seqFps.num/seqFps.den)
+      //                                   / (sourceFps.num/sourceFps.den)
+      //
+      // Then deltaSrcFrame = roundHalfAwayFromZero(pixelDelta /
+      // pxPerFrame_source).
+      const pixelDelta = ev.clientX - startX;
+      const pxPerFrameSource =
+        pxPerFrame * (seqFps.num / seqFps.den) / (assetFps.num / assetFps.den);
+      const deltaSrcFrame = pxPerFrameToFrameDelta(pixelDelta, pxPerFrameSource);
       if (edge === "left") {
-        // 源区间 [start, end)：头最多拖到尾 -0.1s，且不小于 0
-        const maxD = clip.source_range.end - clip.source_range.start - 0.1;
-        const d = Math.min(maxD, Math.max(-clip.source_range.start, delta));
+        // source range [start, end): head can move up to (end - 1)
+        // and not below 0
+        const maxD = srcDurF - MIN_TRIM_DELTA_FRAMES;
+        const minD = -srcStartF0;
+        const d = Math.min(maxD, Math.max(minD, deltaSrcFrame));
         cur = { dStart: d, dEnd: 0 };
       } else {
-        const maxD = clip.source_range.end - clip.source_range.start - 0.1;
-        const d = Math.max(-maxD, delta);
+        // tail: can move up to (srcDurF - 1) backward and arbitrarily forward
+        const maxD = srcDurF - MIN_TRIM_DELTA_FRAMES;
+        const d = Math.max(-maxD, deltaSrcFrame);
         cur = { dStart: 0, dEnd: d };
       }
       setTrimDelta({ ...cur });
     };
+
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       setTrimDelta(null);
-      const minChange = 0.05;
-      if (edge === "left" && Math.abs(cur.dStart) > minChange) {
-        onTrimCommit(clip.clip_id, clip.source_range.start + cur.dStart, null);
-      } else if (edge === "right" && Math.abs(cur.dEnd) > minChange) {
-        onTrimCommit(clip.clip_id, null, clip.source_range.end + cur.dEnd);
+      // Commit in SOURCE frames (integer). Convert back to absolute
+      // source-frame positions to send as intent.
+      if (edge === "left" && Math.abs(cur.dStart) >= MIN_TRIM_DELTA_FRAMES) {
+        onTrimCommit(clip.clip_id, srcStartF0 + cur.dStart, null);
+      } else if (edge === "right" && Math.abs(cur.dEnd) >= MIN_TRIM_DELTA_FRAMES) {
+        onTrimCommit(clip.clip_id, null, srcEndF0 + cur.dEnd);
       }
     };
     window.addEventListener("pointermove", move);
@@ -240,19 +418,19 @@ export default function ClipBlock({
       >
         Y · {clip.context?.why || "AI"}
       </div>
-      <div className="edit-zone" title={`源 ${(clip.source_range.start + dStart).toFixed(1)}-${(clip.source_range.end + dEnd).toFixed(1)}s · 速度 ${clip.speed}x · 音量 ${clip.volume}`}>
+      <div className="edit-zone" title={`源 ${srcStartTc}-${srcEndTc} · 时长 ${tlDurTc} · 速度 ${clip.speed}x · 音量 ${clip.volume}`}>
         {isMedia && <canvas ref={canvasRef} className="wave-canvas" />}
         {isMedia && !kindClass && width > 60 && (
           <img
             className="clip-thumb"
-            src={`/assets/${clip.asset_id}/thumbnail?t=${(clip.source_range.start + 0.1).toFixed(1)}`}
+            src={`/assets/${clip.asset_id}/thumbnail?t=${framesToTimecode(srcStartFrame + roundHalfAwayFromZero(sFps.den * 0.1 / sFps.num), sFps, false)}`}
             alt=""
             draggable={false}
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
         )}
         <span className="clip-label">
-          {clip.context?.muted ? "🔇 " : ""}{label}（{(tlEnd - tlStart).toFixed(1)}s）
+          {clip.context?.muted ? "🔇 " : ""}{label}（{tlDurTc}）
         </span>
       </div>
       <div

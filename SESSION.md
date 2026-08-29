@@ -2,10 +2,10 @@
 
 ## 当前状态
 - **GUI-01（Session + Mutation Gate + Revision）已完整交付**（详见下"v0.2 GUI-01"）
-- **GUI-02 Closure 02-1（Core 标准 NTSC DF）+ 02-2（TS mirror）+ 02-3（Source Timebase & Conformance）已完成**
+- **GUI-02 Closure 02-1（Core 标准 NTSC DF）+ 02-2（TS mirror）+ 02-3（Source Timebase & Conformance）+ 02-4（ClipBlock Frame-Native Refactor）已完成**
 - 工程：sanlihe-story（38 clip + 18 字幕 + 40 资产 + 91 op）
-- Core v0.2 测试：462 passed + 1 skipped
-- GUI 测试：125 vitest + Playwright 端到端冒烟通过
+- Core v0.2 测试：466 passed + 1 skipped
+- GUI 测试：140 vitest + Playwright 端到端冒烟通过
 
 ## v0.2 GUI-01 完工（2026-08-29）
 

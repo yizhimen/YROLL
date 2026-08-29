@@ -181,15 +181,22 @@ async function mutate<R>(
 export const api = {
   project: () => req<Project>("/project"),
   operations: () => req<Operation[]>("/operations"),
-  trim: (clipId: string, newSourceStart?: number, newSourceEnd?: number, why = "") =>
+  // GUI-02: frame-native. Server rejects legacy seconds fields with 400.
+  // `newSourceStart` / `newSourceEnd` are integer SOURCE FRAMES
+  // (asset's source timebase, NOT sequence fps). The server converts
+  // them via the asset's source_fps when applying.
+  trim: (clipId: string, newSourceStartFrame?: number, newSourceEndFrame?: number, why = "") =>
     mutate(`POST`, `/clips/${clipId}/trim`, {
-      new_source_start: newSourceStart ?? null, new_source_end: newSourceEnd ?? null, why,
+      new_source_start_frame: newSourceStartFrame ?? null,
+      new_source_end_frame: newSourceEndFrame ?? null,
+      why,
     }),
-  split: (clipId: string, atSourceTime: number, why = "") =>
-    mutate("POST", `/clips/${clipId}/split`, { at_source_time: atSourceTime, why }),
-  move: (clipId: string, newTimelineStart: number, why = "", trackId?: string) =>
+  split: (clipId: string, atTimelineFrame: number, why = "") =>
+    mutate("POST", `/clips/${clipId}/split`, { at_timeline_frame: atTimelineFrame, why }),
+  // `newTimelineStart` is an integer TIMELINE FRAME (sequence fps).
+  move: (clipId: string, newTimelineStartFrame: number, why = "", trackId?: string) =>
     mutate("POST", `/clips/${clipId}/move`,
-      { new_timeline_start: newTimelineStart, new_track_id: trackId ?? null, why }),
+      { new_timeline_start_frame: newTimelineStartFrame, new_track_id: trackId ?? null, why }),
   speed: (clipId: string, speed: number, why = "") =>
     mutate("POST", `/clips/${clipId}/speed`, { speed, why }),
   volume: (clipId: string, volume: number, why = "") =>
