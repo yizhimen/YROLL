@@ -1613,6 +1613,54 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             ],
         }
 
+    # ---------- GUI-03D.1: /preview/plan (L1 Preview Plan cache) ----------
+    @app.get("/preview/plan")
+    def preview_plan():
+        """Structural snapshot of the current timeline for GUI
+        caching. Keyed by (project_revision, timeline_id); the GUI
+        invalidates the cache when the revision changes.
+
+        The /preview/at_frame endpoint is the canonical single-frame
+        resolution; this endpoint returns the FULL plan so the GUI
+        can resolve the active layer at any TimelineFrame LOCALLY
+        without per-frame HTTP.
+        """
+        from yroll.core.plan import (
+            PreviewPlan, build_preview_plan, PreviewLayer,
+        )
+        plan: PreviewPlan = build_preview_plan(st.core.project)
+
+        def _layer_to_dict(l: PreviewLayer) -> dict:
+            return {
+                "track_id": l.track_id,
+                "layer_index": l.layer_index,
+                "kind": l.kind,
+                "clip_id": l.clip_id,
+                "asset_id": l.asset_id,
+                "asset_type": l.asset_type,
+                "asset_path": l.asset_path,
+                "timeline_start_frame": l.timeline_start_frame,
+                "timeline_end_frame": l.timeline_end_frame,
+                "source_start_frame": l.source_start_frame,
+                "source_end_frame": l.source_end_frame,
+                "source_fps": (
+                    {"num": l.source_fps.num, "den": l.source_fps.den}
+                    if l.source_fps is not None else None
+                ),
+                "transform": l.transform,
+            }
+
+        return {
+            "project_revision": plan.project_revision,
+            "timeline_id": plan.timeline_id,
+            "fps": {"num": plan.fps.num, "den": plan.fps.den},
+            "tracks": [[_layer_to_dict(l) for l in t] for t in plan.tracks],
+            "subtitle_ranges": [
+                {"start_frame": s, "end_frame": e, "text": text}
+                for (s, e), text in plan.subtitle_texts_by_range
+            ],
+        }
+
     # ---------- GUI-03D: /preview/at_frame (L1 Timeline Composite) ----------
     @app.get("/preview/at_frame")
     def preview_at_frame(frame: int = 0):

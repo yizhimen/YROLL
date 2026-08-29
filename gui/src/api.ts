@@ -260,6 +260,38 @@ export const api = {
       }>;
       subtitle_texts: string[];
     }>(`/preview/at_frame?frame=${timelineFrame}`),
+  // GUI-03D.1: Preview Plan snapshot for caching. Returns the
+  // structural layout of all clips per track (timeline-frame
+  // range, source-frame range, source_fps, etc.) for a given
+  // project_revision. The GUI caches this locally; per-frame
+  // playback resolves the active layer via `active_layer_at`
+  // (no per-frame HTTP).
+  previewPlan: () =>
+    req<{
+      project_revision: number;
+      timeline_id: string;
+      fps: { num: number; den: number };
+      tracks: Array<Array<{
+        track_id: string;
+        layer_index: number;
+        kind: string;
+        clip_id: string;
+        asset_id: string;
+        asset_type: string;
+        asset_path: string;
+        timeline_start_frame: number;
+        timeline_end_frame: number;
+        source_start_frame: number;
+        source_end_frame: number;
+        source_fps: { num: number; den: number } | null;
+        transform: Record<string, unknown>;
+      }>>;
+      subtitle_ranges: Array<{
+        start_frame: number;
+        end_frame: number;
+        text: string;
+      }>;
+    }>(`/preview/plan`),
   render: (burnSubtitles = false, width = 1080, name = "preview.mp4") =>
     mutate<{ preview: string }>("POST",
       `/render?burn_subtitles=${burnSubtitles}&width=${width}&name=${encodeURIComponent(name)}`),

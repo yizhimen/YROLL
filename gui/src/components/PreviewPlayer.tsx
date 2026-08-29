@@ -20,6 +20,13 @@
 import { useEffect, useRef, useState } from "react";
 import { api, Project } from "../api";
 import {
+  activeLayerAt,
+  activeSubtitleAt,
+  PreviewLayer,
+  sourceSecondsAt,
+  usePreviewPlan,
+} from "../preview-plan";
+import {
   type FrameClock,
   createFrameClock,
   currentFrame as frameClockCurrentFrame,
@@ -164,61 +171,43 @@ export default function PreviewPlayer({
   const [sourceFrame, setSourceFrame] = useState<number | null>(null);
   const [timeMapEntry, setTimeMapEntry] = useState<TimeMapCacheEntry | null>(null);
 
-  // GUI-03D: L1 Timeline Composite Preview. The single source of
-  // truth for what the Preview should display at this playhead.
-  // Resolves all visual + audio + subtitle layers via Core's
-  // /preview/at_frame endpoint (which uses TimeMap for source-frame
-  // resolution and the asset's source timebase for media seconds).
-  const [composite, setComposite] = useState<{
-    visual_layers: Array<{
-      track_id: string;
-      layer_index: number;
-      kind: string;
-      clip_id: string;
-      asset_id: string;
-      asset_path: string;
-      source_frame: number;
-      source_seconds: number;
-      source_fps: { num: number; den: number } | null;
-      timeline_start_frame: number;
-      timeline_end_frame: number;
-      transform: Record<string, unknown>;
-    }>;
-    audio_layers: Array<{
-      track_id: string;
-      layer_index: number;
-      kind: string;
-      clip_id: string;
-      asset_id: string;
-      asset_path: string;
-      source_frame: number;
-      source_seconds: number;
-      source_fps: { num: number; den: number } | null;
-      timeline_start_frame: number;
-      timeline_end_frame: number;
-      transform: Record<string, unknown>;
-    }>;
+  // GUI-03D.1: L1 Preview Plan cache. Replaces the per-frame
+  // /preview/at_frame fetch with one cached plan per
+  // project_revision. The active layer is resolved LOCALLY for
+  // every TimelineFrame change, so continuous playback does NOT
+  // generate per-frame HTTP.
+  const projectRevision =
+    project?.sequence?.project_revision ?? null;
+  const { plan, loading: planLoading } = usePreviewPlan(
+    mode === "instant" ? projectRevision : null,
+  );
+
+  // Active composite at the current playheadFrame, derived from
+  // the cached plan. Recomputed on every render — no HTTP.
+  const composite: {
+    visual_layers: PreviewLayer[];
+    audio_layers: PreviewLayer[];
     subtitle_texts: string[];
     is_black: boolean;
-  } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (mode !== "instant" || !project) {
-      setComposite(null);
-      return;
+  } | null = (() => {
+    if (!plan || mode !== "instant") return null;
+    const visual: PreviewLayer[] = [];
+    const audio: PreviewLayer[] = [];
+    for (const track of plan.tracks) {
+      const layer = activeLayerAt(track, playheadFrame);
+      if (layer === null) continue;
+      if (layer.kind === "audio") audio.push(layer);
+      else visual.push(layer);
     }
-    (async () => {
-      try {
-        const data = await api.compositePreview(playheadFrame);
-        if (cancelled) return;
-        setComposite(data);
-      } catch {
-        if (!cancelled) setComposite(null);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [project, mode, playheadFrame]);
+    const subtitle = activeSubtitleAt(plan, playheadFrame);
+    return {
+      visual_layers: visual,
+      audio_layers: audio,
+      subtitle_texts: subtitle ? [subtitle] : [],
+      is_black:
+        visual.length === 0 && audio.length === 0 && subtitle === null,
+    };
+  })();
 
   useEffect(() => {
     let cancelled = false;
@@ -478,8 +467,9 @@ export default function PreviewPlayer({
                       // Sync v.currentTime from Core's source_seconds.
                       // Per the closure invariant: NEVER read
                       // v.currentTime as TimelineFrame state.
-                      if (Math.abs(el.currentTime - l.source_seconds) > 0.4) {
-                        el.currentTime = l.source_seconds;
+                      const secs = sourceSecondsAt(l, playheadFrame);
+                      if (Math.abs(el.currentTime - secs) > 0.4) {
+                        el.currentTime = secs;
                       }
                     }}
                     src={`/assets/${l.asset_id}/file`}
@@ -510,8 +500,9 @@ export default function PreviewPlayer({
                   key={`audio:${l.track_id}:${l.clip_id}`}
                   ref={(el) => {
                     if (!el) return;
-                    if (Math.abs(el.currentTime - l.source_seconds) > 0.4) {
-                      el.currentTime = l.source_seconds;
+                    const secs = sourceSecondsAt(l, playheadFrame);
+                    if (Math.abs(el.currentTime - secs) > 0.4) {
+                      el.currentTime = secs;
                     }
                     if (playing && el.paused) el.play().catch(() => undefined);
                     if (!playing && !el.paused) el.pause();
