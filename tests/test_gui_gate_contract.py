@@ -43,6 +43,13 @@ GATE_EXEMPT = {
     "heartbeatLease",
     "handoffLease",
     "mutationCheck",  # /mutation/check
+    # GUI-02: read-only endpoints that share Gate-exempt status on the
+    # server side (they never write state). The static guard trusts
+    # the server's middleware classification.
+    "getSequence",    # /sequence — canonical timebase
+    "getKeymap",      # /keyboard/keymap — semantic binding
+    "snap",           # /snap — Core SnapEngine query
+    "getTimemap",     # /clip/{id}/timemap — Core TimeMap query
 }
 
 
