@@ -207,17 +207,29 @@ export default function App() {
   };
 
   // 剪辑点导航（↑/↓ 跳上一个/下一个边界）
+  //
+  // GUI-02.6.1 invariant: boundary navigation operates in
+  // TimelineFrame space (integer). The clip's timeline_range.start
+  // / .end are legacy SECONDS storage; we convert to frames via
+  // the project's sequence fps before comparing with playheadFrame.
+  // No seconds-based comparison, no 0.05-second epsilon magic.
   const jumpBoundary = (dir: 1 | -1) => {
     if (!project) return;
+    const seqFps = project.sequence?.fps ?? {
+      num: project.fps_num ?? 30, den: project.fps_den ?? 1,
+    };
+    const toFrame = (sec: number) =>
+      Math.round(sec * seqFps.num / seqFps.den);
     const pts = new Set<number>([0]);
     for (const c of Object.values(project.clips)) {
-      pts.add(c.timeline_range.start);
-      pts.add(c.timeline_range.end);
+      pts.add(toFrame(c.timeline_range.start));
+      pts.add(toFrame(c.timeline_range.end));
     }
     const sorted = [...pts].sort((a, b) => a - b);
+    // Strict integer comparison in TimelineFrame space; no epsilon.
     const t = dir === 1
-      ? sorted.find((p) => p > playheadFrame + 0.05)
-      : [...sorted].reverse().find((p) => p < playheadFrame - 0.05);
+      ? sorted.find((p) => p > playheadFrame)
+      : [...sorted].reverse().find((p) => p < playheadFrame);
     if (t !== undefined) seek(t);
   };
 
