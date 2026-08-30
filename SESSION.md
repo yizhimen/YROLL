@@ -1,37 +1,41 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-30 GUI-03E-3 ✅ 已交付；03E-4 / 03E-5 / 真实生产测试 待办）
+## 当前状态（2026-08-30 GUI-03E-3 + 03E-4 ✅ 已交付；03E-5 / 真实生产测试 待办）
 - **GUI-01（Session + Mutation Gate + Revision）已完整交付**
 - **GUI-02 Closure** 02-1 → 02-6.1 + 02-7 已完成
 - **GUI-03** 03A/03B/03C/03D + 03D.1 已完成
-- **GUI-03E Multiple Timelines** 03E-1 + 03E-2A + **03E-3 ✅** 已完成：
+- **GUI-03E Multiple Timelines** 03E-1 + 03E-2A + 03E-3 + **03E-4 ✅** 已完成：
   - 03E-1：Schema/migration
-  - 03E-2A：pragmatic safe scoping（ownership + 4 lifecycle commands + explicit high-frequency + HTTP API + audit metadata + static guard）
-  - **03E-3（GUI Timeline Context UX）**：把 peer Timelines 暴露给用户为 first-class editing contexts
-    - **Server 端（5 个新端点）**:
-      - `GET /timelines` → `{active_timeline_id, default_timeline_id, timelines: TimelineSummary[]}`（gate-exempt）
-      - `POST /timelines {name, derived_from?}` → `{timeline_id, name, derived_from}`（mutate 走 Gate）
-      - `POST /timelines/{id}/switch` → `{active_timeline_id}`（mutate 走 Gate；server-resolved 权威值）
-      - `POST /timelines/{id}/duplicate {new_name?}` → `{timeline_id, name, active_timeline_id}`（mutate 走 Gate）
-      - `DELETE /timelines/{id}` → `{ok, active_timeline_id, default_timeline_id}`（mutate 走 Gate；Open Order replacement 是 server 决定，GUI 不复制策略）
-    - **GUI 端**:
-      - `gui/src/api.ts`：`listTimelines / addTimeline / switchActiveTimeline / duplicateTimeline / deleteTimeline` + `TimelinesResponse / TimelineSummary` types + `previewPlan({timeline_id})` 接 query
-      - `gui/src/preview-plan.ts`：
-        - 新 `useTimelines(projectRevision)` hook
-        - `usePreviewPlan(projectRevision, timelineId)` race-safe 重写：**per-fetch `activeTimelineRef` 检查**，stale 响应丢弃；cache key 改为 `(rev, timeline_id)` 阻止 Preview-A 内容泄漏到 Preview-B
-      - `gui/src/components/TimelineSwitcher.tsx`：**新建**，受控组件。active chip highlight ring + brand bg；per-chip ✕ 删除按钮（last-timeline 灰显）；`+` chip；click chip → `onSwitch` callback；click ✕ → confirm → `onRequestDeleteTimeline`
-      - `gui/src/components/NewTimelineDialog.tsx`：**新建**，modal；name input；"空 Timeline" / "复制当前" 双模式；Esc 关、Enter 提交、backdrop click 关
-      - `gui/src/components/PreviewPlayer.tsx`：加 `timelineId` prop → `usePreviewPlan(rev, timelineId)`
-      - `gui/src/App.tsx`：`activeTimelineId` state（**GUI 单一 source of truth**）；`refresh()` 从 server `active_timeline_id` 同步；`switchTimeline` / `deleteTimeline` / `createTimeline` handlers（optimistic update + server-authoritative 校正）；TimelineSwitcher + NewTimelineDialog 挂载；PreviewPlayer 传 `activeTimelineId`
+  - 03E-2A：pragmatic safe scoping
+  - 03E-3：GUI Timeline Context UX（switcher / dialog / delete / race-safe hooks）
+  - **03E-4（Duplicate / Many Cuts）**：把"one Project → many independent editing answers"做成完整 user workflow
+    - **Duplicate semantics（Core 已对齐 spec）**:
+      - new Timeline/Track/Clip/Marker/Beat IDs（无与源 id 重叠）
+      - **Asset IDs 共享**（`Project.assets` 列表 byte-equivalent before/after）
+      - **媒体文件永不复**制（manifest-only operation）
+      - `derived_from = source_timeline_id`（不是 name — stable id 锚定）
+      - **新 duplicate 自动成为 active Timeline**（spec: "duplicate becomes the active Timeline"；之前 duplicate 不切 active，03E-4 改为切到 new_id，server-authoritative）
+      - 源 Timeline 的 tracks/clips/markers/beats **byte-equivalent** before/after duplicate call（仅 `active_timeline_id` 指针移动）
+    - **GUI 改动**:
+      - `gui/src/components/NewTimelineDialog.tsx`：
+        - 文案改用"复制为新版本"
+        - 新 `defaultDuplicateName` prop（parent 可预填语义名，如"种草版"）
+        - placeholder + default name 区分 empty/duplicate 模式
+      - `gui/src/App.tsx`：
+        - `createTimeline` handler：duplicate 模式后立刻 `setActiveTimelineId(r.active_timeline_id)`（server-authoritative）+ 清 selected/selectedSet/playhead（navigation）
+        - **empty 模式不切 active**（用户显式建侧支 Timeline，仍留在当前编辑）
+        - dialog 传 `defaultDuplicateName` = `"<current> 副本"`
   - **关键不变量**:
-    - `activeTimelineId` 是 GUI 单一 source of truth；切换 = navigation state，**不**污染 content Undo（selected/selectedSet/playhead 重置，但走独立 UI state）
-    - **Stale-response defense**: `usePreviewPlan` 在 resolve 时检查 `activeTimelineRef.current !== data.timeline_id` → 丢弃响应（防止 Preview-A 内容写入 Preview-B 状态）
-    - **Server-authoritative**: lifecycle mutations（switch/delete/duplicate）都返回 `active_timeline_id`，GUI 必须使用 server 值（Open Order race-safe）
-    - **Project-level Lease + Project-level Revision 不变**：lifecycle mutations 走现有 Mutation Gate，无新 lease 模型
-  - **Completion criterion met**: 顶部 chip 切换 / 新建 / 删除 / 复制 / last-guard / Open-Order race / Preview A↔B 隔离 / 旧单 Timeline 工程兼容 — 全部 spec 要求 ✅
+    - 源 Timeline 的 clip_ids / track_ids / marker_ids / beat_ids / source_range / timeline_range / asset_id **byte-equivalent** before/after duplicate
+    - `Project.assets` 列表 byte-equivalent before/after duplicate（无媒体拷贝）
+    - 删除 duplicate 不动 shared Assets
+    - 旧单 Timeline 工程也能 duplicate
+    - 切换是 navigation，**不污染** content Undo
+    - Project-level Lease + Project-level Revision 不变
+  - **Completion criterion verified**: Sanlihe-style scenario（Full → Seed → mutate Seed → Full byte-equivalent）已端到端跑通；597 passed + 1 skipped
 - 沙盒工程：`projects/sanlihe-slice-30s/`
-- Core 测试：**589 passed + 1 skipped**（含 14 migration + 14 safety + **8 新 switcher**）
-- GUI 测试：**181 vitest**（含 **4 新 preview-plan** + **6 新 TimelineSwitcher**）
+- Core 测试：**597 passed + 1 skipped**（含 14 migration + 14 safety + 8 switcher + **8 新 duplicate isolation**）
+- GUI 测试：**181 vitest**（03E-4 未新增 GUI 测试 — duplicate semantics 在 Core 层，03E-4-E 8 个 Python 测试覆盖 invariant）
 
 ### GUI-03E 计划（用户已确认）
 拆 5 个小 batch：
@@ -109,10 +113,10 @@
 ### 待办
 - 03E-1（Schema/migration）✅
 - 03E-2A（Pragmatic Safe Scoping）✅
-- **03E-3（GUI Timeline Context UX）✅ — switcher / dialog / delete UX / resync / race-safe hooks / 18 新测试**
-- **03E-4（Duplicate UX 完善 — Track 颜色 / 资产面板 / 占位 Track 命名 / 编辑友好）← 下一 batch**
-- 03E-5（Revision scope 到 Timeline：第一版：每次 Timeline mutation 推 Project revision，mutation 必须带 `timeline_id`；未来：Timeline-local revision）
-- 然后再做一次真实生产测试：拿《三里河·陶鬶》做完整版 + 种草版 两条 timeline
+- 03E-3（GUI Timeline Context UX）✅
+- **03E-4（Duplicate / Many Cuts）✅ — "复制为新版本" workflow + 8 isolation tests + Sanlihe completion criterion verified**
+- **03E-5（Timeline-local Revision）← 下一 batch**：spec 推 Project revision 已经够；如要 Timeline-local diff UI，在 03E-5 推进
+- 真实生产测试：拿《三里河·陶鬶》做完整版 + 种草版 两条 timeline（已经在测试里以 Sanlihe-style scenario 端到端验证）
 
 ## 关键不变量（4 个 closure）
 1. Frame-native edit chain

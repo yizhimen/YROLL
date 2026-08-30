@@ -1,12 +1,15 @@
-// GUI-03E-3: NewTimelineDialog
+// GUI-03E-4: NewTimelineDialog — "复制为新版本" workflow.
 //
 // Modal for creating a new peer Timeline. Two modes:
 //   - "empty":    brand-new Timeline, no derived_from.
-//   - "duplicate": copy the active Timeline (Tracks/Clips/Markers/
-//                  Beats) into a new Timeline with fresh ids.
-//                  Assets are SHARED — media files are never copied
-//                  (Core guarantees this; the GUI does not need to
-//                  warn about disk usage).
+//   - "duplicate": copy the source Timeline (default = current
+//                  active Timeline) into a new Timeline with fresh
+//                  ids. The new duplicate becomes the active
+//                  Timeline (server-authoritative) so the user can
+//                  immediately edit the new version. Assets are
+//                  SHARED — media files are never copied (Core
+//                  guarantees this; the GUI does not need to warn
+//                  about disk usage).
 //
 // The dialog is fully controlled by the parent:
 //   isOpen / onClose:                open state
@@ -25,7 +28,13 @@ export type NewTimelineMode = "empty" | "duplicate";
 
 export interface NewTimelineDialogProps {
   isOpen: boolean;
+  /** Name of the source Timeline for the "duplicate" mode. The
+   *  default source for duplication is the current active Timeline;
+   *  pass `currentTimelineName` (the active one) so the dialog can
+   *  show "复制自 <name>" and pre-fill the new name. */
   currentTimelineName: string;
+  /** Name to pre-fill when duplicating. */
+  defaultDuplicateName: string;
   onClose: () => void;
   onSubmit: (name: string, mode: NewTimelineMode) => void;
 }
@@ -33,6 +42,7 @@ export interface NewTimelineDialogProps {
 export default function NewTimelineDialog({
   isOpen,
   currentTimelineName,
+  defaultDuplicateName,
   onClose,
   onSubmit,
 }: NewTimelineDialogProps) {
@@ -70,7 +80,10 @@ export default function NewTimelineDialog({
 
   const trimmed = name.trim();
   const canSubmit = trimmed.length > 0;
-  const defaultDupName = currentTimelineName
+  // The default duplicate name is computed by the parent (so the
+  // caller can name it after its semantic role, e.g. "种草版"). If
+  // the parent didn't supply one, fall back to "<source> 副本".
+  const fallbackDupName = currentTimelineName
     ? `${currentTimelineName} 副本`
     : "副本";
 
@@ -146,7 +159,9 @@ export default function NewTimelineDialog({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={
-            mode === "duplicate" ? defaultDupName : "如：种草版 / 收割版"
+            mode === "duplicate"
+              ? defaultDuplicateName || fallbackDupName
+              : "如：种草版 / 收割版"
           }
           style={{
             width: "100%",
@@ -191,11 +206,15 @@ export default function NewTimelineDialog({
               checked={mode === "duplicate"}
               onChange={() => {
                 setMode("duplicate");
-                if (!name.trim()) setName(defaultDupName);
+                if (!name.trim()) {
+                  setName(defaultDuplicateName || fallbackDupName);
+                }
               }}
             />
-            复制当前时间线
-            <span style={{ color: "#888" }}>（Tracks/Clips/Markers/Beats）</span>
+            复制为新版本
+            <span style={{ color: "#888" }}>
+              （Tracks/Clips/Markers/Beats 复制；素材共享不复制媒体）
+            </span>
           </label>
         </div>
 
@@ -236,7 +255,7 @@ export default function NewTimelineDialog({
               fontWeight: 600,
             }}
           >
-            {mode === "duplicate" ? "复制" : "创建"}
+            {mode === "duplicate" ? "复制为新版本" : "创建"}
           </button>
         </div>
       </div>

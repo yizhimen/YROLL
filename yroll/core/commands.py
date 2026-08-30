@@ -2103,6 +2103,13 @@ class CommandLayer:
         IDs; preserve each Clip's asset_id (shared, never copied);
         never copy media files or Asset objects; set
         derived_from=source_timeline_id.
+
+        GUI-03E-4: the new duplicate becomes the active Timeline so the
+        user can immediately edit the new version. The source
+        Timeline is byte/state-equivalent before/after the call (no
+        track / clip / marker / beat content of the source is
+        mutated; only the project-level active_timeline_id pointer
+        moves).
         """
         src = self._timeline(source_timeline_id)
         if not new_name or not new_name.strip():
@@ -2187,10 +2194,15 @@ class CommandLayer:
             "source_clip_count": sum(
                 1 for c in self.core.project.clips.values()
                 if c.timeline_id == src.timeline_id),
+            "active_timeline_id": self.core.project.active_timeline_id,
         }
         self.core.project.timelines.append(new_tl)
         for cid, clip in new_clips.items():
             self.core.project.clips[cid] = clip
+        # GUI-03E-4: the new duplicate becomes active. The source
+        # Timeline's tracks/clips/markers/beats are NOT mutated; only
+        # project.active_timeline_id moves.
+        self.core.project.active_timeline_id = new_id
         after = {
             "timelines": [t.timeline_id for t in self.core.project.timelines],
             "added_timeline": new_id,
@@ -2204,6 +2216,7 @@ class CommandLayer:
             "destination_clip_count": sum(
                 1 for c in self.core.project.clips.values()
                 if c.timeline_id == new_id),
+            "active_timeline_id": new_id,
         }
         self._record_lifecycle(
             "duplicate_timeline", new_id, before, after,

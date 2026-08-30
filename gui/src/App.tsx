@@ -244,11 +244,22 @@ export default function App() {
     try {
       if (mode === "duplicate") {
         const r = await api.duplicateTimeline(activeTimelineId, name);
-        // Server may have set the duplicate as active.
+        // GUI-03E-4: server has already made the duplicate active.
+        // Server is authoritative (Open Order race-safe).
         setActiveTimelineId(r.active_timeline_id);
       } else {
+        // Empty Timeline: do NOT switch to it; user explicitly
+        // creates a side-Timeline and stays on the current one
+        // for editing. The new Timeline appears as a chip in the
+        // switcher for later use.
         await api.addTimeline(name);
       }
+      // Switcher refresh; selected/playhead reset (timeline-local
+      // editor context may have shifted). This is navigation, NOT
+      // content Undo.
+      setSelected(null);
+      setSelectedSet(new Set());
+      setPlayheadFrame(0);
       setNewTimelineOpen(false);
       await refresh();
     } catch (e) {
@@ -599,6 +610,14 @@ export default function App() {
         currentTimelineName={
           project?.timelines?.find((t) => t.timeline_id === activeTimelineId)
             ?.name ?? ""
+        }
+        defaultDuplicateName={
+          // GUI-03E-4: default to "复制自 <current>"; the user can
+          // override to a semantic name (种草版 / 收割版 / ...).
+          (project?.timelines?.find((t) => t.timeline_id === activeTimelineId)
+            ?.name ?? "")
+            ? `${project?.timelines?.find((t) => t.timeline_id === activeTimelineId)?.name} 副本`
+            : "副本"
         }
         onClose={() => setNewTimelineOpen(false)}
         onSubmit={createTimeline}
