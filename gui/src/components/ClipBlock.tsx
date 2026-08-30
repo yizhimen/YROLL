@@ -663,7 +663,10 @@ if (localSnapTarget !== null) {
         {isMedia && !kindClass && width > 60 && (
           <img
             className="clip-thumb"
-            src={`/assets/${clip.asset_id}/thumbnail?t=${framesToTimecode(srcStartFrame + roundHalfAwayFromZero(sFps.den * 0.1 / sFps.num), sFps, false)}`}
+            // GUI-03R3-1 fix: server expects `t` as float SECONDS, not
+            // a SMPTE timecode string. Sample at srcRange.start + 0.1s
+            // to get a non-black frame.
+            src={`/assets/${clip.asset_id}/thumbnail?t=${(clip.source_range.start + 0.1).toFixed(3)}`}
             alt=""
             draggable={false}
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
