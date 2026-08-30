@@ -40,7 +40,12 @@ interface Props {
   onSeek: (frame: number) => void;
   onSelect: (clipId: string, viaAiZone: boolean, ctrl?: boolean) => void;
   /** Pointermove preview. `newStartFrame` is an INTEGER TimelineFrame. */
-  onDragMove: (clipId: string, newStartFrame: number) => void;
+  onDragMove: (clipId: string, newStartFrame: number, ghostSnapFrame?: number | null) => void;
+  /** GUI-03R3-1E: ghost-snap frame per active drag, keyed by clipId.
+   *  Rendered as a thin vertical line inside the clip's track-content
+   *  row at `ghostFrame * pxPerFrame`. Visual only — never modifies
+   *  the dragged clip's preview position. */
+  dragGhost?: Record<string, number | null>;
   /** Drag-end move commit. Final integer TimelineFrame (post-snap +
    *  post-clamp). If the drag also resolved a vertical-track-drop
    *  target (the pointer ended over a different track-content row),
@@ -75,6 +80,7 @@ export default function Timeline({
   snapMode = "always",
   highlightRel = false,
   onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onTrackMute, onTrackLock, onTrackHide, onAssetDrop,
+  dragGhost,
   showEmptyTracks = false,
 }: Props) {
   // GUI-03R: resolve the active Timeline once. All render-time track
@@ -366,6 +372,25 @@ export default function Timeline({
                 }}
                 data-track-content={track.track_id}
               >
+                {/* GUI-03R3-1E: visual snap-target ghost line.
+                    Rendered inside the source track's track-content
+                    row at `ghostFrame * pxPerFrame`. Visual only —
+                    never modifies the dragged clip's preview. */}
+                {dragGhost && Object.entries(dragGhost).map(([cid, ghostFrame]) => {
+                  if (ghostFrame == null) return null;
+                  // Only render in the source track's row (where the
+                  // dragged clip lives).
+                  if (project.clips[cid]?.track_id !== track.track_id) return null;
+                  return (
+                    <div
+                      key={`__ghost_${cid}`}
+                      className="clip-ghost"
+                      style={{ left: ghostFrame * pxPerF }}
+                      data-ghost-for={cid}
+                      title={`Snap target · frame ${ghostFrame}`}
+                    />
+                  );
+                })}
                 {track.clip_ids.map((cid) => {
                   const clip = project.clips[cid];
                   if (!clip) return null;

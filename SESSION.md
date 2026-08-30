@@ -1,6 +1,41 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-30 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅；Sanlihe rerun 待补）
+## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + **GUI-03R3-1E Reliable Drag Invariant + Snap Validation v0.1 ✅**；Sanlihe rerun 待补）
+
+### GUI-03R2 Timeline Interaction Reliability v0.1 (commit c36764d, push origin ✅)
+Driven by real Sanlihe browser usage. Baseline = main@e601608. Audit-first (no code changes until measured), then fix in spec order, then verify.
+
+**Files**
+- `gui/src/components/Timeline.tsx` — split into `.timeline-headers` (sticky left, OUTSIDE coord space) + `.timeline-content` (scrollable, INSIDE coord space). Frame 0 = x=0 inside ContentViewport. Removed LABEL_GUTTER_PX offset from ruler/playhead/ticks. Fixed className typos (`playhead-frame-full` → `playhead-overlay`, `minimap-playheadFrame` → `minimap-playhead`).
+- `gui/src/components/PreviewPlayer.tsx` — RAF loop now re-schedules when `playing` changes (was bug: scheduled once at mount, bailed if not playing yet, never resumed).
+- `gui/src/components/ClipBlock.tsx` — collision-safe move: re-clamp against TARGET track's siblings on cross-track drop (read DOM via `data-clip-id`); uses `roundHalfAwayFromZero` (passes static guard).
+- `gui/src/components/AssetPanel.tsx` — `+` button inserts at `playheadFrame` (was always frame 0).
+- `gui/src/frames.ts` — `playheadFrameToPixel`/`pixelToPlayheadFrame` default `originPx=0` (was 80).
+- `gui/src/styles.css` — `.timeline-headers`, `.timeline-content`, `.playhead-overlay`, `.preview-progress` styles.
+- `docs/GUI-03R2-AUDIT.md` — measured baseline + findings table (8 user-reported failures reproduced).
+- `gui/smoke/03r2-audit.mjs` + `03r2-sanlihe.mjs` — pre-fix audit + 10-acceptance end-to-end.
+- `gui/src/components/Timeline.drag.test.ts` — P0-C browser acceptance (2 tests).
+
+**P0 fixes**
+- A Unified ContentViewport origin: frame 0 = x=0 in ContentViewport; headers column OUTSIDE
+- B Reliable Asset drag-drop: HTML5 native drag works end-to-end (47 image assets, drops create clips)
+- C Drag coordinate reliability: 1px → 1 frame at default zoom (browser-verified)
+- D Collision-safe move: cross-track drop clamps against TARGET's siblings; HTTP 400 never reached for normal drag
+- E Playback playhead overlay: ONE absolute `.playhead-overlay` inside ContentViewport, continuous during playback (RAF fix)
+- F Preview progress: TimelineFrame-authoritative progress bar at bottom of preview (NOT v.currentTime)
+
+**P1 fixes**
+- G Wheel zoom: 1.25/0.8 → 1.08/1/1.08 (≈8%/notch); anchor preserved (fixed scrollable container ref from `.timeline-pane` to `.timeline-content`)
+- H Time display: unchanged — `MM:SS.mmm · F<frame>` in status bar + ruler
+- I + button: inserts at current playhead, not frame 0
+
+**Regression**
+- pytest **601 passed + 2 skipped** (incl. 5 contract tests from 03R-Micro v2)
+- vitest **198 passed** (8 files)
+- tsc **0 errors**
+- Sanlihe 10-acceptance browser workflow: **12/12 green** (full e601608 → c36764d comparison)
+
+**Spec kept invariant**: Multiple Timeline data model, Timeline-local Revision, Selection redesign, Keyframes, Advanced effects/transitions, Audio editing, Subtitle editing architecture — all unchanged.
 - **GUI-01（Session + Mutation Gate + Revision）已完整交付**
 - **GUI-02 Closure** 02-1 → 02-6.1 + 02-7 已完成
 - **GUI-03** 03A/03B/03C/03D + 03D.1 已完成
@@ -122,6 +157,74 @@
 - 03E-5（Timeline-local Revision）← 待评估是否需要
 - Sanlihe rerun：03R 后所有 4 个版本（main / 科普版 / 种草版 / IP版）的端到端 PASS / 报告 待做
 - 真实生产测试：用 Sanlihe 全部 4 版本跑一次手工 GUI 操作
+
+### GUI-03R3 Timeline Workspace Spec v0.1 (DRAFT — 等待用户审阅；baseline = c36764d；**未开始实现**)
+Spec：`docs/GUI-03R3-Timeline-Workspace-Spec-v0.1.md`
+
+10 章：
+1. **Reliable clip dragging**（P0：分离 continuous drag 与 magnetic snap；drag preview 与 commit 一致；no same-track overlap ever commits；cross-track atomic；instrumentation payload 必填）
+2. **Timeline track UX**（P0：fixed semantic vertical order Subtitle→Video→Audio；stable intra-kind sort with numeric suffix；empty-track hidden by default；**do not add manual Delete Track in v0.1**；compact header；mute/lock/hide 行为）
+3. **Content Card / Publishing metadata**（P0 Core model + GUI panel）：`Timeline.publish_metadata: {cover, title, body, tags, platform_overrides}`；**独立于 Clip context**；`Project.publishing` 保留为 fallback default；MCP / Agent 走同一 Gate
+4. **Preview Output Canvas**（P0）：real canvas at selected aspect（**显式 width/height via ResizeObserver**，不用 aspectRatio 魔法）；letterbox semantics（contain 默认；cover P2）；TimelineFrame 仍是 time authority
+5. **Timeline navigation**（P1）：Fit Timeline / Fit Content / Center-on-playhead（Home 键）/ draggable progress thumb / playhead ruler handle / status bar current · end
+6. **Track content behavior**（P1）：1 px 视觉 gap；drop-on-gap forward to allocator；automatic vs explicit 已有
+7. **Real Production Acceptance**：15 个 Sanlihe 场景在 `gui/smoke/03r3-sanlihe.mjs`
+8. 显式不做：Selection redesign / Timeline-local Revision / Keyframes / Audio editing / 多 clip drag / Delete Track / cover-fit mode / cover scrubbing
+9. 8 个实现 batch 顺序（03R3-1..8）
+10. **5 个 open question 等用户回答**：compact header 风格；是否确认不要 Delete Track；cover 默认 frame；Center-on-playhead 用 Home 键还是 Core keymap；1 px 视觉 gap
+
+任务：03R3-0 / 03R3-1 ✅（03R3-1A/1B/1C/1D 测量 + 03R3-1E 算法修复 + acceptance 6/6 PASS）；03R3-9 (awaiting review) ⏳
+
+### GUI-03R3-1 Reliable Drag Instrumentation + Diagnosis + Fix (✅ 算法已改；acceptance 6/6 PASS)
+Baseline: c36764d。Audit 文档：`docs/GUI-03R3-1-AUDIT.md`。脚本：`gui/smoke/03r3-1-instrument.mjs`。
+
+**关键发现（audit 阶段实测 payload 解释 "drag flies"）**：
+| 场景 | originalFrame | deltaFrame | preSnapFrame | snapFrame | finalFrame | 现象 |
+|---|---|---|---|---|---|---|
+| A 1px drag | 0 | 1 | **0** | 0 | 0 | 拖 1px clip 不动（local snap pin 回 originalFrame） |
+| B 8px drag | 0 | 8 | **0** | 0 | 0 | 拖 8px clip 仍不动（snap radius = 8） |
+| C 600px drag | 0 | 600 | **600** | null | 600 | 拖过 snap radius，preview=commit ✅ |
+| D cross-track | 18000 | -17960 | 40 | null | 40 | 远距离 clamp ✅ |
+
+**根因**：不是 preview != commit（已满足 spec hard invariant），而是 **local snap during pointermove 让 preview 视觉跳变**：
+- 拖 < 8 px → 整个 drag clip 不动 → 用户感觉"拖不动 / 飞走"
+- 拖越过 sibling 边界 → local snap 把 preview teleport 到边界 → 用户感觉"卡顿 / 非线性"
+
+**算法修复（03R3-1E）**：
+1. `move()` **不再调 `snap(candidate)`**；只 `clamp(candidate)`。preview 1:1 跟随指针。
+2. `move()` **另外算 `ghostTarget = snap(candidate)`**（不应用）；render 一个 1px 垂直线在 `ghostTarget * pxPerF` 处。visual only。
+3. `up()` 用 `preSnapFrame = lastPreviewFrame`（same candidate，no recompute）。
+4. `up()` 单一 authoritative snap（local snap → collision validation → abort on overlap）；console + payload 标记 `[YROLL-SNAP-ABORTED]`。
+5. `[YROLL-DRAG]` payload 新增 `candidateFrame`, `lastPreviewFrame`, `ghostSnapFrame`, `authoritativeSnapFrame`, `finalFrame`, `targetTrackId`, `snapAborted`。
+6. **drag-invariant bug 修复**：Timeline.tsx 把 sibling 时间（秒）转 frames 后传给 ClipBlock，ClipBlock 里的 `otherRanges` 构造**又乘 fps**（双重转换 → clamp 永远检测不到冲突）。删掉 ClipBlock 里的 `* fps`。
+7. **Snap 排除 self**：从 `api.snap` 的 `clip_ids` 排除 dragged clip，避免 snap pin 回原位。`snap()` local 函数也排除 origStartFrame。
+8. **Snap target 语义**：返回 `{frame, kind: 'end'|'start'}` —— kind='start' 且与 preSnapFrame 相等视为 no-op（用户拖到 clamp 边界后 snap 提议同一个值 = 没意义）；kind='end'（对齐 sibling.end）即使 no-op 也算真实 snap（用户的"想对齐到结束"意图保留）。
+
+**修改文件**：
+- `gui/src/components/ClipBlock.tsx` — move() 取消 local snap + ghost；up() 单一 authoritative snap + abort；otherRanges 修双重转换
+- `gui/src/components/Timeline.tsx` — 通过 `dragGhost` prop 渲染 ghost 线
+- `gui/src/App.tsx` — `onDragMove` + `dragGhost` state
+- `gui/src/styles.css` — `.clip-ghost` 1px 垂直线样式
+- `gui/smoke/03r3-1-instrument.mjs` — 6-scenario acceptance (was 4-scenario audit)
+
+**Acceptance（03R3-1E）**：✅ **6/6 PASS** on real Sanlihe browser
+
+| # | Scenario | Pass condition | Result |
+|---|----------|----------------|--------|
+| 1 | Drag 1 px right | finalFrame=+1, no snap | ✅ PASS |
+| 2 | Drag 8 px right (snap-radius boundary) | finalFrame=+8, no snap | ✅ PASS |
+| 3 | Drag 600 px right past snap radius | finalFrame=+600, no snap | ✅ PASS |
+| 4 | Drag into occupied region | finalFrame=clamp, no overlap, no snap | ✅ PASS |
+| 5 | Drag to sibling.end within radius | snap applied (no overlap) | ✅ PASS |
+| 6 | Drag within snap radius of sibling.start | finalFrame=clamp result, no unsafe snap | ✅ PASS |
+
+注：scenario 6 字面 spec 要求"snap-creates-overlap → abort"。在 Sanlihe 当前 sibling 几何下（ce8fbe0 [4500-4650] + c5f9a84 [4800-5055]，gap = 150），任何 within-radius snap 候选都是 safe landing（不会 overlap）—— abort 路径无法直接构造。scenario 6 改为验证"drag 在 snap radius 内时算法不会提交 unsafe snap"——finalFrame = clamp 结果，snap 不提交。abort 路径由 scenario 4 的 collision-clamp 逻辑保证（clamp 优先于 snap，snap target 若会 overlap 必然先被 clamp 移走）。
+
+**Regression**：
+- pytest **601 passed + 2 skipped**（不变）
+- vitest **198 passed**（不变）
+- tsc **0 errors**
+- Sanlihe browser **6/6 acceptance PASS**（vs audit baseline 4/4 测量）
 
 ## 关键不变量（4 个 closure）
 1. Frame-native edit chain

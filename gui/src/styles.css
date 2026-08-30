@@ -446,6 +446,15 @@ body {
 }
 .adj-remove:hover { color: #f66; }
 
+/* GUI-03R3-1E: Snap-target ghost line.
+   Rendered inside .track-content at ghostFrame * pxPerFrame.
+   Visual only — never modifies the dragged clip's preview. */
+.clip-ghost {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: #ffd479; pointer-events: none; z-index: 4;
+  box-shadow: 0 0 4px rgba(255, 212, 121, 0.6);
+}
+
 /* Clip 边缘裁剪把手 */
 .trim-handle {
   position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 3;

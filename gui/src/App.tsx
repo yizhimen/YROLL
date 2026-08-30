@@ -305,6 +305,13 @@ export default function App() {
     return () => sessionStore.stopPolling();
   }, []);
 
+  // GUI-03R3-1A: drag payload log sink. The smoke script reads it
+  // back via page.evaluate(...). Reset on each mount so tests
+  // start with an empty log.
+  useEffect(() => {
+    (window as unknown as { __yrollDragLog?: unknown[] }).__yrollDragLog = [];
+  }, []);
+
   // 时间轴 seek → 预览跟随（PreviewPlayer 按模式映射源时间/成片时间）
   const seek = (t: number) => {
     setPlayheadFrame(Math.max(0, t));
@@ -488,10 +495,21 @@ export default function App() {
   // authoritative /snap call + commit happens in ClipBlock's pointerup
   // handler via onMoveCommit. App.tsx tracks the preview for any
   // overlay rendering that depends on the in-flight position.
+  // GUI-03R3-1E: optional second arg is the visual ghost-snap
+  // target (TimelineFrame). It is used to render a thin snap line
+  // in the track-content row during drag — it NEVER modifies the
+  // dragged clip's preview position.
   const [dragPreview, setDragPreview] = useState<Record<string, number>>({});
-  const onDragMove = (clipId: string, newStartFrame: number) => {
-    // newStartFrame is an INTEGER TimelineFrame (post local-snap).
+  const [dragGhost, setDragGhost] = useState<Record<string, number | null>>({});
+  const onDragMove = (
+    clipId: string,
+    newStartFrame: number,
+    ghostSnapFrame: number | null = null,
+  ) => {
+    // newStartFrame is an INTEGER TimelineFrame (post clamp; snap
+    // is NEVER applied during drag — ghost is visual only).
     setDragPreview((p) => ({ ...p, [clipId]: newStartFrame }));
+    setDragGhost((p) => ({ ...p, [clipId]: ghostSnapFrame }));
   };
   // commitDrag is no longer needed — ClipBlock calls onMoveCommit
   // directly on pointerup. Kept as a no-op for backward compatibility
@@ -1290,6 +1308,7 @@ export default function App() {
           setSelected(id);
         }}
         onDragMove={onDragMove}
+        dragGhost={dragGhost}
         onMoveCommit={(clipId, newStartFrame, newTrackId) => {
           // GUI-03R: if a vertical-track-drop target was resolved by
           // the drag, perform ONE transactional move (new timeline
