@@ -92,7 +92,7 @@ export default function NewTimelineDialog({
       data-testid="new-timeline-dialog"
       role="dialog"
       aria-modal="true"
-      aria-label="新增时间线"
+      aria-label="新增版本"
       style={{
         position: "fixed",
         inset: 0,
@@ -127,7 +127,7 @@ export default function NewTimelineDialog({
             marginBottom: 12,
           }}
         >
-          <h3 style={{ margin: 0, fontSize: 15 }}>新增时间线</h3>
+          <h3 style={{ margin: 0, fontSize: 15 }}>新增版本</h3>
           <button
             onClick={onClose}
             aria-label="关闭"
@@ -194,7 +194,7 @@ export default function NewTimelineDialog({
               checked={mode === "empty"}
               onChange={() => setMode("empty")}
             />
-            空时间线
+            空版本
           </label>
           <label
             style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}

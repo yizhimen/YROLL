@@ -195,6 +195,35 @@ export function framesToTimecode(
   return `${pad(hh)}:${pad(mm)}:${pad(ss)}${sep}${pad(ff)}`;
 }
 
+/** GUI-03R: ruler-friendly seconds display. Returns `MM:SS.mmm`
+ *  where `.mmm` is the sub-second fraction in milliseconds (3-digit
+ *  precision). Drops the HH field because editor content rarely
+ *  exceeds an hour; for very long projects, the caller can prefix
+ *  with an hours component.
+ *
+ *  The trailing field is **milliseconds**, not a frame field — even
+ *  though both share the same display width. The companion
+ *  `frameRulerLabel` returns the frame number for precise zoom. */
+export function frameToRulerSeconds(
+  frame: number,
+  fps: Rational,
+): string {
+  if (frame < 0) throw new Error(`frame must be non-negative, got ${frame}`);
+  const totalSeconds = frame * fps.den / fps.num;
+  const mm = Math.floor(totalSeconds / 60);
+  const ss = Math.floor(totalSeconds) % 60;
+  const mmm = Math.round((totalSeconds - Math.floor(totalSeconds)) * 1000);
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const pad3 = (n: number) => String(n).padStart(3, "0");
+  return `${pad2(mm)}:${pad2(ss)}.${pad3(mmm)}`;
+}
+
+/** GUI-03R: precise-zoom companion label, e.g. `F372`. Pure frame
+ *  integer; consumers concat after the seconds label. */
+export function frameRulerLabel(frame: number): string {
+  return `F${Math.round(frame)}`;
+}
+
 /** Inverse of `framesToTimecode`. Mirrors `yroll.core.timebase.from_timecode`.
  *
  * Round-trip is exact for both NDF and DF (bijective). For DF at

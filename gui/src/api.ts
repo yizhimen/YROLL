@@ -130,11 +130,18 @@ export interface TimelinesResponse {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
   const r = await fetch(path, {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
-  if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
+  if (!r.ok) {
+    // GUI-03R: surface METHOD + path + status + server detail so a
+    // refused write is never silent (the previous "404" only told
+    // the user a number, not which call failed).
+    const detail = await r.text();
+    throw new Error(`${method} ${path} → ${r.status} ${r.statusText} | ${detail}`);
+  }
   return r.json();
 }
 
@@ -210,7 +217,10 @@ async function gated<R>(path: string, init: RequestInit): Promise<R> {
       sessionStore.noteGateError(kind, detail);
       throw new GateRejection(kind, r.status, detail);
     }
-    throw new Error(`${r.status}: ${detail}`);
+    // GUI-03R: same shape as the read path — METHOD + path → status
+    // + server detail.
+    const method = (init.method ?? "GET").toUpperCase();
+    throw new Error(`${method} ${path} → ${r.status} ${r.statusText} | ${detail}`);
   }
 
   await syncRevision();

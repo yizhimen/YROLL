@@ -4,6 +4,7 @@ import { sessionStore } from "./session";
 import { useProjectSequence } from "./sequence";
 import { useCoreKeymap } from "./keymap";
 import {
+  frameToRulerSeconds,
   framesToTimecode,
   pxPerFrame,
   roundHalfAwayFromZero,
@@ -70,7 +71,9 @@ export default function App() {
   const [playheadFrame, setPlayheadFrame] = useState(0);
   // pxPerSec is the *perceived* px-per-second (stable across FPS).
   // Internally we anchor in frames: pxPerFrame = pxPerSec * fps.den/fps.num.
-  const [pxPerSec, setPxPerSec] = useState(12);
+  // GUI-03R: default 30 px/sec — at 30 fps that's ~1 px/frame, the
+  // frame-native feel. User can still zoom via the slider (4-60).
+  const [pxPerSec, setPxPerSec] = useState(30);
   // Sequence (canonical timebase) from /sequence
   const seq = useProjectSequence();
   // Core keymap (semantic binding) from /keyboard/keymap
@@ -215,7 +218,7 @@ export default function App() {
     } catch (e) {
       // Roll back on failure.
       setActiveTimelineId(previous);
-      setStatus({ ok: false, text: `切时间线失败：${e}` });
+      setStatus({ ok: false, text: `切版本失败：${e}` });
     }
   };
 
@@ -231,7 +234,7 @@ export default function App() {
       setPlayheadFrame(0);
       await refresh();
     } catch (e) {
-      setStatus({ ok: false, text: `删除时间线失败：${e}` });
+      setStatus({ ok: false, text: `删除版本失败：${e}` });
     }
   };
 
@@ -263,7 +266,7 @@ export default function App() {
       setNewTimelineOpen(false);
       await refresh();
     } catch (e) {
-      setStatus({ ok: false, text: `新增时间线失败：${e}` });
+      setStatus({ ok: false, text: `新增版本失败：${e}` });
     }
   };
 
@@ -281,6 +284,16 @@ export default function App() {
     // Intentionally only re-run when the project object changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
+
+  // GUI-03R: helper for the active path. The deprecated
+  // `project.timeline` (singular) alias is still served by Core for
+  // legacy compatibility but reads of it from the active editing path
+  // are forbidden (03E-3 spec + 03R). All new call sites must go
+  // through this helper.
+  const activeTimeline = project?.timelines?.find(
+    (tl) => tl.timeline_id === activeTimelineId,
+  ) ?? project?.timelines?.[0];
+  const activeTimelineTracks = activeTimeline?.tracks ?? [];
 
   // GUI-01: session lifecycle. initLocal() restores our sessionId from
   // localStorage; startPolling() reconciles owner/revision/conflict against
@@ -519,6 +532,9 @@ export default function App() {
       <div className="topbar">
         <span className="title">YROLL AI</span>
         <span>{project.name}</span>
+        {/* GUI-03R: EditLease (Project-level) lives in the header as
+            a compact badge; controls revealed on click. */}
+        <EditLease />
         {project.intent?.goal && <span className="goal">目标：{project.intent.goal}</span>}
         <span style={{ flex: 1 }} />
         <span style={{ position: "relative" }}>
@@ -554,7 +570,7 @@ export default function App() {
         </span>
         <label style={{ color: "#888" }}>缩放</label>
         <input
-          type="range" min={4} max={60} step={1} value={pxPerSec}
+          type="range" min={4} max={120} step={1} value={pxPerSec}
           onChange={(e) => setPxPerSec(Number(e.target.value))}
           style={{ width: 100 }}
         />
@@ -597,7 +613,6 @@ export default function App() {
         <button onClick={() => run(() => api.commit("GUI 手动存档"), "已存版本")}>存版本</button>
       </div>
 
-      <EditLease />
       <TimelineSwitcher
         projectRevision={project?.sequence?.project_revision ?? 0}
         activeTimelineId={activeTimelineId}
@@ -706,7 +721,7 @@ export default function App() {
         onAddSubtitle={() => {
           // 优先编辑已有字幕（如果 playheadFrame 在某字幕 clip 上），否则新建
           const selClip = project.clips[selected ?? ""];
-          if (selClip && project.timeline.tracks.find((t) => t.track_id === selClip.track_id)?.kind === "text"
+          if (selClip && activeTimelineTracks.find((t) => t.track_id === selClip.track_id)?.kind === "text"
               && playheadFrame >= selClip.timeline_range.start && playheadFrame < selClip.timeline_range.end) {
             setSubtitleEdit({
               clipId: selClip.clip_id,
@@ -725,7 +740,7 @@ export default function App() {
               style: {} as unknown as Record<string, unknown>,
               start: s,
               end: e,
-              track_id: (project.timeline.tracks.find((t) => t.kind === "text") ?? { track_id: "t1" }).track_id,
+              track_id: (activeTimelineTracks.find((t) => t.kind === "text") ?? { track_id: "t1" }).track_id,
             });
           }
           setSelRange(null);
@@ -740,7 +755,7 @@ export default function App() {
 
       <div className="main">
         <div className="asset-pane" style={{ width: assetW }}>
-          <AssetPanel project={project} onChanged={refresh} onStatus={(ok, text) => setStatus({ ok, text })}
+          <AssetPanel project={project} activeTimelineId={activeTimelineId} onChanged={refresh} onStatus={(ok, text) => setStatus({ ok, text })}
             onPreview={(assetId) => {
               const a = project.assets.find((x) => x.asset_id === assetId);
               if (!a) return;
@@ -768,7 +783,7 @@ export default function App() {
             onAspect={setAspect}
             timelineId={activeTimelineId}
           />
-          {previewVersion > 0 && clip && project.timeline.tracks
+          {previewVersion > 0 && clip && activeTimelineTracks
             .filter((t) => t.kind === "video").slice(1)
             .some((t) => t.clip_ids.includes(clip.clip_id)) && (
             <div
@@ -870,7 +885,7 @@ export default function App() {
               <button
                 onClick={() => {
                   // 目标 = 播放头所在的主视频轨 clip（框的就是眼前这段）
-                  const vtrack = project.timeline.tracks.find((t) => t.kind === "video");
+                  const vtrack = activeTimelineTracks.find((t) => t.kind === "video");
                   const target = vtrack?.clip_ids
                     .map((id) => project.clips[id])
                     .find((c) => c && playheadFrame >= c.timeline_range.start && playheadFrame <= c.timeline_range.end);
@@ -996,7 +1011,7 @@ export default function App() {
                 />
                 <span>{clip.speed}x</span>
               </div>
-              {project.timeline.tracks
+              {activeTimelineTracks
                 .filter((t) => t.kind === "video").slice(1)
                 .some((t) => t.clip_ids.includes(clip.clip_id)) && (
                 <>
@@ -1206,7 +1221,7 @@ export default function App() {
           <button
             onClick={() => {
               // 范围音量作用于播放头下/选中的 clip（不必先 Split，蓝图 §2.4）
-              const target = clip ?? project.timeline.tracks
+              const target = clip ?? activeTimelineTracks
                 .find((t) => t.kind === "video")?.clip_ids
                 .map((id) => project.clips[id])
                 .find((c) => c && selRange[0] < c.timeline_range.end && selRange[1] > c.timeline_range.start);
@@ -1273,8 +1288,21 @@ export default function App() {
           setSelected(id);
         }}
         onDragMove={onDragMove}
-        onMoveCommit={(clipId, newStartFrame) =>
-          run(() => api.move(clipId, newStartFrame, "GUI 拖动"), "已移动")}
+        onMoveCommit={(clipId, newStartFrame, newTrackId) => {
+          // GUI-03R: if a vertical-track-drop target was resolved by
+          // the drag, perform ONE transactional move (new timeline
+          // start frame + target track in a single API). Previously
+          // the parent would commit the frame first and then
+          // dispatch a separate track move, leaving a brief window
+          // where the clip lived on the wrong track.
+          if (newTrackId) {
+            run(() => api.move(clipId, newStartFrame, "GUI 跨轨拖动",
+                  newTrackId), "已跨轨移动");
+            return;
+          }
+          run(() => api.move(clipId, newStartFrame, "GUI 拖动"),
+              "已移动");
+        }}
         onZoomPx={setPxPerSec}
         onRangeSelect={setSelRange}
         // Trim receives integer SOURCE FRAMES from ClipBlock; api.trim
@@ -1284,16 +1312,10 @@ export default function App() {
         onAssetDrop={(assetId, trackId, t) => {
           const a = project.assets.find((x) => x.asset_id === assetId);
           if (!a) return;
-          // 图片默认 5 秒（CapCut 行为：单帧当静帧用，可加 Ken Burns）
-          const DEFAULT_IMG_DUR = 5;
-          const isVideo = a.type === "video" || a.type === "audio";
-          const dur = a.identity.duration_sec ?? (isVideo ? 0 : DEFAULT_IMG_DUR);
-          if (!dur) {
-            setStatus({ ok: false, text: "该素材无时长，不能上时间轴" });
-            return;
-          }
           // 类型校验：图片只能上 V 轨，音频只能上 A 轨，字幕只能上 T 轨
-          const track = project.timeline.tracks.find((x) => x.track_id === trackId);
+          const track = project.timelines
+            ?.find((tl) => tl.timeline_id === activeTimelineId)
+            ?.tracks.find((x) => x.track_id === trackId);
           if (track) {
             if (a.type === "image" && track.kind !== "video") {
               setStatus({ ok: false, text: "图片只能放到视频轨（V1/V2/V3）" });
@@ -1304,26 +1326,57 @@ export default function App() {
               return;
             }
           }
-          // 找最近的空隙（剪映/Premiere 行为：落点冲突就推到最近可用空隙）
-          const otherClips = track ? project.clips : null;
-          let placement = t;
-          if (otherClips) {
-            const occupied = track!.clip_ids
+          if (a.type === "image") {
+            // GUI-03R: image assets take a frame-native path through
+            // /clips/add_image — no set_speed, no duration-as-seconds
+            // hack. Default 5s @ active fps.
+            const fps = seq.fps;
+            const DEFAULT_IMG_DUR_SEC = 5;
+            const durFrames = Math.round(
+              DEFAULT_IMG_DUR_SEC * fps.num / fps.den);
+            const occupied = (track?.clip_ids ?? [])
               .map((cid) => project.clips[cid])
               .filter(Boolean)
-              .map((c) => ({ start: c.timeline_range.start, end: c.timeline_range.end }))
+              .map((c) => ({ start: c.timeline_range.start,
+                             end: c.timeline_range.end }))
               .sort((a, b) => a.start - b.start);
             const findFree = (want: number) => {
               let cur = Math.max(0, want);
               for (const r of occupied) {
-                if (cur + dur <= r.start) return cur;            // 落在 r 之前
-                if (cur < r.end) cur = r.end;                     // 推到 r 之后
+                if (cur + durFrames <= r.start) return cur;
+                if (cur < r.end) cur = r.end;
               }
               return cur;
             };
-            placement = findFree(t);
+            const placement = findFree(t);
+            run(() => api.addImageClip(assetId, placement, durFrames,
+                trackId, "GUI 拖入图片"),
+              `${a.path.split(/[\/]/).pop()} 已放到 F${placement}（${durFrames}f）`);
+            return;
           }
-          run(() => api.addClip(assetId, 0, dur, placement, trackId, "GUI 拖入时间轴"),
+          // video / audio → /clips (seconds-based)
+          const dur = a.identity.duration_sec;
+          if (!dur) {
+            setStatus({ ok: false, text: "该素材无时长，不能上时间轴" });
+            return;
+          }
+          const occupied = (track?.clip_ids ?? [])
+            .map((cid) => project.clips[cid])
+            .filter(Boolean)
+            .map((c) => ({ start: c.timeline_range.start,
+                           end: c.timeline_range.end }))
+            .sort((a, b) => a.start - b.start);
+          const findFree = (want: number) => {
+            let cur = Math.max(0, want);
+            for (const r of occupied) {
+              if (cur + dur <= r.start) return cur;
+              if (cur < r.end) cur = r.end;
+            }
+            return cur;
+          };
+          const placement = findFree(t);
+          run(() => api.addClip(assetId, 0, dur, placement, trackId,
+              "GUI 拖入时间轴"),
             `${a.path.split(/[\/]/).pop()} 已放到 ${placement.toFixed(1)}s（${dur.toFixed(1)}s）`);
         }}
         onTrackLock={(trackId, locked) =>
@@ -1335,12 +1388,6 @@ export default function App() {
         onTrackMute={(trackId, muted) =>
           run(() => api.setTrackMuted(trackId, muted, "GUI 轨道静音"),
             muted ? `轨道 ${trackId} 已静音` : `轨道 ${trackId} 已取消静音`)}
-        onDropOnTrack={(clipId, trackId) => {
-          const c = project.clips[clipId];
-          if (!c) return;
-          run(() => api.move(clipId, c.timeline_range.start, "GUI 竖向拖轨", trackId),
-            `已移到轨道 ${trackId}`);
-        }}
       />
 
       {workspaceClip && project.clips[workspaceClip] && (
@@ -1431,7 +1478,12 @@ export default function App() {
 
       <div className="statusbar">
         <span className={status.ok ? "ok" : "err"}>{status.text}</span>
-        <span>播放头 {playheadFrame.toFixed(1)}s</span>
+        {/* GUI-03R: playhead status exposes BOTH elapsed time
+            (MM:SS.mmm, milliseconds) AND the canonical frame
+            integer. The .mmm field is ms, NOT a frame field. */}
+        <span data-testid="playhead-status">
+          播放头 {frameToRulerSeconds(playheadFrame, seq.fps)} · F{playheadFrame}
+        </span>
         <span>{Object.keys(project.clips).length} clips</span>
       </div>
 

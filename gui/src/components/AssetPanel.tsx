@@ -5,6 +5,7 @@ import { api, Project } from "../api";
 
 interface Props {
   project: Project;
+  activeTimelineId: string;
   onChanged: () => Promise<void>;
   onStatus: (ok: boolean, text: string) => void;
   onPreview: (assetId: string) => void;
@@ -18,7 +19,7 @@ function baseName(p: string) {
   return p.split(/[\\/]/).pop() || p;
 }
 
-export default function AssetPanel({ project, onChanged, onStatus, onPreview }: Props) {
+export default function AssetPanel({ project, activeTimelineId, onChanged, onStatus, onPreview }: Props) {
   const [filter, setFilter] = useState("");
   const importFiles = async (files: FileList) => {
     try {
@@ -37,31 +38,54 @@ export default function AssetPanel({ project, onChanged, onStatus, onPreview }: 
   const addToTimeline = async (assetId: string, mode: "matched" | "overlay") => {
     const asset = project.assets.find((a) => a.asset_id === assetId);
     if (!asset) return;
-    const dur = asset.identity.duration_sec;
-    if (!dur) {
-      onStatus(false, "该素材无时长的（暂不支持图片/文档上时间轴）");
-      return;
-    }
     try {
       let track;
+      // Resolve target track via the active Timeline (NOT the
+      // deprecated project.timeline alias).
+      const tl = project.timelines?.find(
+        (tl) => tl.timeline_id === activeTimelineId)
+        ?? project.timelines?.[0];
+      const tlTracks = tl?.tracks ?? project.timeline.tracks;
       if (mode === "overlay") {
         // 新建叠加轨（v2/v3…）：PiP/B-roll 专用
-        const vTracks = project.timeline.tracks.filter((t) => t.kind === "video");
+        const vTracks = tlTracks.filter((t) => t.kind === "video");
         track = await api.addTrack("video", `v${vTracks.length + 1}`);
       } else {
         const kind = asset.type === "audio" ? "audio" : "video";
-        track = project.timeline.tracks.find((t) => t.kind === kind);
+        track = tlTracks.find((t) => t.kind === kind);
         if (!track) {
           // 同类轨不存在就建（修：音频不再错落到视频轨）
           track = await api.addTrack(kind, kind === "audio" ? "a1" : "v1");
         }
       }
-      const tlStart = Math.max(
-        0,
-        ...track.clip_ids.map((id) => project.clips[id]?.timeline_range.end ?? 0)
-      );
-      await api.addClip(assetId, 0, dur, tlStart, track.track_id,
-        mode === "overlay" ? "素材库加入（叠加轨）" : "素材库加入");
+      if (asset.type === "image") {
+        // GUI-03R: image goes through the frame-native
+        // /clips/add_image endpoint. No set_speed, no seconds-as-
+        // duration hack. Default 5 seconds @ the project's sequence
+        // fps.
+        const fps = project.sequence?.fps ?? { num: 30, den: 1 };
+        const DEFAULT_IMG_DUR_SEC = 5;
+        const durFrames = Math.round(
+          DEFAULT_IMG_DUR_SEC * fps.num / fps.den);
+        const tlStart = Math.max(
+          0,
+          ...track.clip_ids.map((id) => project.clips[id]?.timeline_range.end ?? 0)
+        );
+        await api.addImageClip(assetId, tlStart, durFrames, track.track_id,
+          mode === "overlay" ? "素材库加入（叠加轨）" : "素材库加入");
+      } else {
+        const dur = asset.identity.duration_sec;
+        if (!dur) {
+          onStatus(false, "该素材无时长，不能上时间轴");
+          return;
+        }
+        const tlStart = Math.max(
+          0,
+          ...track.clip_ids.map((id) => project.clips[id]?.timeline_range.end ?? 0)
+        );
+        await api.addClip(assetId, 0, dur, tlStart, track.track_id,
+          mode === "overlay" ? "素材库加入（叠加轨）" : "素材库加入");
+      }
       await onChanged();
       onStatus(true, `${baseName(asset.path)} 已加到 ${track.track_id}`);
     } catch (e) {

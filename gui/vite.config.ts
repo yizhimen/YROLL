@@ -19,14 +19,25 @@ export default defineConfig({
     proxy: {
       // /ws 是 WebSocket，必须显式声明（正则不会透传 ws）
       "/ws": { target: apiProxyTarget, ws: true },
-      // Catch-all: any non-asset request goes to FastAPI. Vite's
-      // own middleware serves files it can match (e.g. /assets/...,
-      // /@vite/...) before this proxy runs, so the SPA shell only
-      // falls through when nothing else matched — i.e. an API
-      // request. The root `/` is bypassed so Vite serves its own
-      // index.html (with /src/main.tsx). Without this bypass the
-      // catch-all forwards `/` to FastAPI which returns 404.
-      "^/(?!(@vite|@react-refresh|node_modules|src/|assets/|favicon))": {
+      // Catch-all: most non-source requests go to FastAPI. Vite's
+      // own middleware serves files it can match (e.g. /@vite/...)
+      // before this proxy runs, so the SPA shell only falls through
+      // when nothing else matched — i.e. an API request. The root
+      // `/` is bypassed so Vite serves its own index.html (with
+      // /src/main.tsx). Without this bypass the catch-all forwards
+      // `/` to FastAPI which returns 404.
+      //
+      // 03R fix: do NOT exclude `/assets/*` here. The /assets/import
+      // endpoint (and friends) lives under that prefix; excluding
+      // the whole prefix would make Vite proxy POST /assets/import
+      // to its SPA fallback (HTML) and the browser would JSON.parse
+      // fail. Vite-served static assets live under /@vite/... and
+      // /node_modules/...; there is no gui/public/ or gui/src/assets/
+      // directory, so excluding `assets/` from the proxy was always
+      // wrong — it was just coincidence that the few existing
+      // /assets/{id}/file etc. endpoints happened to work via the
+      // FastAPI direct connection. Now they proxy through correctly.
+      "^/(?!(@vite|@react-refresh|node_modules|src/|favicon))": {
         target: apiProxyTarget,
         changeOrigin: true,
         bypass: (req) => {

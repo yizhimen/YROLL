@@ -157,7 +157,9 @@ export default function PreviewPlayer({
   // Find the clip covering the current playheadFrame (TimelineFrame
   // integer). The find is over the project's clip list — no time
   // math beyond the half-open interval check.
-  const vtrack = project.timeline.tracks.find((t) => t.kind === "video");
+  const vtrack = (project.timelines?.find(
+    (tl) => tl.timeline_id === project.active_timeline_id,
+  ) ?? project.timelines?.[0])?.tracks.find((t) => t.kind === "video");
   const clips = (vtrack?.clip_ids ?? [])
     .map((id) => project.clips[id])
     .filter(Boolean)
@@ -292,10 +294,12 @@ export default function PreviewPlayer({
     }
   };
 
-  const audioNow = mode === "instant" ? project.timeline.tracks
+  const audioNow = mode === "instant" ? ((project.timelines?.find(
+    (tl) => tl.timeline_id === project.active_timeline_id,
+  ) ?? project.timelines?.[0])?.tracks
     .filter((t) => t.kind === "audio" && !t.muted)
     .flatMap((t) => t.clip_ids)
-    .map((id) => project.clips[id])
+    .map((id) => project.clips[id]) ?? [])
     .filter((c) => c && !c.context?.muted
       && playheadFrame >= c.timeline_range.start && playheadFrame < c.timeline_range.end)
     : [];

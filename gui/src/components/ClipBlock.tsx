@@ -87,9 +87,17 @@ interface Props {
    *  TimelineFrame. The parent uses this for visual feedback only;
    *  the authoritative commit happens via onMoveCommit. */
   onDragMove: (clipId: string, newTimelineStartFrame: number) => void;
-  /** Drag-end move commit. The final TimelineFrame (post-snap) is
-   *  passed; the parent forwards to `api.move`. */
-  onMoveCommit: (clipId: string, newTimelineStartFrame: number) => void;
+  /** Drag-end move commit. The final TimelineFrame (post-snap +
+   *  post-clamp) is passed; the parent forwards to `api.move`. If
+   *  the drag also resolved a vertical-track-drop target (the
+   *  pointer ended over a different track-content row), the new
+   *  track id is passed too — the parent performs ONE transactional
+   *  move (frame + track) instead of two. */
+  onMoveCommit: (
+    clipId: string,
+    newTimelineStartFrame: number,
+    targetTrackId?: string,
+  ) => void;
   /** Trim commit. `srcStartFrame` / `srcEndFrame` are integer
    *  SourceFrame values (NOT seconds). Either may be null meaning
    *  "don't change this edge". */
@@ -319,14 +327,16 @@ export default function ClipBlock({
       } catch {
         // Snap is best-effort; commit the unsnapped frame on error.
       }
-      // Track-drop is orthogonal; the parent decides via onDropOnTrack.
-      onMoveCommit(clip.clip_id, finalFrame);
+      // GUI-03R: snap can land on a frame that re-introduces an
+      // overlap. Re-clamp AFTER snap, so the snap cannot commit
+      // overlap. Then resolve the track-drop target (if any) and
+      // dispatch a SINGLE onMoveCommit that carries both the frame
+      // and the target track. No two-step mutation.
+      finalFrame = clamp(finalFrame);
       const row = document.elementsFromPoint(ev.clientX, ev.clientY)
         .find((el) => (el as HTMLElement).dataset?.trackId) as HTMLElement | undefined;
       const tid = row?.dataset.trackId;
-      if (tid && tid !== clip.track_id && onDropOnTrack) {
-        onDropOnTrack(clip.clip_id, tid);
-      }
+      onMoveCommit(clip.clip_id, finalFrame, tid);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);

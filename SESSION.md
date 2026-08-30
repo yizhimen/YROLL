@@ -1,6 +1,6 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-30 GUI-03E-3 + 03E-4 ✅ 已交付；03E-5 / 真实生产测试 待办）
+## 当前状态（2026-08-30 GUI-03R ✅ Production Reality Repair v0.1；Sanlihe rerun 待补）
 - **GUI-01（Session + Mutation Gate + Revision）已完整交付**
 - **GUI-02 Closure** 02-1 → 02-6.1 + 02-7 已完成
 - **GUI-03** 03A/03B/03C/03D + 03D.1 已完成
@@ -34,8 +34,8 @@
     - Project-level Lease + Project-level Revision 不变
   - **Completion criterion verified**: Sanlihe-style scenario（Full → Seed → mutate Seed → Full byte-equivalent）已端到端跑通；597 passed + 1 skipped
 - 沙盒工程：`projects/sanlihe-slice-30s/`
-- Core 测试：**597 passed + 1 skipped**（含 14 migration + 14 safety + 8 switcher + **8 新 duplicate isolation**）
-- GUI 测试：**181 vitest**（03E-4 未新增 GUI 测试 — duplicate semantics 在 Core 层，03E-4-E 8 个 Python 测试覆盖 invariant）
+- Core 测试：**597 passed + 2 skipped**（含 14 migration + 14 safety + 8 switcher + 8 duplicate isolation + gui_static_hosting skip-when-no-dist）
+- GUI 测试：**191 vitest**（03E-4 不增 GUI 测试；03R +11 tests in frames.test.ts）
 
 ### GUI-03E 计划（用户已确认）
 拆 5 个小 batch：
@@ -111,12 +111,14 @@
 - 新媒体/编辑功能
 
 ### 待办
-- 03E-1（Schema/migration）✅
-- 03E-2A（Pragmatic Safe Scoping）✅
-- 03E-3（GUI Timeline Context UX）✅
-- **03E-4（Duplicate / Many Cuts）✅ — "复制为新版本" workflow + 8 isolation tests + Sanlihe completion criterion verified**
-- **03E-5（Timeline-local Revision）← 下一 batch**：spec 推 Project revision 已经够；如要 Timeline-local diff UI，在 03E-5 推进
-- 真实生产测试：拿《三里河·陶鬶》做完整版 + 种草版 两条 timeline（已经在测试里以 Sanlihe-style scenario 端到端验证）
+- 03E-1 ✅
+- 03E-2A ✅
+- 03E-3 ✅
+- 03E-4 ✅
+- **03R ✅ — Production Reality Repair v0.1 (P0+P1, no new features)** — image drag → addImageClip；/assets/import 404 fix；overlap prevention；cross-track atomic；EditLease in Project header；用户视角"时间线"→"版本"；ruler seconds+frame；default zoom 30 px/sec；project.timeline reads replaced；error UX method/path/status/detail
+- 03E-5（Timeline-local Revision）← 待评估是否需要
+- Sanlihe rerun：03R 后所有 4 个版本（main / 科普版 / 种草版 / IP版）的端到端 PASS / 报告 待做
+- 真实生产测试：用 Sanlihe 全部 4 版本跑一次手工 GUI 操作
 
 ## 关键不变量（4 个 closure）
 1. Frame-native edit chain

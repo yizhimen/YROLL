@@ -16,6 +16,8 @@ import {
   LABEL_GUTTER_PX,
   chooseTickStep,
   chooseZoomProfile,
+  frameToRulerSeconds,
+  frameRulerLabel,
   framesToTimecode,
   pixelToPlayheadFrame,
   playheadFrameToPixel,
@@ -38,8 +40,16 @@ interface Props {
   onSelect: (clipId: string, viaAiZone: boolean, ctrl?: boolean) => void;
   /** Pointermove preview. `newStartFrame` is an INTEGER TimelineFrame. */
   onDragMove: (clipId: string, newStartFrame: number) => void;
-  /** Drag-end move commit. Final integer TimelineFrame (post-snap). */
-  onMoveCommit: (clipId: string, newStartFrame: number) => void;
+  /** Drag-end move commit. Final integer TimelineFrame (post-snap +
+   *  post-clamp). If the drag also resolved a vertical-track-drop
+   *  target (the pointer ended over a different track-content row),
+   *  the new track id is passed too — the parent performs ONE
+   *  transactional move (frame + track). */
+  onMoveCommit: (
+    clipId: string,
+    newStartFrame: number,
+    targetTrackId?: string,
+  ) => void;
   onZoomPx: (px: number) => void;
   onRangeSelect: (r: [number, number] | null) => void;
   /** Trim commit. `newStart` / `newEnd` are integer SOURCE frames. */
@@ -63,9 +73,16 @@ export default function Timeline({
   height = 240,
   snapMode = "always",
   highlightRel = false,
-  onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onDropOnTrack, onTrackMute, onTrackLock, onTrackHide, onAssetDrop,
+  onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onTrackMute, onTrackLock, onTrackHide, onAssetDrop,
   showEmptyTracks = false,
 }: Props) {
+  // GUI-03R: resolve the active Timeline once. All render-time track
+  // reads go through this — never `project.timeline` (singular, the
+  // deprecated legacy alias).
+  const activeTimelineTracks = (project.timelines?.find(
+    (tl) => tl.timeline_id === project.active_timeline_id,
+  ) ?? project.timelines?.[0])?.tracks ?? [];
+  void activeTimelineTracks;  // alias scoped below
   const paneRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState({ left: 0, width: 1 });
   // Sequence (canonical timebase) — provides fps for frame↔px math
@@ -207,7 +224,7 @@ export default function Timeline({
           window.addEventListener("pointerup", up);
         }}
       >
-        {project.timeline.tracks.flatMap((track) =>
+        {activeTimelineTracks.flatMap((track) =>
           track.clip_ids.map((cid) => {
             const c = project.clips[cid];
             if (!c) return null;
@@ -240,7 +257,15 @@ export default function Timeline({
         <div className="ruler" style={{ width, paddingLeft: LABEL_GUTTER_PX }} onPointerDown={onRulerDown}>
           {ticks.map((t) => {
             const x = LABEL_GUTTER_PX + Math.round(t * pxPerF);
-            const label = framesToTimecode(t, seq.fps, seq.dropFrame);
+            // GUI-03R: normal zoom shows `MM:SS.mmm`. Precise zoom
+            // (≥24 px/sec) appends ` · F<frame>` so frame-level work
+            // can read both. The trailing `.mmm` field is
+            // milliseconds, NOT a frame field.
+            const seconds = frameToRulerSeconds(t, seq.fps);
+            const precise = pxPerSec >= 24;
+            const label = precise
+              ? `${seconds} · ${frameRulerLabel(t)}`
+              : seconds;
             return (
               <div key={t} className="tick" style={{ left: x }}>
                 {label}
@@ -272,7 +297,7 @@ export default function Timeline({
           })()}
         </div>
         <div className="tracks">
-        {[...project.timeline.tracks].reverse()
+        {[...activeTimelineTracks].reverse()
           // GUI-03C: hide empty tracks by default. The Core still
           // owns them; the GUI just chooses not to render them.
           // Toggle via the showEmptyTracks prop (default false).
@@ -386,7 +411,6 @@ export default function Timeline({
                   onDragMove={onDragMove}
                   onMoveCommit={onMoveCommit}
                   onTrimCommit={onTrimCommit}
-                  onDropOnTrack={onDropOnTrack}
                 />
               );
             })}

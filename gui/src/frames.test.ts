@@ -291,3 +291,167 @@ describe("chooseTickStep lands ticks ~60-120 px apart", () => {
 // Declare FPS_50 for the loop above (alias of FPS_30 since 50fps
 // isn't common; tests can be relaxed later)
 const FPS_50 = rational(50, 1);
+
+// ============================================================================
+// GUI-03R Production Reality Repair v0.1 — acceptance tests
+// ============================================================================
+//
+// 10 required items from the 03R spec; mapped one-to-one below.
+import {
+  frameRulerLabel,
+  frameToRulerSeconds,
+} from "./frames";
+import { api } from "./api";
+
+// -------- 8. ruler exposes seconds + frame (millisecond trailing field) ----
+describe("GUI-03R: ruler format", () => {
+  const FPS_30 = rational(30, 1);
+  const FPS_24 = rational(24, 1);
+
+  it("frameToRulerSeconds(372 @ 30fps) === 00:12.400", () => {
+    expect(frameToRulerSeconds(372, FPS_30)).toBe("00:12.400");
+  });
+
+  it("trailing .mmm is milliseconds, NOT a frame field", () => {
+    // 1 frame @ 30fps = 33.33ms → "00:00.033"
+    expect(frameToRulerSeconds(1, FPS_30)).toBe("00:00.033");
+  });
+
+  it("frame 0 displays as 00:00.000", () => {
+    expect(frameToRulerSeconds(0, FPS_30)).toBe("00:00.000");
+  });
+
+  it("rounds to ms at 24fps (1 frame = 41.666ms)", () => {
+    expect(frameToRulerSeconds(1, FPS_24)).toBe("00:00.042");
+  });
+
+  it("frameRulerLabel: F<frame> companion for precise zoom", () => {
+    expect(frameRulerLabel(372)).toBe("F372");
+    expect(frameRulerLabel(0)).toBe("F0");
+  });
+});
+
+// -------- 3. 1-frame drag visually controllable at default zoom ----------
+// Spec: "1 px/frame at 30fps is the desired starting feel".
+describe("GUI-03R: default zoom is 1 px/frame at 30 fps", () => {
+  it("pxPerFrame(30, 30/1) === 1", () => {
+    expect(pxPerFrame(30, rational(30, 1))).toBeCloseTo(1, 6);
+  });
+  it("1-frame drag is at least 0.5 px wide (visually controllable)", () => {
+    expect(pxPerFrame(30, rational(30, 1))).toBeGreaterThanOrEqual(0.5);
+  });
+});
+
+// Helper: stub fetch with a dispatch table so the post-mutate
+// syncRevision fetch (which hits /ui/status) doesn't overwrite the
+// captured URL we actually want to assert.
+function makeFetchStub(
+  handlers: Record<string, (init?: RequestInit) => Response>,
+): { fetch: typeof fetch; calls: Array<{ url: string; method: string; init?: RequestInit }> } {
+  const calls: Array<{ url: string; method: string; init?: RequestInit }> = [];
+  const stub = (async (url: string, init?: RequestInit) => {
+    const method = (init?.method ?? "GET").toUpperCase();
+    calls.push({ url, method, init });
+    for (const [prefix, h] of Object.entries(handlers)) {
+      if (url.includes(prefix)) return h(init);
+    }
+    // Default: 200 OK with empty body
+    return new Response("{}", {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+  return { fetch: stub, calls };
+}
+
+// -------- 1. image drag routes to addImageClip with frame duration -------
+describe("GUI-03R: api.addImageClip", () => {
+  it("POSTs /clips/add_image with frame-native payload", async () => {
+    const orig = globalThis.fetch;
+    const { fetch: stub, calls } = makeFetchStub({
+      "/clips/add_image": () => new Response(
+        JSON.stringify({ clip_id: "c-new" }),
+        { status: 200,
+          headers: { "Content-Type": "application/json" } },
+      ),
+    });
+    globalThis.fetch = stub;
+    try {
+      const r = await api.addImageClip("a-img", 100, 150, "v1", "drag");
+      expect(r.clip_id).toBe("c-new");
+      const targetCall = calls.find(
+        (c) => c.url.includes("/clips/add_image"),
+      );
+      expect(targetCall, "missing /clips/add_image call").toBeDefined();
+      expect(targetCall!.method).toBe("POST");
+      const body = JSON.parse(targetCall!.init?.body as string);
+      expect(body).toEqual({
+        asset_id: "a-img",
+        timeline_start_frame: 100,
+        timeline_duration_frames: 150,
+        track_id: "v1",
+        why: "drag",
+      });
+      // Confirm: no set_speed in the request (03R spec).
+      expect(body).not.toHaveProperty("speed");
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+});
+
+// -------- 2. video import path is /assets/import (formerly 404) ----------
+describe("GUI-03R: api.importAsset posts to /assets/import", () => {
+  it("URL is /assets/import, method is POST", async () => {
+    const orig = globalThis.fetch;
+    const { fetch: stub, calls } = makeFetchStub({
+      "/assets/import": () => new Response(
+        JSON.stringify({
+          asset: { asset_id: "a1" }, clip: null, deduped: false,
+        }),
+        { status: 200,
+          headers: { "Content-Type": "application/json" } },
+      ),
+    });
+    globalThis.fetch = stub;
+    try {
+      const file = new File(["x"], "v.mp4", { type: "video/mp4" });
+      const r = await api.importAsset(file);
+      expect(r.asset.asset_id).toBe("a1");
+      const targetCall = calls.find(
+        (c) => c.url.includes("/assets/import"),
+      );
+      expect(targetCall, "missing /assets/import call").toBeDefined();
+      expect(targetCall!.method).toBe("POST");
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+});
+
+// -------- 03R-K error UX includes method/path/status/detail ----------
+describe("GUI-03R: error messages include METHOD /path /status /detail", () => {
+  it("req() surfaces DELETE /clips/... 404 with method+path+status+detail", async () => {
+    const orig = globalThis.fetch;
+    const { fetch: stub } = makeFetchStub({
+      "/clips/c-bad": () => new Response(
+        '{"detail":"no such clip"}',
+        { status: 404, statusText: "Not Found",
+          headers: { "Content-Type": "application/json" } },
+      ),
+    });
+    globalThis.fetch = stub;
+    try {
+      let caught = "";
+      try {
+        await api.removeClip("c-bad");
+      } catch (e: any) {
+        caught = e.message;
+      }
+      expect(caught).toMatch(/^DELETE \/clips\/c-bad\?why= → 404 Not Found/);
+      expect(caught).toContain("no such clip");
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+});

@@ -76,7 +76,7 @@ export default function TimelineSwitcher({
     e.stopPropagation();
     if (timelines.length <= 1) return; // last-timeline guard
     if (!window.confirm(
-      `删除时间线 "${tl.name}"？\n该时间线上所有 clip/track/marker/beat 将一并删除。`,
+      `删除版本 "${tl.name}"？\n该版本上所有 clip/track/marker/beat 将一并删除。`,
     )) {
       return;
     }
@@ -101,7 +101,7 @@ export default function TimelineSwitcher({
       }}
     >
       <span style={{ fontSize: 11, color: "#888", marginRight: 4 }}>
-        时间线
+        版本
       </span>
       {loading && timelines.length === 0 && (
         <span style={{ fontSize: 11, color: "#888" }}>加载…</span>
@@ -161,7 +161,7 @@ export default function TimelineSwitcher({
                 data-testid={`timeline-chip-delete-${tl.timeline_id}`}
                 onClick={(e) => handleDelete(tl, e)}
                 role="button"
-                aria-label={`删除时间线 ${tl.name}`}
+                aria-label={`删除版本 ${tl.name}`}
                 style={{
                   marginLeft: 2,
                   padding: "0 4px",
@@ -194,7 +194,7 @@ export default function TimelineSwitcher({
           cursor: "pointer",
           fontSize: 12,
         }}
-        title="新增时间线"
+        title="新增版本"
       >
         +
       </button>
