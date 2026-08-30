@@ -108,10 +108,12 @@ class AddClipReq(BaseModel):
     source_start: float
     source_end: float
     timeline_start: float
-    # GUI-03R-Micro: empty string → Core's allocator picks the
-    # minimum non-overlapping track. Explicit track_id from a
-    # targeted drop is still honored.
-    track_id: str = ""
+    # GUI-03R-Micro v2: track_id is typed str | None. None means
+    # "no explicit target" — Core's TrackAllocator picks the
+    # minimum suitable non-overlapping track. A string value is an
+    # explicit user target; Core validates overlap and either
+    # accepts or rejects with 400.
+    track_id: str | None = None
     why: str = ""
 
 
@@ -120,9 +122,8 @@ class AddImageClipReq(BaseModel):
     asset_id: str
     timeline_start_frame: int
     timeline_duration_frames: int
-    # GUI-03R-Micro: empty string → Core's allocator picks the
-    # minimum non-overlapping track.
-    track_id: str = ""
+    # GUI-03R-Micro v2: same contract as AddClipReq.track_id.
+    track_id: str | None = None
     why: str = ""
 
 
@@ -452,12 +453,13 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         def _do():
             if sessionId:
                 require_edit_right(st.core, sessionId)
-            # GUI-03R-Micro: empty track_id → None so Core's
-            # allocator picks the minimum non-overlapping track.
-            kwargs = req.model_dump()
-            if not kwargs.get("track_id"):
-                kwargs["track_id"] = None
-            return st.cmd.add_clip(timeline_id=(timeline_id or None), **kwargs)
+            # GUI-03R-Micro v2: track_id is already str | None; pass
+            # through to Core as-is. Core's add_clip accepts None
+            # and lets TrackAllocator pick the minimum non-
+            # overlapping track. Explicit string values are
+            # validated for overlap there.
+            return st.cmd.add_clip(timeline_id=(timeline_id or None),
+                                   **req.model_dump())
         return guard(_check_rev(baseRevision, _do))
 
     @app.post("/clips/add_image")
@@ -472,11 +474,14 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         def _do():
             if sessionId:
                 require_edit_right(st.core, sessionId)
+            # GUI-03R-Micro v2: track_id is already str | None; pass
+            # through to Core as-is. TrackAllocator runs when
+            # track_id is None.
             return st.cmd.add_image_clip(
                 asset_id=req.asset_id,
                 timeline_start_frame=req.timeline_start_frame,
                 timeline_duration_frames=req.timeline_duration_frames,
-                track_id=(req.track_id or None),
+                track_id=req.track_id,
                 why=req.why,
                 timeline_id=(timeline_id or None),
             )

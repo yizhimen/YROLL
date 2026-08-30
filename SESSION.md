@@ -1,6 +1,6 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-30 GUI-03R ✅ + GUI-03R-Micro ✅ Track Allocation Wiring；Sanlihe rerun 待补）
+## 当前状态（2026-08-30 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅；Sanlihe rerun 待补）
 - **GUI-01（Session + Mutation Gate + Revision）已完整交付**
 - **GUI-02 Closure** 02-1 → 02-6.1 + 02-7 已完成
 - **GUI-03** 03A/03B/03C/03D + 03D.1 已完成
@@ -34,7 +34,7 @@
     - Project-level Lease + Project-level Revision 不变
   - **Completion criterion verified**: Sanlihe-style scenario（Full → Seed → mutate Seed → Full byte-equivalent）已端到端跑通；597 passed + 1 skipped
 - 沙盒工程：`projects/sanlihe-slice-30s/`
-- Core 测试：**596 passed + 2 skipped**（含 14 migration + 14 safety + 8 switcher + 8 duplicate isolation + gui_static_hosting skip-when-no-dist）
+- Core 测试：**601 passed + 2 skipped**（含 14 migration + 14 safety + 8 switcher + 8 duplicate isolation + 5 track_allocation_contract + gui_static_hosting skip-when-no-dist）
 - GUI 测试：**196 vitest**（03E-4 不增 GUI；03R +11；03R-Micro +5）
 - Core 测试：596 passed + 2 skipped
 
@@ -118,6 +118,7 @@
 - 03E-4 ✅
 - **03R ✅ — Production Reality Repair v0.1 (P0+P1, no new features)** — image drag → addImageClip；/assets/import 404 fix；overlap prevention；cross-track atomic；EditLease in Project header；用户视角"时间线"→"版本"；ruler seconds+frame；default zoom 30 px/sec；project.timeline reads replaced；error UX method/path/status/detail
 - **03R-Micro ✅** — GUI Track Allocation Wiring（GUI + server request schemas；Core 不变）。`POST /clips/add_image` 不再 force `track_id=v1`；`+` 按钮和 image 自动加通过 `track_id=null` 让 Core allocator 选轨；drop-on-track 保留 explicit track_id，overlap rejection 由 Core 保证；status bar 加 separator 防 `F0`+`86 clips` 视觉粘连
+- **03R-Micro v2 ✅** — `AddClipReq.track_id` 和 `AddImageClipReq.track_id` typed `str | None = None`（v1 是 `str = ""`），Pydantic 不再 422 拒绝 `null`。Handler pass-through，无 sentinel translation。5 个 pytest 覆盖 `null` / `'v2'` / allocator 真的跑 / overlap 400
 - 03E-5（Timeline-local Revision）← 待评估是否需要
 - Sanlihe rerun：03R 后所有 4 个版本（main / 科普版 / 种草版 / IP版）的端到端 PASS / 报告 待做
 - 真实生产测试：用 Sanlihe 全部 4 版本跑一次手工 GUI 操作
