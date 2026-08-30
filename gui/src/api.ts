@@ -92,6 +92,41 @@ export interface Project {
   };
   fps_num?: number;
   fps_den?: number;
+  // GUI-03E: multiple peer Timelines. `timeline` (singular above) is
+  // the deprecated legacy accessor (returns the active Timeline);
+  // new code MUST go through `timelines[]` + `active_timeline_id`.
+  timelines?: Array<{
+    timeline_id: string;
+    name: string;
+    derived_from?: string | null;
+    created_at?: string;
+    tracks: Track[];
+    markers?: Array<Record<string, unknown>>;
+    beats?: Array<Record<string, unknown>>;
+  }>;
+  active_timeline_id?: string;
+  default_timeline_id?: string;
+  schema_version?: string;
+}
+
+// GUI-03E-3: switcher data layer. Lightweight view used by the
+// TimelineSwitcher / NewTimelineDialog; the heavy `Project.timelines`
+// above is for the editor (carries Track/Marker/Beat payloads).
+export interface TimelineSummary {
+  timeline_id: string;
+  name: string;
+  derived_from?: string | null;
+  created_at?: string | null;
+  track_count: number;
+  clip_count: number;
+  marker_count: number;
+  beat_count: number;
+}
+
+export interface TimelinesResponse {
+  active_timeline_id: string;
+  default_timeline_id: string;
+  timelines: TimelineSummary[];
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -266,8 +301,49 @@ export const api = {
   // project_revision. The GUI caches this locally; per-frame
   // playback resolves the active layer via `active_layer_at`
   // (no per-frame HTTP).
-  previewPlan: () =>
-    req<{
+  // GUI-03E-3: switcher data layer.
+  //
+  // listTimelines():  gate-exempt (GET); returns {active_timeline_id,
+  //   default_timeline_id, timelines[]} with lightweight summaries.
+  // addTimeline / switchActiveTimeline / duplicateTimeline /
+  // deleteTimeline: all mutations go through `mutate()` so the
+  // Mutation Gate is enforced (sessionId + baseRevision injected).
+  // Every Timeline-lifecycle response includes the Core-resolved
+  // `active_timeline_id` so the GUI can verify the call's effect —
+  // this is the defense against stale-response races (see
+  // GUI-03E-3-F).
+  listTimelines: () => req<TimelinesResponse>("/timelines"),
+  addTimeline: (name: string, derivedFrom?: string) =>
+    mutate<{
+      timeline_id: string;
+      name: string;
+      derived_from: string | null;
+    }>("POST", "/timelines", {
+      name,
+      derived_from: derivedFrom ?? "",
+    }),
+  switchActiveTimeline: (timelineId: string) =>
+    mutate<{ active_timeline_id: string }>(
+      "POST", `/timelines/${encodeURIComponent(timelineId)}/switch`),
+  duplicateTimeline: (timelineId: string, newName?: string) =>
+    mutate<{
+      timeline_id: string;
+      name: string;
+      active_timeline_id: string;
+    }>("POST", `/timelines/${encodeURIComponent(timelineId)}/duplicate`, {
+      new_name: newName ?? "",
+    }),
+  deleteTimeline: (timelineId: string) =>
+    mutate<{
+      ok: boolean;
+      active_timeline_id: string;
+      default_timeline_id: string;
+    }>("DELETE", `/timelines/${encodeURIComponent(timelineId)}`),
+
+  previewPlan: (opts: { timeline_id?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.timeline_id) qs.set("timeline_id", opts.timeline_id);
+    return req<{
       project_revision: number;
       timeline_id: string;
       fps: { num: number; den: number };
@@ -291,7 +367,8 @@ export const api = {
         end_frame: number;
         text: string;
       }>;
-    }>(`/preview/plan`),
+    }>(`/preview/plan${qs.toString() ? `?${qs}` : ""}`);
+  },
   render: (burnSubtitles = false, width = 1080, name = "preview.mp4") =>
     mutate<{ preview: string }>("POST",
       `/render?burn_subtitles=${burnSubtitles}&width=${width}&name=${encodeURIComponent(name)}`),

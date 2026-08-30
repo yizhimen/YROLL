@@ -55,6 +55,10 @@ interface Props {
   onClearOverride?: () => void;
   aspect?: AspectRatio;
   onAspect?: (a: AspectRatio) => void;
+  // GUI-03E-3: scope the L1 plan cache to the active Timeline so
+  // Preview cannot leak content between Timelines. Falls back to
+  // "main" if unset (legacy single-Timeline projects still work).
+  timelineId?: string;
 }
 
 const ASPECTS: { id: AspectRatio; label: string; w: number; h: number }[] = [
@@ -70,6 +74,7 @@ export default function PreviewPlayer({
   overrideSrc, onClearOverride,
   aspect = "16:9", onAspect,
   durationHint = 120,
+  timelineId,
 }: Props) {
   const [mode, setMode] = useState<"instant" | "rendered">("instant");
 
@@ -180,6 +185,7 @@ export default function PreviewPlayer({
     project?.sequence?.project_revision ?? null;
   const { plan, loading: planLoading } = usePreviewPlan(
     mode === "instant" ? projectRevision : null,
+    timelineId ?? "main",
   );
 
   // Active composite at the current playheadFrame, derived from

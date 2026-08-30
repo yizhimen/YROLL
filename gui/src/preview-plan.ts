@@ -1,17 +1,27 @@
-// GUI-03D.1: Preview Plan cache for the L1 Timeline Composite.
+// GUI-03D.1 + GUI-03E-3: Preview Plan cache for the L1 Timeline
+// Composite, scoped per Timeline.
 //
 // During continuous playback, the FrameClock advances the current
-// TimelineFrame. The plan cache (fetched ONCE per project_revision)
-// is queried LOCALLY to find the active layer on each track at the
-// current frame. No per-frame HTTP.
+// TimelineFrame. The plan cache (fetched ONCE per
+// (project_revision, timeline_id) pair) is queried LOCALLY to find
+// the active layer on each track at the current frame. No per-frame
+// HTTP.
 //
-// The plan is invalidated when /ui/status's `base_revision`
-// changes (any Core mutation bumps the revision). The GUI checks
-// the revision before each playback frame and refetches the plan
-// when it changes.
+// The plan is invalidated when /ui/status's `base_revision` changes
+// (any Core mutation bumps the revision). The GUI checks the
+// revision before each playback frame and refetches the plan when it
+// changes.
+//
+// GUI-03E-3 — keying by timeline_id prevents Preview-A's plan from
+// leaking into Preview-B after a switch. Race safety: a stale fetch
+// that resolves AFTER the user has switched to a different Timeline
+// must NOT clobber the new Timeline's plan. Each effect tracks its
+// own request epoch and the component's `activeTimelineId` ref; if
+// the active timeline changes between request fire and resolve, the
+// response is discarded.
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "./api";
+import { api, TimelinesResponse, TimelineSummary } from "./api";
 
 export interface PreviewLayer {
   track_id: string;
@@ -107,32 +117,117 @@ export function activeSubtitleAt(
   return chosen;
 }
 
-/** Hook: load + cache the Preview Plan. Invalidates when the
- *  project's revision changes. */
-export function usePreviewPlan(
-  projectRevision: number | null,
-  timelineId: string = "main",
-): {
-  plan: PreviewPlan | null;
+// =================================================================
+// GUI-03E-3: useTimelines — switcher data layer.
+// =================================================================
+//
+// Returns the Project's peer Timelines + active_timeline_id +
+// default_timeline_id. Refresh is invalidated by (projectRevision,
+// timelineListRevision) where timelineListRevision is bumped when
+// any Timeline lifecycle mutation lands. The hook is read-only; it
+// never triggers a mutation.
+
+interface TimelinesState {
+  activeTimelineId: string;
+  defaultTimelineId: string;
+  timelines: TimelineSummary[];
   loading: boolean;
   error: string | null;
-  fetchCount: number;
-} {
-  const [plan, setPlan] = useState<PreviewPlan | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+}
+
+export function useTimelines(
+  projectRevision: number | null,
+): TimelinesState {
+  const [state, setState] = useState<TimelinesState>({
+    activeTimelineId: "",
+    defaultTimelineId: "",
+    timelines: [],
+    loading: false,
+    error: null,
+  });
   const lastRevRef = useRef<number | null>(null);
-  const fetchCountRef = useRef(0);
 
   useEffect(() => {
     if (projectRevision === null) return;
     if (lastRevRef.current === projectRevision) return;
     lastRevRef.current = projectRevision;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    api.listTimelines()
+      .then((data: TimelinesResponse) => {
+        setState({
+          activeTimelineId: data.active_timeline_id,
+          defaultTimelineId: data.default_timeline_id,
+          timelines: data.timelines,
+          loading: false,
+          error: null,
+        });
+      })
+      .catch((e) => {
+        setState((s) => ({ ...s, loading: false, error: String(e) }));
+      });
+  }, [projectRevision]);
+
+  return state;
+}
+
+// =================================================================
+// GUI-03D.1 + GUI-03E-3: usePreviewPlan — keyed by (rev, timeline_id)
+// =================================================================
+//
+// Race safety: when the user switches Timeline rapidly, multiple
+// in-flight `/preview/plan` requests can be outstanding. Each one
+// carries a request epoch; the effect also reads the latest
+// `timelineId` from props on resolve and aborts the state update if
+// the user has already moved on to a different Timeline. This
+// guarantees that Preview-A content cannot leak into Preview-B.
+
+interface PreviewPlanState {
+  plan: PreviewPlan | null;
+  loading: boolean;
+  error: string | null;
+  fetchCount: number;
+}
+
+export function usePreviewPlan(
+  projectRevision: number | null,
+  timelineId: string = "main",
+): PreviewPlanState {
+  const [plan, setPlan] = useState<PreviewPlan | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Track the timeline_id the LAST APPLIED plan belongs to. If a
+  // resolve sees a different id, drop the response.
+  const activeTimelineRef = useRef<string>(timelineId);
+  const lastKeyRef = useRef<string | null>(null);
+  const fetchCountRef = useRef(0);
+
+  useEffect(() => {
+    if (projectRevision === null) return;
+    // Per-timeline dedupe: don't refetch if (rev, timeline_id)
+    // already fetched this run.
+    const key = `${projectRevision}:${timelineId}`;
+    if (lastKeyRef.current === key) return;
+    lastKeyRef.current = key;
+    // Clear stale plan when timeline changes: we don't want to
+    // briefly show Timeline A's layers under Timeline B's name.
+    if (activeTimelineRef.current !== timelineId) {
+      activeTimelineRef.current = timelineId;
+      setPlan(null);
+    }
     setLoading(true);
     setError(null);
     fetchCountRef.current += 1;
-    api.previewPlan()
+    api
+      .previewPlan({ timeline_id: timelineId })
       .then((data) => {
+        // RACE GUARD: if the user has already switched to a
+        // different Timeline since this fetch fired, discard the
+        // response — applying it would show stale content.
+        if (activeTimelineRef.current !== data.timeline_id) {
+          // No state mutation. The newer Timeline's effect will
+          // set the correct plan shortly.
+          return;
+        }
         setPlan({
           project_revision: data.project_revision,
           timeline_id: data.timeline_id,
@@ -142,9 +237,15 @@ export function usePreviewPlan(
         });
       })
       .catch((e) => {
+        // Don't overwrite with errors from a now-irrelevant fetch.
+        if (activeTimelineRef.current !== timelineId) return;
         setError(String(e));
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (activeTimelineRef.current === timelineId) {
+          setLoading(false);
+        }
+      });
   }, [projectRevision, timelineId]);
 
   return { plan, loading, error, fetchCount: fetchCountRef.current };

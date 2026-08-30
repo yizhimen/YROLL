@@ -1853,6 +1853,118 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         st.core.save_state()
         return m.to_dict()
 
+    # ---------- GUI-03E-3: Timeline Lifecycle (Server) ----------
+    #
+    # The four lifecycle commands live on the CommandLayer; this block
+    # exposes them via HTTP. Project-level Lease + Project-level
+    # Revision apply (intentional — Timeline lifecycle is a Project
+    # mutation). Reads are gate-exempt (GET + idempotent LIST).
+    @app.get("/timelines")
+    def list_timelines():
+        """List all peer Timelines with the project's active/default ids.
+
+        The response carries `active_timeline_id` and `default_timeline_id`
+        at the top level so the GUI can render the switcher without a
+        separate /project round-trip when only context is needed.
+        """
+        proj = st.core.project
+        return {
+            "active_timeline_id": proj.active_timeline_id,
+            "default_timeline_id": proj.default_timeline_id,
+            "timelines": [
+                {
+                    "timeline_id": t.timeline_id,
+                    "name": t.name,
+                    "derived_from": t.derived_from,
+                    "created_at": t.created_at.isoformat()
+                        if t.created_at else None,
+                    "track_count": len(t.tracks),
+                    "clip_count": sum(
+                        1 for c in proj.clips.values()
+                        if c.timeline_id == t.timeline_id),
+                    "marker_count": len(t.markers or []),
+                    "beat_count": len(t.beats or []),
+                }
+                for t in proj.timelines
+            ],
+        }
+
+    @app.post("/timelines")
+    def create_timeline(name: str, derived_from: str = "",
+                        sessionId: str = "", baseRevision: int = None):
+        """Create a new Timeline. `derived_from` is the source
+        timeline_id (NOT name) when duplicating via the API; pass
+        empty for an empty fresh Timeline. The CORE decides whether
+        to copy content (always empty here — use /timelines/{id}/
+        duplicate for that path)."""
+        def _do():
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            tl = st.cmd.add_timeline(
+                name=name,
+                derived_from=(derived_from or None),
+            )
+            return {
+                "timeline_id": tl.timeline_id,
+                "name": tl.name,
+                "derived_from": tl.derived_from,
+            }
+        return guard(_check_rev(baseRevision, _do))
+
+    @app.post("/timelines/{timeline_id}/switch")
+    def switch_timeline(timeline_id: str, sessionId: str = "",
+                        baseRevision: int = None):
+        """Make `timeline_id` the active Timeline. Returns the new
+        active_timeline_id so the GUI can verify the switch landed
+        (defense against stale responses — see GUI-03E-3-F)."""
+        def _do():
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            st.cmd.switch_active_timeline(timeline_id)
+            return {"active_timeline_id":
+                    st.core.project.active_timeline_id}
+        return guard(_check_rev(baseRevision, _do))
+
+    @app.post("/timelines/{timeline_id}/duplicate")
+    def duplicate_timeline(timeline_id: str, new_name: str = "",
+                           sessionId: str = "", baseRevision: int = None):
+        """Duplicate a Timeline. Returns the new Timeline's id + the
+        Open-Order-resolved active_timeline_id so the GUI knows
+        whether the duplicate became active."""
+        def _do():
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            new_tl = st.cmd.duplicate_timeline(
+                timeline_id,
+                new_name=(new_name or None),
+            )
+            return {
+                "timeline_id": new_tl.timeline_id,
+                "name": new_tl.name,
+                "active_timeline_id":
+                    st.core.project.active_timeline_id,
+            }
+        return guard(_check_rev(baseRevision, _do))
+
+    @app.delete("/timelines/{timeline_id}")
+    def delete_timeline(timeline_id: str, sessionId: str = "",
+                        baseRevision: int = None):
+        """Delete a Timeline. The CORE decides the active replacement
+        (Open Order: active → default → first). The GUI MUST consume
+        the returned active_timeline_id instead of guessing."""
+        def _do():
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            st.cmd.delete_timeline(timeline_id)
+            return {
+                "ok": True,
+                "active_timeline_id":
+                    st.core.project.active_timeline_id,
+                "default_timeline_id":
+                    st.core.project.default_timeline_id,
+            }
+        return guard(_check_rev(baseRevision, _do))
+
     # ---------- Keyboard keymap (P1 §34) ----------
     @app.get("/keyboard/keymap")
     def keyboard_keymap():

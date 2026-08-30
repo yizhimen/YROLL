@@ -10,6 +10,8 @@ import {
   type Rational,
 } from "./frames";
 import Timeline from "./components/Timeline";
+import TimelineSwitcher from "./components/TimelineSwitcher";
+import NewTimelineDialog from "./components/NewTimelineDialog";
 import ChatPanel from "./components/ChatPanel";
 import ClipWorkspace from "./components/ClipWorkspace";
 import MenuBar from "./components/MenuBar";
@@ -47,6 +49,13 @@ function eventToKeyCombo(e: KeyboardEvent): string {
 
 export default function App() {
   const [project, setProject] = useState<Project | null>(null);
+  // GUI-03E-3: activeTimelineId is the GUI's single source of truth
+  // for Timeline context. Switcher is fully controlled by this
+  // state. We initialize from the project's `active_timeline_id`
+  // when the project first loads; subsequent switches are driven by
+  // user clicks. The server response's `active_timeline_id` is
+  // authoritative for delete-active — we use it instead of guessing.
+  const [activeTimelineId, setActiveTimelineId] = useState<string>("");
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedSet, setSelectedSet] = useState<Set<string>>(new Set());
   // Selected clip (used by keyboard handlers in the useEffect below).
@@ -157,7 +166,13 @@ export default function App() {
 
   const refresh = async () => {
     try {
-      setProject(await api.project());
+      const fresh = await api.project();
+      setProject(fresh);
+      // Authoritative sync from server (handles delete-active where
+      // the Core selected the Open-Order replacement).
+      const serverActive =
+        fresh.active_timeline_id || (fresh.timelines?.[0]?.timeline_id ?? "");
+      if (serverActive) setActiveTimelineId(serverActive);
       setOpsKey((k) => k + 1);  // 操作历史跟着工程状态走
       setStatus({ ok: true, text: "已连接 YROLL Server" });
     } catch (e) {
@@ -168,6 +183,93 @@ export default function App() {
   useEffect(() => {
     refresh();
   }, []);
+
+  // GUI-03E-3: New Timeline dialog state.
+  const [newTimelineOpen, setNewTimelineOpen] = useState(false);
+
+  // Switch active Timeline. Optimistic update of local state so the
+  // Preview/cache refetches scoped to the new Timeline immediately;
+  // if the server response disagrees (rare — only if a deletion
+  // raced), the response's `active_timeline_id` wins.
+  const switchTimeline = async (timelineId: string) => {
+    const previous = activeTimelineId;
+    setActiveTimelineId(timelineId);  // optimistic
+    // Reset Timeline-local editor state — switching context does
+    // NOT belong to the content Undo stack; it is navigation. We
+    // also clear playhead to 0 (Timeline A's playhead is meaningless
+    // in Timeline B).
+    setSelected(null);
+    setSelectedSet(new Set());
+    setPlayheadFrame(0);
+    try {
+      const r = await api.switchActiveTimeline(timelineId);
+      // Server is authoritative: if it disagrees with our optimistic
+      // pick, use its value (Open-Order races).
+      if (r.active_timeline_id !== timelineId) {
+        setActiveTimelineId(r.active_timeline_id);
+      }
+      // Re-sync the whole project (Timeline-local data may have
+      // shifted) without bumping the local opsKey (this is a
+      // navigation, not an edit).
+      await refresh();
+    } catch (e) {
+      // Roll back on failure.
+      setActiveTimelineId(previous);
+      setStatus({ ok: false, text: `切时间线失败：${e}` });
+    }
+  };
+
+  // Delete a Timeline. Server returns the Open-Order-resolved
+  // replacement; we use it as the authoritative next-active.
+  const deleteTimeline = async (timelineId: string) => {
+    try {
+      const r = await api.deleteTimeline(timelineId);
+      // Server-resolved replacement.
+      setActiveTimelineId(r.active_timeline_id);
+      setSelected(null);
+      setSelectedSet(new Set());
+      setPlayheadFrame(0);
+      await refresh();
+    } catch (e) {
+      setStatus({ ok: false, text: `删除时间线失败：${e}` });
+    }
+  };
+
+  // Create a new Timeline (empty or duplicate). Parent owns the
+  // mutation so the Mutation Gate stays in one place.
+  const createTimeline = async (
+    name: string,
+    mode: "empty" | "duplicate",
+  ) => {
+    try {
+      if (mode === "duplicate") {
+        const r = await api.duplicateTimeline(activeTimelineId, name);
+        // Server may have set the duplicate as active.
+        setActiveTimelineId(r.active_timeline_id);
+      } else {
+        await api.addTimeline(name);
+      }
+      setNewTimelineOpen(false);
+      await refresh();
+    } catch (e) {
+      setStatus({ ok: false, text: `新增时间线失败：${e}` });
+    }
+  };
+
+  // GUI-03E-3: when the project loads, sync activeTimelineId from
+  // the server's source of truth. This handles legacy single-
+  // Timeline projects (which lack active_timeline_id but the Core
+  // synthesizes "main") and any reload that arrived after a
+  // delete-active cycle where we missed the response.
+  useEffect(() => {
+    if (!project) return;
+    const fromProject = project.active_timeline_id || "main";
+    if (fromProject !== activeTimelineId) {
+      setActiveTimelineId(fromProject);
+    }
+    // Intentionally only re-run when the project object changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
 
   // GUI-01: session lifecycle. initLocal() restores our sessionId from
   // localStorage; startPolling() reconciles owner/revision/conflict against
@@ -485,6 +587,22 @@ export default function App() {
       </div>
 
       <EditLease />
+      <TimelineSwitcher
+        projectRevision={project?.sequence?.project_revision ?? 0}
+        activeTimelineId={activeTimelineId}
+        onSwitch={switchTimeline}
+        onRequestNewTimeline={() => setNewTimelineOpen(true)}
+        onRequestDeleteTimeline={(id) => deleteTimeline(id)}
+      />
+      <NewTimelineDialog
+        isOpen={newTimelineOpen}
+        currentTimelineName={
+          project?.timelines?.find((t) => t.timeline_id === activeTimelineId)
+            ?.name ?? ""
+        }
+        onClose={() => setNewTimelineOpen(false)}
+        onSubmit={createTimeline}
+      />
         <MenuBar
         hasClip={!!clip}
         onOpenProject={() => {
@@ -629,6 +747,7 @@ export default function App() {
             onClearOverride={() => setPreviewAsset(null)}
             aspect={aspect}
             onAspect={setAspect}
+            timelineId={activeTimelineId}
           />
           {previewVersion > 0 && clip && project.timeline.tracks
             .filter((t) => t.kind === "video").slice(1)
