@@ -8,6 +8,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    // Listen on both IPv4 and IPv6 so browsers that resolve
+    // `localhost` to 127.0.0.1 (IPv4) can reach the dev server.
+    host: true,
     proxy: {
       ...Object.fromEntries(
         apiPaths.map((p) => [p, { target: "http://127.0.0.1:8765", changeOrigin: true }])
