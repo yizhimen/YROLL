@@ -23,10 +23,17 @@ export default defineConfig({
       // own middleware serves files it can match (e.g. /assets/...,
       // /@vite/...) before this proxy runs, so the SPA shell only
       // falls through when nothing else matched — i.e. an API
-      // request.
+      // request. The root `/` is bypassed so Vite serves its own
+      // index.html (with /src/main.tsx). Without this bypass the
+      // catch-all forwards `/` to FastAPI which returns 404.
       "^/(?!(@vite|@react-refresh|node_modules|src/|assets/|favicon))": {
         target: apiProxyTarget,
         changeOrigin: true,
+        bypass: (req) => {
+          // Let Vite serve the SPA shell itself for the root path.
+          if (req.url === "/" || req.url === "") return req.url;
+          return undefined;
+        },
       },
     },
   },

@@ -68,3 +68,6 @@ gui/src-tauri/target/
 
 # TypeScript build cache
 tsconfig.tsbuildinfo
+
+# GUI smoke test artifacts (Playwright screenshots + JSON reports)
+gui/smoke-out/

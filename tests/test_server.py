@@ -83,7 +83,15 @@ def test_errors(authed_client):
 
 
 def test_gui_static_hosting(client):
-    """生产部署：FastAPI 托管 gui/dist，API 路由不被静态文件覆盖。"""
+    """生产部署：FastAPI 托管 gui/dist，API 路由不被静态文件覆盖。
+
+    只在 gui/dist 存在时生效 — dev workflow（pnpm dev）下 dist
+    不存在，FastAPI 也就不挂载静态文件，`GET /` 返回 404 是正确
+    行为（API 优先，浏览器需用 Vite dev server 看 GUI）。
+    """
+    from yroll.server.app import _candidates_for_gui_dist
+    if not any(c.is_dir() for c in _candidates_for_gui_dist()):
+        pytest.skip("gui/dist not built; production static hosting not active")
     r = client.get("/")
     assert r.status_code == 200
     assert "<div id=\"root\">" in r.text or "id=\"root\"" in r.text  # Vite SPA 入口

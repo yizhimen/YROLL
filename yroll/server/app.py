@@ -348,7 +348,24 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
 
     @app.get("/project")
     def get_project():
-        return st.core.project
+        # GUI-03E-3 compatibility shim: a dozen App/PreviewPlayer/
+        # Timeline call sites still read project.timeline (the legacy
+        # singular accessor that 03E-1 deprecated). Pydantic doesn't
+        # serialize it because it's a @property on the Project model.
+        # Inject the active Timeline under the `timeline` key so the
+        # GUI keeps working while we migrate call sites to
+        # `project.timelines[activeIdx].tracks`. Removal candidate
+        # for 03E-5 once the GUI has switched over.
+        proj = st.core.project.model_dump()
+        active = proj.get("active_timeline_id")
+        timelines = proj.get("timelines") or []
+        active_tl = next((t for t in timelines
+                          if t.get("timeline_id") == active), None)
+        if active_tl is None and timelines:
+            active_tl = timelines[0]
+        if active_tl is not None:
+            proj["timeline"] = active_tl
+        return proj
 
     # ----------------------------------------------------------------
     # GUI-02.3: Media conformance — gate-exempt (read-only).
@@ -626,14 +643,22 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         else:
             asset = next((a for a in st.core.project.assets
                           if a.asset_id == clip.asset_id), None)
-            if asset is None or asset.source_fps is None:
+            # GUI-03B: image clips have no source_fps by design (still
+            # images are 1 source frame). For images we treat source
+            # fps as the sequence fps (1 source frame = 1 seq frame)
+            # so the TimeMap math is a no-op. /preview/at_frame and
+            # /preview/plan already special-case images this way.
+            if asset is not None and asset.type.value == "image":
+                src_fps = fps
+            elif asset is None or asset.source_fps is None:
                 raise HTTPException(
                     422,
                     f"asset for clip {clip_id!r} has no source FPS set; "
                     f"call /project/validate_media_conformance and "
                     f"populate Asset.source_fps before frame-native edits",
                 )
-            src_fps = asset.source_fps
+            else:
+                src_fps = asset.source_fps
         tm = TimeMap.for_clip(clip, fps, src_fps)
         return {
             "source_start_frame": tm.source_start_frame,
@@ -672,12 +697,18 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         else:
             asset = next((a for a in st.core.project.assets
                           if a.asset_id == clip.asset_id), None)
-            if asset is None or asset.source_fps is None:
+            # GUI-03B: image clips share sequence fps (no separate
+            # source timebase). See /clip/{id}/timemap for the same
+            # rule.
+            if asset is not None and asset.type.value == "image":
+                src_fps = fps
+            elif asset is None or asset.source_fps is None:
                 raise HTTPException(
                     422,
                     f"asset for clip {clip_id!r} has no source FPS set",
                 )
-            src_fps = asset.source_fps
+            else:
+                src_fps = asset.source_fps
         tm = TimeMap.for_clip(clip, fps, src_fps)
         sf = tm.source_from_timeline(timeline_frame)
         return {
@@ -2134,11 +2165,7 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
     # ---------- 生产部署：托管 GUI 构建产物（单进程全栈，无需 Docker/nginx） ----------
     # API/WS 路由优先；剩下的 GET 落到 gui/dist 静态文件（html=True 处理 SPA 入口）。
     # 两个候选：源码树（开发/服务器部署）与 PyInstaller 解包目录（桌面壳 sidecar）。
-    import sys as _sys
-
-    candidates = [Path(__file__).resolve().parents[2] / "gui" / "dist"]
-    if getattr(_sys, "frozen", False):
-        candidates.append(Path(_sys._MEIPASS) / "gui" / "dist")  # type: ignore[attr-defined]
+    candidates = _candidates_for_gui_dist()
     gui_dist = next((d for d in candidates if d.is_dir()), None)
     if gui_dist:
         from fastapi.staticfiles import StaticFiles
@@ -2146,6 +2173,20 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         app.mount("/", StaticFiles(directory=gui_dist, html=True), name="gui")
 
     return app
+
+
+def _candidates_for_gui_dist() -> list:
+    """Module-level helper: returns the candidate paths where the
+    built `gui/dist/` directory may live. Exposed so tests can skip
+    the production-static-hosting assertions when no dist exists
+    (the dev workflow uses Vite, not the bundled FastAPI StaticFiles).
+    """
+    import sys as _sys
+
+    cands = [Path(__file__).resolve().parents[2] / "gui" / "dist"]
+    if getattr(_sys, "frozen", False):
+        cands.append(Path(_sys._MEIPASS) / "gui" / "dist")  # type: ignore[attr-defined]
+    return cands
 
 
 def serve(project_path: str | Path, host: str = "127.0.0.1", port: int = 8765) -> None:
