@@ -108,7 +108,10 @@ class AddClipReq(BaseModel):
     source_start: float
     source_end: float
     timeline_start: float
-    track_id: str = "v1"
+    # GUI-03R-Micro: empty string → Core's allocator picks the
+    # minimum non-overlapping track. Explicit track_id from a
+    # targeted drop is still honored.
+    track_id: str = ""
     why: str = ""
 
 
@@ -117,7 +120,9 @@ class AddImageClipReq(BaseModel):
     asset_id: str
     timeline_start_frame: int
     timeline_duration_frames: int
-    track_id: str = "v1"
+    # GUI-03R-Micro: empty string → Core's allocator picks the
+    # minimum non-overlapping track.
+    track_id: str = ""
     why: str = ""
 
 
@@ -447,7 +452,12 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         def _do():
             if sessionId:
                 require_edit_right(st.core, sessionId)
-            return st.cmd.add_clip(timeline_id=(timeline_id or None), **req.model_dump())
+            # GUI-03R-Micro: empty track_id → None so Core's
+            # allocator picks the minimum non-overlapping track.
+            kwargs = req.model_dump()
+            if not kwargs.get("track_id"):
+                kwargs["track_id"] = None
+            return st.cmd.add_clip(timeline_id=(timeline_id or None), **kwargs)
         return guard(_check_rev(baseRevision, _do))
 
     @app.post("/clips/add_image")
@@ -466,7 +476,7 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
                 asset_id=req.asset_id,
                 timeline_start_frame=req.timeline_start_frame,
                 timeline_duration_frames=req.timeline_duration_frames,
-                track_id=req.track_id,
+                track_id=(req.track_id or None),
                 why=req.why,
                 timeline_id=(timeline_id or None),
             )

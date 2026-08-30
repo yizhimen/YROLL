@@ -1326,32 +1326,20 @@ export default function App() {
               return;
             }
           }
+          // GUI-03R-Micro: explicit drops pass the drop-target
+          // track_id through to Core. Core itself rejects overlap
+          // and enforces same-track policy; the GUI no longer
+          // pre-computes a "free" frame via local findFree (that
+          // duplicated Core's overlap-check logic and could
+          // disagree with it under heterogeneous fps).
           if (a.type === "image") {
-            // GUI-03R: image assets take a frame-native path through
-            // /clips/add_image — no set_speed, no duration-as-seconds
-            // hack. Default 5s @ active fps.
             const fps = seq.fps;
             const DEFAULT_IMG_DUR_SEC = 5;
             const durFrames = Math.round(
               DEFAULT_IMG_DUR_SEC * fps.num / fps.den);
-            const occupied = (track?.clip_ids ?? [])
-              .map((cid) => project.clips[cid])
-              .filter(Boolean)
-              .map((c) => ({ start: c.timeline_range.start,
-                             end: c.timeline_range.end }))
-              .sort((a, b) => a.start - b.start);
-            const findFree = (want: number) => {
-              let cur = Math.max(0, want);
-              for (const r of occupied) {
-                if (cur + durFrames <= r.start) return cur;
-                if (cur < r.end) cur = r.end;
-              }
-              return cur;
-            };
-            const placement = findFree(t);
-            run(() => api.addImageClip(assetId, placement, durFrames,
+            run(() => api.addImageClip(assetId, t, durFrames,
                 trackId, "GUI 拖入图片"),
-              `${a.path.split(/[\/]/).pop()} 已放到 F${placement}（${durFrames}f）`);
+              `${a.path.split(/[\/]/).pop()} 已放到 F${t}（${durFrames}f）`);
             return;
           }
           // video / audio → /clips (seconds-based)
@@ -1360,24 +1348,9 @@ export default function App() {
             setStatus({ ok: false, text: "该素材无时长，不能上时间轴" });
             return;
           }
-          const occupied = (track?.clip_ids ?? [])
-            .map((cid) => project.clips[cid])
-            .filter(Boolean)
-            .map((c) => ({ start: c.timeline_range.start,
-                           end: c.timeline_range.end }))
-            .sort((a, b) => a.start - b.start);
-          const findFree = (want: number) => {
-            let cur = Math.max(0, want);
-            for (const r of occupied) {
-              if (cur + dur <= r.start) return cur;
-              if (cur < r.end) cur = r.end;
-            }
-            return cur;
-          };
-          const placement = findFree(t);
-          run(() => api.addClip(assetId, 0, dur, placement, trackId,
+          run(() => api.addClip(assetId, 0, dur, t, trackId,
               "GUI 拖入时间轴"),
-            `${a.path.split(/[\/]/).pop()} 已放到 ${placement.toFixed(1)}s（${dur.toFixed(1)}s）`);
+            `${a.path.split(/[\/]/).pop()} 已放到 ${t.toFixed(1)}s（${dur.toFixed(1)}s）`);
         }}
         onTrackLock={(trackId, locked) =>
           run(() => api.setTrackLocked(trackId, locked, "GUI 轨道锁"),
@@ -1478,12 +1451,17 @@ export default function App() {
 
       <div className="statusbar">
         <span className={status.ok ? "ok" : "err"}>{status.text}</span>
-        {/* GUI-03R: playhead status exposes BOTH elapsed time
-            (MM:SS.mmm, milliseconds) AND the canonical frame
-            integer. The .mmm field is ms, NOT a frame field. */}
+        {/* GUI-03R-Micro: explicit separator. Without the space
+            inside the previous <span>, `·F0` and `86 clips` were
+            visually concatenated (the leading bullet of the
+            playhead label ran into the next span when the playhead
+            was 0). The bullet now lives in its own span so flex
+            gap is consistent across all status rows. */}
+        <span aria-hidden="true" style={{ color: "#555" }}>·</span>
         <span data-testid="playhead-status">
           播放头 {frameToRulerSeconds(playheadFrame, seq.fps)} · F{playheadFrame}
         </span>
+        <span aria-hidden="true" style={{ color: "#555" }}>·</span>
         <span>{Object.keys(project.clips).length} clips</span>
       </div>
 

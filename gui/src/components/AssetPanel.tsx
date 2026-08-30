@@ -39,25 +39,30 @@ export default function AssetPanel({ project, activeTimelineId, onChanged, onSta
     const asset = project.assets.find((a) => a.asset_id === assetId);
     if (!asset) return;
     try {
-      let track;
-      // Resolve target track via the active Timeline (NOT the
-      // deprecated project.timeline alias).
-      const tl = project.timelines?.find(
-        (tl) => tl.timeline_id === activeTimelineId)
-        ?? project.timelines?.[0];
-      const tlTracks = tl?.tracks ?? project.timeline.tracks;
+      // GUI-03R-Micro: the "+" / ⧉ buttons do NOT pick a track on
+      // the GUI side. They pass no track_id (server translates
+      // empty → None) so Core's Track Allocation Policy picks the
+      // minimum suitable non-overlapping track. Image and video
+      // sharing V1 when their time ranges don't overlap is a Core
+      // guarantee, not a GUI side computation.
+      //
+      // Explicit-track behavior (drop-on-track → App.tsx
+      // onAssetDrop) is unchanged: the drop target's track_id is
+      // forwarded to Core, and Core rejects overlap there.
+      let explicitTrackId: string | null = null;
       if (mode === "overlay") {
-        // 新建叠加轨（v2/v3…）：PiP/B-roll 专用
+        // Overlay = "create a new dedicated PiP/B-roll video
+        // track". The user is explicit about wanting a new track.
+        const tl = project.timelines?.find(
+          (tl) => tl.timeline_id === activeTimelineId)
+          ?? project.timelines?.[0];
+        const tlTracks = tl?.tracks ?? project.timeline.tracks;
         const vTracks = tlTracks.filter((t) => t.kind === "video");
-        track = await api.addTrack("video", `v${vTracks.length + 1}`);
-      } else {
-        const kind = asset.type === "audio" ? "audio" : "video";
-        track = tlTracks.find((t) => t.kind === kind);
-        if (!track) {
-          // 同类轨不存在就建（修：音频不再错落到视频轨）
-          track = await api.addTrack(kind, kind === "audio" ? "a1" : "v1");
-        }
+        const newTrack = await api.addTrack("video",
+          `v${vTracks.length + 1}`);
+        explicitTrackId = newTrack.track_id;
       }
+      const tlStart = 0;  // Core allocator picks the start frame
       if (asset.type === "image") {
         // GUI-03R: image goes through the frame-native
         // /clips/add_image endpoint. No set_speed, no seconds-as-
@@ -67,11 +72,7 @@ export default function AssetPanel({ project, activeTimelineId, onChanged, onSta
         const DEFAULT_IMG_DUR_SEC = 5;
         const durFrames = Math.round(
           DEFAULT_IMG_DUR_SEC * fps.num / fps.den);
-        const tlStart = Math.max(
-          0,
-          ...track.clip_ids.map((id) => project.clips[id]?.timeline_range.end ?? 0)
-        );
-        await api.addImageClip(assetId, tlStart, durFrames, track.track_id,
+        await api.addImageClip(assetId, tlStart, durFrames, explicitTrackId,
           mode === "overlay" ? "素材库加入（叠加轨）" : "素材库加入");
       } else {
         const dur = asset.identity.duration_sec;
@@ -79,15 +80,12 @@ export default function AssetPanel({ project, activeTimelineId, onChanged, onSta
           onStatus(false, "该素材无时长，不能上时间轴");
           return;
         }
-        const tlStart = Math.max(
-          0,
-          ...track.clip_ids.map((id) => project.clips[id]?.timeline_range.end ?? 0)
-        );
-        await api.addClip(assetId, 0, dur, tlStart, track.track_id,
+        await api.addClip(assetId, 0, dur, tlStart, explicitTrackId,
           mode === "overlay" ? "素材库加入（叠加轨）" : "素材库加入");
       }
       await onChanged();
-      onStatus(true, `${baseName(asset.path)} 已加到 ${track.track_id}`);
+      onStatus(true,
+        `${baseName(asset.path)} 已加入（Core allocator 选轨）`);
     } catch (e) {
       onStatus(false, `添加失败：${e}`);
     }

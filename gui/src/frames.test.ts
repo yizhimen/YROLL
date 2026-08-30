@@ -455,3 +455,157 @@ describe("GUI-03R: error messages include METHOD /path /status /detail", () => {
     }
   });
 });
+
+// ============================================================================
+// GUI-03R-Micro: Track Allocation Wiring (GUI side only — Core unchanged)
+// ============================================================================
+//
+// The GUI's automatic-placement path ("+" button, drag without explicit
+// target) MUST NOT force v1 / a1. It must pass track_id=null so Core's
+// Track Allocation Policy picks the minimum non-overlapping track.
+//
+// These tests pin the contract the GUI now follows:
+//   1. addImageClip / addClip accept trackId=null and serialize
+//      track_id: null in the request body (the server side maps
+//      null/empty to Core's None which lets the allocator run).
+//   2. The explicit-target path still passes track_id (drop on V1).
+//   3. An overlap on an explicit target is left for Core to reject
+//      (the GUI does not pre-compute a "free" frame).
+
+describe("GUI-03R-Micro: addImageClip auto-placement", () => {
+  it("passes track_id=null (server → Core allocator) when no explicit track", async () => {
+    const orig = globalThis.fetch;
+    const { fetch: stub, calls } = makeFetchStub({
+      "/clips/add_image": () => new Response(
+        JSON.stringify({ clip_id: "c-img" }),
+        { status: 200,
+          headers: { "Content-Type": "application/json" } },
+      ),
+    });
+    globalThis.fetch = stub;
+    try {
+      await api.addImageClip("a-img", 0, 150, null, "auto");
+      const targetCall = calls.find(
+        (c) => c.url.includes("/clips/add_image"),
+      );
+      expect(targetCall).toBeDefined();
+      const body = JSON.parse(targetCall!.init?.body as string);
+      // GUI must NOT force "v1" — Core's allocator picks the track.
+      expect(body.track_id).toBeNull();
+      // Frame-native coordinates preserved (no seconds-as-duration
+      // hack, no set_speed).
+      expect(body.timeline_start_frame).toBe(0);
+      expect(body.timeline_duration_frames).toBe(150);
+      expect(body).not.toHaveProperty("speed");
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  it("explicit drop passes the user's track_id through", async () => {
+    const orig = globalThis.fetch;
+    const { fetch: stub, calls } = makeFetchStub({
+      "/clips/add_image": () => new Response(
+        JSON.stringify({ clip_id: "c-img" }),
+        { status: 200,
+          headers: { "Content-Type": "application/json" } },
+      ),
+    });
+    globalThis.fetch = stub;
+    try {
+      await api.addImageClip("a-img", 100, 150, "v2", "drop");
+      const targetCall = calls.find(
+        (c) => c.url.includes("/clips/add_image"),
+      );
+      const body = JSON.parse(targetCall!.init?.body as string);
+      expect(body.track_id).toBe("v2");
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+});
+
+describe("GUI-03R-Micro: addClip auto-placement (video/audio)", () => {
+  it("passes track_id=null when no explicit track was chosen", async () => {
+    const orig = globalThis.fetch;
+    const { fetch: stub, calls } = makeFetchStub({
+      "/clips": () => new Response(
+        JSON.stringify({ clip_id: "c-v" }),
+        { status: 200,
+          headers: { "Content-Type": "application/json" } },
+      ),
+    });
+    globalThis.fetch = stub;
+    try {
+      await api.addClip("a-v", 0, 10, 0, null, "auto");
+      const targetCall = calls.find((c) => /\/clips(\?|$)/.test(c.url));
+      expect(targetCall).toBeDefined();
+      const body = JSON.parse(targetCall!.init?.body as string);
+      expect(body.track_id).toBeNull();
+      expect(body.timeline_start).toBe(0);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  it("explicit drop passes the user's track_id through", async () => {
+    const orig = globalThis.fetch;
+    const { fetch: stub, calls } = makeFetchStub({
+      "/clips": () => new Response(
+        JSON.stringify({ clip_id: "c-v" }),
+        { status: 200,
+          headers: { "Content-Type": "application/json" } },
+      ),
+    });
+    globalThis.fetch = stub;
+    try {
+      await api.addClip("a-v", 0, 10, 5, "a1", "drop");
+      const targetCall = calls.find((c) => /\/clips(\?|$)/.test(c.url));
+      const body = JSON.parse(targetCall!.init?.body as string);
+      expect(body.track_id).toBe("a1");
+      expect(body.timeline_start).toBe(5);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+});
+
+describe("GUI-03R-Micro: explicit-drop overlap is left to Core", () => {
+  it("does NOT pre-compute a free frame; passes the drop frame verbatim", async () => {
+    // The GUI used to run a local findFree() that shifted the drop
+    // frame past occupied ranges. 03R-Micro removes that — Core
+    // enforces overlap. The drop frame MUST be passed verbatim
+    // even if it would conflict; Core will then reject.
+    const orig = globalThis.fetch;
+    const { fetch: stub, calls } = makeFetchStub({
+      "/clips": () => new Response(
+        JSON.stringify({ detail: "track a1 时间重叠" }),
+        { status: 400, statusText: "Bad Request",
+          headers: { "Content-Type": "application/json" } },
+      ),
+    });
+    globalThis.fetch = stub;
+    try {
+      let caught = "";
+      try {
+        // Drop frame = 5s; v1 already has a clip covering [0,10]
+        // so this should conflict.
+        await api.addClip("a-v", 0, 3, 5, "a1", "drop");
+      const targetCall = calls.find((c) => /\/clips(\?|$)/.test(c.url));
+      } catch (e: any) {
+        caught = e.message;
+      }
+      // Server returned 400; req() threw — and the GUI error UX
+      // (03R-K) surfaces method+path+status+detail.
+      expect(caught).toMatch(/^POST \/clips/);
+      expect(caught).toContain("400");
+      expect(caught).toContain("时间重叠");
+      const targetCall = calls.find((c) => /\/clips(\?|$)/.test(c.url));
+      const body = JSON.parse(targetCall!.init?.body as string);
+      // The drop frame 5 was passed verbatim — no local mutation.
+      expect(body.timeline_start).toBe(5);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+});

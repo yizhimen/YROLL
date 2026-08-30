@@ -431,7 +431,7 @@ export const api = {
       "/assets/import", { method: "POST", body: fd });
   },
   addClip: (assetId: string, sourceStart: number, sourceEnd: number,
-            timelineStart: number, trackId: string, why = "") =>
+            timelineStart: number, trackId: string | null, why = "") =>
     mutate<Clip>("POST", "/clips", {
       asset_id: assetId, source_start: sourceStart, source_end: sourceEnd,
       timeline_start: timelineStart, track_id: trackId, why,
@@ -442,7 +442,7 @@ export const api = {
     assetId: string,
     timelineStartFrame: number,
     timelineDurationFrames: number,
-    trackId: string = "v1",
+    trackId: string | null,
     why = "",
   ) => mutate<Clip>("POST", "/clips/add_image", {
     asset_id: assetId,
