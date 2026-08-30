@@ -1,6 +1,6 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-30 GUI-03E-2A 已完工，待 push）
+## 当前状态（2026-08-30 GUI-03E-2A 已 push + 03E-3 计划中，等 compact）
 - **GUI-01（Session + Mutation Gate + Revision）已完整交付**
 - **GUI-02 Closure** 02-1 → 02-6.1 + 02-7 已完成：
   - 02-1 `f674a56` 标准 NTSC DF + reject dropped labels
@@ -65,16 +65,60 @@
 - Track / Clip / Marker / Beat / Timeline metadata：**复制**
 - 媒体文件本身：**永远不复制**（Asset 引用即可）
 
+### GUI 03E-3 计划（用户已批准，compact 后开始）
+**目标**：把 peer Timelines 暴露给用户为 first-class editing contexts。
+
+**UI 范围**
+- 顶部 TimelineSwitcher：`[完整版] [种草版] [IP版] [+]` chips
+  - active Timeline 视觉突出（highlight ring + brand color）
+  - 切换 → switchActiveTimeline → refetch plan → resync editor
+  - Preview 必须随 Timeline 切换
+  - current Timeline name/id 在 editor context 全程可用
+- 新 Timeline 对话框：name input + optional derived_from dropdown；空 Timeline = add_timeline；"Duplicate current" 按钮调用 duplicate_timeline（完整 UX 在 03E-4）
+- Delete：last Timeline 不可删（UI 灰显）；删 active 走 Core Open Order（active → default → first）；GUI 必须 resync 到 Core 返回的 active Timeline
+
+**Editor Context**
+- 引入 activeTimelineId 作为 GUI 单一 source of truth
+- playhead / selection / zoom 可以做 Timeline-specific（但**不**重做 Selection）
+- 切换 Timeline 是 navigation state，**不**污染 content undo stack
+
+**Human / Agent**
+- GUI active = Full；Agent 显式 target Seed；Agent mutation 不改 GUI active Timeline
+- 切到 Seed 后 GUI 必须看到 Agent 的 changes
+
+**关键 GUI 文件**（03E-3 改动 surface）
+- `gui/src/App.tsx`（1368 行）— 加 TimelineSwitcher + NewTimelineDialog
+- `gui/src/api.ts`（586 行）— 新方法：listTimelines / addTimeline / switchActiveTimeline / deleteTimeline
+- `gui/src/components/Timeline.tsx`（400 行）— Timeline 容器随 activeTimelineId rescope
+- `gui/src/components/PreviewPlayer.tsx`（568 行）— `usePreviewPlan` 用 activeTimelineId 作 cache key
+- `gui/src/preview-plan.ts`（151 行）— 扩展为 useTimelines() hook
+- 新增 `gui/src/components/TimelineSwitcher.tsx`
+- 新增 `gui/src/components/NewTimelineDialog.tsx`
+
+**Spec 要求测试**
+- switch Full → Seed → Full
+- Preview changes with Timeline
+- Timeline-local clips/tracks/markers/beats change with context
+- active Timeline 视觉突出
+- create Timeline
+- delete Timeline
+- cannot delete last Timeline
+- deleting active Timeline selects Core-defined replacement
+- GUI active vs Agent target independent
+- legacy single-Timeline project 仍可用
+
+**不做**
+- 完整 Duplicate UX（03E-4）
+- Timeline-local Revision（03E-5）
+- nested Timelines
+- Selection redesign
+- 新媒体/编辑功能
+
 ### 待办
 - 03E-1（Schema/migration）✅
 - 03E-2A（Pragmatic Safe Scoping）✅ — safety invariant + 4 lifecycle commands + explicit high-frequency + HTTP API + audit metadata + static guard；**581 passed**
-- **03E-3（GUI Timeline Switcher）← 下一步**
-  - 顶部版本切换条：`[完整版] [种草版] [IP版] [抖音版] [+]`；点击切换 → refetch plan
-  - 当前 Timeline 高亮
-  - 新 Timeline 创建 modal（name + derived_from）
-  - Duplicate 按钮（基于当前 Timeline）
-  - Timeline 删除（最后一个保护）
-- 03E-4（Duplicate UI 完善 — Track 颜色 / 资产面板 / 占位 Track 命名 / 编辑友好）
+- **03E-3（GUI Timeline Context UX）← 当前**
+- 03E-4（Duplicate UX 完善 — Track 颜色 / 资产面板 / 占位 Track 命名 / 编辑友好）
 - 03E-5（Revision scope 到 Timeline：第一版：每次 Timeline mutation 推 Project revision，mutation 必须带 `timeline_id`；未来：Timeline-local revision）
 - 然后再做一次真实生产测试：拿《三里河·陶鬶》做完整版 + 种草版 两条 timeline
 
