@@ -224,10 +224,11 @@ def build_zhongcao(core: ProjectCore) -> str:
     for text, s, e in SUBTITLES:
         _add_subtitle(cmd, zc.timeline_id, text, s, e)
 
-    # 9:16 aspect — set via sequence override on the Project. The
-    # GUI respects project.sequence.width/height for layout.
-    core.project.sequence.width = 1080
-    core.project.sequence.height = 1920
+    # 9:16 aspect — sequence is Project-global, so we deliberately
+    # do NOT mutate it here (would break the other 3 versions).
+    # Aspect-ratio per Timeline is out of scope for 03E-4 (Timeline-
+    # local aspect isn't a Core concept yet). The user can set it
+    # per-Timeline at render time or in a follow-up batch.
 
     return zc.timeline_id
 
