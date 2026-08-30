@@ -55,49 +55,85 @@ _DEFAULT_TIMELINE_ID = "main"
 
 def _migrate_raw_to_multi_timeline(raw: dict) -> dict:
     """Return a new dict with multi-Timeline fields populated. The
-    input is not mutated."""
+    input is not mutated.
+
+    GUI-03E-2A ownership invariants applied here:
+      - Every Clip gets `clip.timeline_id` stamped (legacy projects
+        own all clips by the active Timeline).
+      - Every Track gets `track.timeline_id` stamped.
+      - Every Marker / Beat dict gets `timeline_id` stamped (these
+        are Timeline-local dicts after 03E-1; the lift from `extensions`
+        carries the owner Timeline).
+    """
     has_legacy = isinstance(raw.get("timeline"), dict)
     has_new = isinstance(raw.get("timelines"), list) and len(raw["timelines"]) > 0
+
     if has_new and not has_legacy:
-        # Already post-03E. Repair missing ids defensively.
+        # Already post-03E. Repair missing ids defensively and ensure
+        # every Clip/Track/Marker/Beat has a timeline_id.
         timelines = raw["timelines"]
         ids = {t["timeline_id"] for t in timelines if isinstance(t, dict)
                and "timeline_id" in t}
-        if "active_timeline_id" not in raw or raw["active_timeline_id"] not in ids:
-            raw = dict(raw)
-            raw["active_timeline_id"] = (
-                raw.get("default_timeline_id") if raw.get("default_timeline_id") in ids
-                else (next(iter(ids)) if ids else _DEFAULT_TIMELINE_ID)
-            )
-        if "default_timeline_id" not in raw or raw["default_timeline_id"] not in ids:
-            raw = dict(raw)
-            raw["default_timeline_id"] = (
-                raw["active_timeline_id"] if "active_timeline_id" in raw
-                else next(iter(ids)) if ids else _DEFAULT_TIMELINE_ID
-            )
-        raw.setdefault("schema_version", "0.2")
+        active_id = raw.get("active_timeline_id")
+        if not active_id or active_id not in ids:
+            active_id = (raw.get("default_timeline_id")
+                          if raw.get("default_timeline_id") in ids
+                          else (next(iter(ids)) if ids else _DEFAULT_TIMELINE_ID))
+        default_id = raw.get("default_timeline_id")
+        if not default_id or default_id not in ids:
+            default_id = active_id
+
+        raw = dict(raw)
+        raw["active_timeline_id"] = active_id
+        raw["default_timeline_id"] = default_id
+        raw["schema_version"] = "0.2"
+
+        # Lift legacy extensions.markers/beats once (idempotent).
+        ext = raw.get("extensions") or {}
+        lift_markers = ext.get("markers")
+        lift_beats = ext.get("story_beats")
+        if lift_markers or lift_beats:
+            for t in raw["timelines"]:
+                if not isinstance(t, dict):
+                    continue
+                if t["timeline_id"] == active_id:
+                    if lift_markers and "markers" not in t:
+                        t["markers"] = list(lift_markers)
+                    if lift_beats and "beats" not in t:
+                        t["beats"] = list(lift_beats)
+            new_ext = {k: v for k, v in ext.items()
+                       if k not in ("markers", "story_beats")}
+            raw["extensions"] = new_ext
+
+        _stamp_ownership(raw, active_id)
         return raw
 
     if has_legacy:
         legacy = raw["timeline"]
         legacy_id = legacy.get("timeline_id", _DEFAULT_TIMELINE_ID)
+        ext = raw.get("extensions") or {}
+        lift_markers = ext.get("markers") or []
+        lift_beats = ext.get("story_beats") or []
         lifted = {
             "timeline_id": legacy_id,
             "name": legacy.get("name", legacy_id),
             "derived_from": legacy.get("derived_from"),
             "tracks": legacy.get("tracks", []),
+            "markers": list(lift_markers),
+            "beats": list(lift_beats),
         }
         raw = dict(raw)
         raw["timelines"] = [lifted]
-        raw["active_timeline_id"] = (
-            raw.get("active_timeline_id") or legacy_id)
-        raw["default_timeline_id"] = (
-            raw.get("default_timeline_id") or legacy_id)
-        # Pydantic will silently drop the legacy `timeline` field on
-        # model_validate (Pydantic 2 default extra='ignore'). The
-        # Project.timeline property still resolves correctly via
-        # active_timeline.
+        active = raw.get("active_timeline_id") or legacy_id
+        default = raw.get("default_timeline_id") or legacy_id
+        raw["active_timeline_id"] = active
+        raw["default_timeline_id"] = default
+        if lift_markers or lift_beats:
+            new_ext = {k: v for k, v in ext.items()
+                       if k not in ("markers", "story_beats")}
+            raw["extensions"] = new_ext
         raw["schema_version"] = "0.2"
+        _stamp_ownership(raw, active)
         return raw
 
     # Neither present: create default `main` so empty/hand-written
@@ -107,11 +143,38 @@ def _migrate_raw_to_multi_timeline(raw: dict) -> dict:
         "timeline_id": _DEFAULT_TIMELINE_ID,
         "name": _DEFAULT_TIMELINE_ID,
         "tracks": [],
+        "markers": [],
+        "beats": [],
     }]
     raw["active_timeline_id"] = raw.get("active_timeline_id", _DEFAULT_TIMELINE_ID)
     raw["default_timeline_id"] = raw.get("default_timeline_id", _DEFAULT_TIMELINE_ID)
     raw["schema_version"] = "0.2"
+    _stamp_ownership(raw, _DEFAULT_TIMELINE_ID)
     return raw
+
+
+def _stamp_ownership(raw: dict, active_id: str) -> None:
+    """Mutate raw in place: stamp timeline_id on every Clip, every
+    Track on every Timeline, every Marker dict, and every Beat dict.
+    The owner Timeline is determined by the Timeline the Track /
+    Marker / Beat lives under, falling back to active_id for legacy
+    singletons."""
+    for tl in raw.get("timelines") or []:
+        if not isinstance(tl, dict):
+            continue
+        tid = tl.get("timeline_id") or active_id
+        for t in tl.get("tracks") or []:
+            if isinstance(t, dict) and "timeline_id" not in t:
+                t["timeline_id"] = tid
+        for m in tl.get("markers") or []:
+            if isinstance(m, dict) and "timeline_id" not in m:
+                m["timeline_id"] = tid
+        for b in tl.get("beats") or []:
+            if isinstance(b, dict) and "timeline_id" not in b:
+                b["timeline_id"] = tid
+    for cid, c in (raw.get("clips") or {}).items():
+        if isinstance(c, dict) and "timeline_id" not in c:
+            c["timeline_id"] = active_id
 
 
 class ProjectCore:

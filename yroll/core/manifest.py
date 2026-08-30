@@ -163,10 +163,18 @@ class Selection(BaseModel):
 # ---------- 核心对象 ----------
 
 class Clip(BaseModel):
-    """时间轴上的使用实例。同一 Asset 可被多个 Clip 复用。"""
+    """时间轴上的使用实例。同一 Asset 可被多个 Clip 复用。
+
+    GUI-03E-2A: every Clip carries an explicit `timeline_id`. Clip IDs
+    remain globally unique across all Timelines (so
+    `Project.clips[clip_id]` keeps working as a flat dict), but
+    `timeline_id` is the source of truth for ownership. A mutation
+    targeting Clip X with mismatched timeline_id is rejected.
+    """
 
     clip_id: str
     asset_id: str
+    timeline_id: str = "main"
     source_range: TimeRange
     timeline_range: TimeRange
     track_id: str = "v1"
@@ -180,6 +188,7 @@ class Clip(BaseModel):
 
 class Track(BaseModel):
     track_id: str
+    timeline_id: str = "main"  # GUI-03E-2A: explicit Timeline ownership
     kind: TrackKind
     clip_ids: list[str] = Field(default_factory=list)
     muted: bool = False   # 轨道静音（音频轨不出声 / PiP 轨不叠画）
@@ -206,6 +215,10 @@ class Timeline(BaseModel):
     derived_from: Optional[str] = None  # stable source timeline_id, never name
     created_at: datetime = Field(default_factory=datetime.now)
     tracks: list[Track] = Field(default_factory=list)
+    # GUI-03E-2A: per-Timeline markers / beats (list of Marker/StoryBeat
+    # .to_dict() shape). Each entry carries a `timeline_id` key.
+    markers: list[dict[str, Any]] = Field(default_factory=list)
+    beats: list[dict[str, Any]] = Field(default_factory=list)
 
     def find_clip(self, clip_id: str) -> Optional["ClipRef"]:
         for t in self.tracks:

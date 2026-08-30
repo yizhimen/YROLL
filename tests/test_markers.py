@@ -8,7 +8,10 @@ import pytest
 from yroll.core.commands import CommandLayer
 from yroll.core.manifest import Actor
 from yroll.core.markers import (
-    add_marker, list_markers, remove_marker, update_marker,
+    legacy_add_marker as add_marker,
+    legacy_list_markers as list_markers,
+    legacy_remove_marker as remove_marker,
+    legacy_update_marker as update_marker,
 )
 from yroll.core.models import Asset, AssetIdentity, AssetType
 from yroll.core.project import ProjectCore

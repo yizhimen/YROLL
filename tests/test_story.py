@@ -10,8 +10,13 @@ from yroll.core.manifest import Actor, TrackKind
 from yroll.core.models import Asset, AssetIdentity, AssetType
 from yroll.core.project import ProjectCore
 from yroll.core.story import (
-    STANDARD_BEAT_KINDS, add_beat, beat_at_frame, beats_overlapping,
-    list_beats, remove_beat, suggest_beat_boundaries,
+    STANDARD_BEAT_KINDS,
+    legacy_add_beat as add_beat,
+    legacy_beat_at_frame as beat_at_frame,
+    legacy_beats_overlapping as beats_overlapping,
+    legacy_list_beats as list_beats,
+    legacy_remove_beat as remove_beat,
+    legacy_suggest_beat_boundaries as suggest_beat_boundaries,
 )
 from yroll.core.timebase import Rational
 

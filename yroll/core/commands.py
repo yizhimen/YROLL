@@ -22,6 +22,7 @@ from yroll.core.manifest import (
     Operation,
     Region,
     TimeRange,
+    Timeline,
     Track,
     TrackKind,
     TrackRole,
@@ -33,24 +34,123 @@ class CommandError(Exception):
     pass
 
 
+# GUI-03E-2A: legacy fallback counter. Tests can read this; the
+# regression guard also reads it. New code MUST NOT introduce new
+# calls that bump this counter.
+_LEGACY_TIMELINE_FALLBACKS: int = 0
+
+
+def _legacy_fallback_used() -> int:
+    return _LEGACY_TIMELINE_FALLBACKS
+
+
+def _reset_legacy_fallback_counter() -> None:
+    global _LEGACY_TIMELINE_FALLBACKS
+    _LEGACY_TIMELINE_FALLBACKS = 0
+
+
+def _resolve_legacy_timeline_id(core: ProjectCore, timeline_id: str | None) -> str:
+    """GUI-03E-2A legacy shim. When `timeline_id` is None, fall back
+    to the active Timeline and bump the counter. New code MUST pass
+    an explicit timeline_id."""
+    if timeline_id is not None:
+        return timeline_id
+    global _LEGACY_TIMELINE_FALLBACKS
+    _LEGACY_TIMELINE_FALLBACKS += 1
+    return core.project.active_timeline_id
+
+
 class CommandLayer:
     def __init__(self, core: ProjectCore, who: Actor = Actor.HUMAN):
         self.core = core
         self.who = who
 
     # ---------- 内部 ----------
+    #
+    # GUI-03E-2A canonical accessors. The `timeline_id` argument is
+    # the source of truth for ownership. Cross-scope mismatch rejects
+    # BEFORE any state/revision/operation mutation. For legacy
+    # callers that pass timeline_id=None, the active Timeline is
+    # used (counter incremented; regression guard reads it).
 
-    def _clip(self, clip_id: str) -> Clip:
+    def _timeline(self, timeline_id: str | None) -> "Timeline":
+        """Resolve the target Timeline. Returns the Timeline whose
+        stable id matches, raising CommandError on miss. Legacy
+        callers that pass None are routed to active Timeline with
+        a counter increment (see _LEGACY_TIMELINE_FALLBACKS)."""
+        tid = _resolve_legacy_timeline_id(self.core, timeline_id)
+        tl = self.core.project.get_timeline(tid)
+        if tl is None:
+            raise CommandError(
+                f"timeline 不存在: {tid!r}; "
+                f"known ids: {[t.timeline_id for t in self.core.project.timelines]}")
+        return tl
+
+    def _clip(self, clip_id: str, timeline_id: str | None = None) -> Clip:
+        """Resolve a Clip and verify Timeline ownership when
+        `timeline_id` is supplied. Mismatched ownership rejects with
+        NO state/revision/op change. `timeline_id=None` skips the
+        ownership check (legacy fallback; counter incremented)."""
         clip = self.core.project.clips.get(clip_id)
         if clip is None:
             raise CommandError(f"clip 不存在: {clip_id}")
+        if timeline_id is not None and clip.timeline_id != timeline_id:
+            raise CommandError(
+                f"clip {clip_id!r} belongs to timeline "
+                f"{clip.timeline_id!r}, not {timeline_id!r}")
         return clip
 
+    def _track(self, track_id: str, timeline_id: str | None = None) -> Track:
+        """Resolve a Track and verify ownership. Returns the Track or
+        raises CommandError. None timeline_id → active Timeline
+        (legacy fallback; counter incremented)."""
+        tl = self._timeline(timeline_id)
+        track = next((t for t in tl.tracks if t.track_id == track_id), None)
+        if track is None:
+            raise CommandError(
+                f"track {track_id!r} 不存在 in timeline {tl.timeline_id!r}; "
+                f"known tracks: {[t.track_id for t in tl.tracks]}")
+        return track
+
+    def _marker(self, timeline_id: str | None, marker_id: str) -> dict:
+        """GUI-03E-2A: resolve a Marker dict by (timeline_id, marker_id).
+        Mismatch rejects without mutation."""
+        tl = self._timeline(timeline_id)
+        store = getattr(tl, "markers", None) or []
+        for m in store:
+            if m.get("marker_id") == marker_id:
+                if m.get("timeline_id") and m["timeline_id"] != tl.timeline_id:
+                    raise CommandError(
+                        f"marker {marker_id!r} belongs to timeline "
+                        f"{m['timeline_id']!r}, not {tl.timeline_id!r}")
+                return m
+        raise CommandError(
+            f"marker {marker_id!r} 不存在 in timeline {tl.timeline_id!r}")
+
+    def _beat(self, timeline_id: str | None, beat_id: str) -> dict:
+        """GUI-03E-2A: resolve a Beat dict by (timeline_id, beat_id).
+        Mismatch rejects without mutation."""
+        tl = self._timeline(timeline_id)
+        store = getattr(tl, "beats", None) or []
+        for b in store:
+            if b.get("beat_id") == beat_id:
+                if b.get("timeline_id") and b["timeline_id"] != tl.timeline_id:
+                    raise CommandError(
+                        f"beat {beat_id!r} belongs to timeline "
+                        f"{b['timeline_id']!r}, not {tl.timeline_id!r}")
+                return b
+        raise CommandError(
+            f"beat {beat_id!r} 不存在 in timeline {tl.timeline_id!r}")
+
     def _find_overlap(self, track_id: str, start: float, end: float,
-                       exclude_clip_id: str | None = None) -> list[str]:
+                       exclude_clip_id: str | None = None,
+                       timeline_id: str | None = None) -> list[str]:
         """同轨时间区间重叠的 clip_id 列表（不包含 exclude_clip_id）。
 
         同一轨道不允许两个 clip 时间区间重叠（剪映/CapCut/Premiere 标准行为）。
+
+        GUI-03E-2A: when `timeline_id` is supplied, the overlap check
+        is scoped to clips owned by that Timeline.
         """
         if end <= start:
             return []
@@ -59,6 +159,8 @@ class CommandLayer:
             if cid == exclude_clip_id:
                 continue
             if c.track_id != track_id:
+                continue
+            if timeline_id is not None and c.timeline_id != timeline_id:
                 continue
             # 区间 [s, e) 半开，与剪映一致
             if c.timeline_range.start < end and start < c.timeline_range.end:
@@ -112,13 +214,14 @@ class CommandLayer:
         return self.move_clip(clip_id, self._frame_to_sec(timeline_start_frame), why=why)
 
     def trim_clip_frame(self, clip_id: str, src_start_frame: int | None = None,
-                        src_end_frame: int | None = None, why: str = '') -> Operation:
+                        src_end_frame: int | None = None, why: str = '',
+                        timeline_id: str | None = None) -> Operation:
         """Frame-based trim_clip."""
         return self.trim_clip(
             clip_id,
             new_source_start=self._frame_to_sec(src_start_frame) if src_start_frame is not None else None,
             new_source_end=self._frame_to_sec(src_end_frame) if src_end_frame is not None else None,
-            why=why)
+            why=why, timeline_id=timeline_id)
 
     def split_clip_frame(self, clip_id: str, at_timeline_frame: int, why: str = '') -> tuple:
         """Frame-based split_clip. at is timeline frame, NOT source frame."""
@@ -127,20 +230,31 @@ class CommandLayer:
 
     def _check_no_overlap(self, track_id: str, start: float, end: float,
                            exclude_clip_id: str | None = None,
-                           op_name: str = "operation") -> None:
-        """重叠检查：发现冲突直接 CommandError（前端拿 400 + 明确消息）。"""
-        conflicts = self._find_overlap(track_id, start, end, exclude_clip_id)
+                           op_name: str = "operation",
+                           timeline_id: str | None = None) -> None:
+        """重叠检查：发现冲突直接 CommandError（前端拿 400 + 明确消息）。
+
+        GUI-03E-2A: when `timeline_id` is supplied, the overlap check
+        is scoped to clips owned by that Timeline (so adding a clip
+        to Timeline B can never conflict with a clip on the same
+        track_id in Timeline A — they are independent).
+        """
+        conflicts = self._find_overlap(
+            track_id, start, end, exclude_clip_id, timeline_id=timeline_id)
         if conflicts:
             shown = ", ".join(conflicts[:3])
             more = f" 等 {len(conflicts)} 个" if len(conflicts) > 3 else ""
+            scope = f" (timeline {timeline_id})" if timeline_id else ""
             raise CommandError(
-                f"{op_name} 与轨道 {track_id} 上现有 clip 时间重叠：{shown}{more}。"
-                f"（同一轨道片段不允许重叠，请先 Trim/Split 或 Move 到其它轨道）")
+                f"{op_name} 与轨道 {track_id}{scope} 上现有 clip 时间重叠："
+                f"{shown}{more}。（同一轨道片段不允许重叠，请先 "
+                f"Trim/Split 或 Move 到其它轨道）")
 
     def _record(self, type_: str, target: str, before: dict, after: dict,
                 why: str = "", time_range: TimeRange | None = None,
                 region: Region | None = None, cost: float = 0.0,
-                tool: str | None = None) -> Operation:
+                tool: str | None = None,
+                timeline_id: str | None = None) -> Operation:
         op = self.core.new_operation(
             who=self.who, type=type_, target=target,
             time_range=time_range, region=region,
@@ -148,6 +262,14 @@ class CommandLayer:
             why=why, tool=tool or f"video.{type_}", cost=cost,
             approved_by=self.who,
         )
+        # GUI-03E-2A: every Timeline-local mutation stamps its
+        # `timeline_id` into the Operation parameters so audit /
+        # history can filter by Timeline. We resolve the legacy
+        # fallback here too (so `timeline_id=None` from a caller
+        # still produces a stamped op).
+        if timeline_id is None:
+            timeline_id = self.core.project.active_timeline_id
+        op.parameters["timeline_id"] = timeline_id
         return self.core.log(op)
 
     # ---------- Composite Mutation Helpers (P0-04D: one user intent = one Op) ----------
@@ -182,9 +304,11 @@ class CommandLayer:
 
     # ---------- 轨道 ----------
 
-    def set_track_muted(self, track_id: str, muted: bool, why: str = "") -> Operation:
+    def set_track_muted(self, track_id: str, muted: bool, why: str = "",
+                         timeline_id: str | None = None) -> Operation:
         """轨道静音：音频轨不出声，PiP 视频轨不叠画（渲染时跳过）。"""
-        track = next((t for t in self.core.project.timeline.tracks
+        tl = self._timeline(timeline_id)
+        track = next((t for t in tl.tracks
                       if t.track_id == track_id), None)
         if track is None:
             raise CommandError(f"track 不存在: {track_id}")
@@ -194,9 +318,11 @@ class CommandLayer:
                             why=why or f"轨道 {track_id} {'静音' if muted else '取消静音'}",
                             tool="track.mute")
 
-    def set_track_locked(self, track_id: str, locked: bool, why: str = "") -> Operation:
+    def set_track_locked(self, track_id: str, locked: bool, why: str = "",
+                          timeline_id: str | None = None) -> Operation:
         """轨道锁定：GUI 禁止拖动/编辑该轨 clip（防误触，渲染不受影响）。"""
-        track = next((t for t in self.core.project.timeline.tracks
+        tl = self._timeline(timeline_id)
+        track = next((t for t in tl.tracks
                       if t.track_id == track_id), None)
         if track is None:
             raise CommandError(f"track 不存在: {track_id}")
@@ -206,9 +332,11 @@ class CommandLayer:
                             why=why or f"轨道 {track_id} {'锁定' if locked else '解锁'}",
                             tool="track.lock")
 
-    def set_track_hidden(self, track_id: str, hidden: bool, why: str = "") -> Operation:
+    def set_track_hidden(self, track_id: str, hidden: bool, why: str = "",
+                          timeline_id: str | None = None) -> Operation:
         """轨道隐藏：GUI 不显示该轨 clip（Premiere/CapCut 标配，渲染时仍参与合成）。"""
-        track = next((t for t in self.core.project.timeline.tracks
+        tl = self._timeline(timeline_id)
+        track = next((t for t in tl.tracks
                       if t.track_id == track_id), None)
         if track is None:
             raise CommandError(f"track 不存在: {track_id}")
@@ -219,8 +347,9 @@ class CommandLayer:
                             tool="track.hide")
 
     def add_track(self, kind: TrackKind, track_id: str | None = None,
-                role: TrackRole | None = None,
-                label: str | None = None) -> Track:
+                  role: TrackRole | None = None,
+                  label: str | None = None,
+                  timeline_id: str | None = None) -> Track:
         """Explicitly create a track. Most callers should use
         `allocate_track_for` instead — this method is for users who
         want to name a track (e.g. "V9 自定义") or set a role.
@@ -231,10 +360,11 @@ class CommandLayer:
         CommandError. Compatible with `ensure_default_tracks`, the
         legacy migration path for pre-GUI-03C projects.
         """
+        tl = self._timeline(timeline_id)
         if track_id is None:
             # Auto-name: lowest unused <prefix><n> for the kind.
             track_id = self._next_track_id_for_kind(kind)
-        for t in self.core.project.timeline.tracks:
+        for t in tl.tracks:
             if t.track_id == track_id:
                 if t.kind != kind:
                     raise CommandError(
@@ -246,8 +376,8 @@ class CommandLayer:
                 if label is not None and t.label != label:
                     t.label = label
                 return t
-        track = Track(track_id=track_id, kind=kind, role=role, label=label)
-        self.core.project.timeline.tracks.append(track)
+        track = Track(track_id=track_id, timeline_id=tl.timeline_id, kind=kind, role=role, label=label)
+        tl.tracks.append(track)
         self._record("add_track", track_id, {}, track.model_dump(), tool="timeline.add_track")
         return track
 
@@ -262,12 +392,13 @@ class CommandLayer:
         }
         prefix = prefix_map[kind]
         existing_nums = set()
-        for t in self.core.project.timeline.tracks:
-            if t.kind == kind and t.track_id.startswith(prefix):
-                try:
-                    existing_nums.add(int(t.track_id[len(prefix):]))
-                except ValueError:
-                    pass
+        for tl in self.core.project.timelines:
+            for t in tl.tracks:
+                if t.kind == kind and t.track_id.startswith(prefix):
+                    try:
+                        existing_nums.add(int(t.track_id[len(prefix):]))
+                    except ValueError:
+                        pass
         n = 1
         while n in existing_nums:
             n += 1
@@ -290,7 +421,8 @@ class CommandLayer:
 
     def allocate_track_for(self, asset_type_value: str,
                             tl_start: float, tl_end: float,
-                            prefer_track_id: str | None = None) -> Track:
+                            prefer_track_id: str | None = None,
+                            timeline_id: str | None = None) -> Track:
         """GUI-03C: Core-owned track allocation policy.
 
         Returns an existing compatible track (same kind, no
@@ -306,26 +438,29 @@ class CommandLayer:
 
         Asset types not in the map (e.g. 'document') raise.
         """
+        tl = self._timeline(timeline_id)
         allowed_kinds = ASSET_TYPE_TO_TRACK_KINDS.get(asset_type_value)
         if not allowed_kinds:
             raise CommandError(
                 f"allocate_track_for: asset type {asset_type_value!r} "
                 f"is not a Timeline media")
         # Find the FIRST existing compatible track with no overlap.
-        for t in self.core.project.timeline.tracks:
+        for t in tl.tracks:
             if t.kind.value not in allowed_kinds:
                 continue
             if not self._track_overlaps(t, tl_start, tl_end):
                 return t
         # No fit: create a new track.
         kind_enum = TrackKind(list(allowed_kinds)[0])
-        return self.add_track(kind_enum)
+        return self.add_track(kind_enum, timeline_id=timeline_id)
 
     # ---------- Clip 增删 ----------
 
     def add_clip(self, asset_id: str, source_start: float, source_end: float,
                  timeline_start: float, track_id: str | None = None,
-                 why: str = "") -> Clip:
+                 why: str = "",
+                 timeline_id: str | None = None) -> Clip:
+        tl = self._timeline(timeline_id)
         duration = source_end - source_start
         if duration <= 0:
             raise CommandError("source_range 无效")
@@ -368,7 +503,7 @@ class CommandLayer:
         # always VIDEO, which broke heterogeneous assets.
         if track_id:
             existing = next(
-                (t for t in self.core.project.timeline.tracks
+                (t for t in tl.tracks
                  if t.track_id == track_id), None,
             )
             if existing is not None:
@@ -405,6 +540,7 @@ class CommandLayer:
         clip = Clip(
             clip_id=f"c{uuid.uuid4().hex[:6]}",
             asset_id=asset_id,
+            timeline_id=tl.timeline_id,
             source_range=TimeRange(start=source_start, end=source_end),
             timeline_range=TimeRange(start=timeline_start, end=tl_end),
             track_id=actual_track_id,
@@ -412,7 +548,8 @@ class CommandLayer:
         # 重叠检查（同一轨道片段不允许重叠）
         self._check_no_overlap(
             actual_track_id, timeline_start, tl_end,
-            op_name=f"add_clip({asset_id})")
+            op_name=f"add_clip({asset_id})",
+            timeline_id=timeline_id)
         track.clip_ids.append(clip.clip_id)
         self.core.project.clips[clip.clip_id] = clip
         self._record("add_clip", clip.clip_id, {}, clip.model_dump(), why=why,
@@ -425,7 +562,8 @@ class CommandLayer:
                         timeline_start_frame: int,
                         timeline_duration_frames: int,
                         track_id: str | None = None,
-                        why: str = "") -> Clip:
+                        why: str = "",
+                        timeline_id: str | None = None) -> Clip:
         """Add an image clip with frame-native coordinates.
 
         GUI-03B contract: an image asset has intrinsic_duration =
@@ -448,6 +586,7 @@ class CommandLayer:
         Track policy: image may live on any VIDEO-class track
         (v1/v2/v3/PiP). Audio and text tracks reject images.
         """
+        tl = self._timeline(timeline_id)
         if timeline_duration_frames <= 0:
             raise CommandError(
                 f"add_image_clip: timeline_duration_frames must be > 0, "
@@ -489,7 +628,7 @@ class CommandLayer:
         # (1 source frame, 1.0 speed) are preserved.
         if track_id:
             existing = next(
-                (t for t in self.core.project.timeline.tracks
+                (t for t in tl.tracks
                  if t.track_id == track_id), None,
             )
             if existing is not None:
@@ -523,11 +662,13 @@ class CommandLayer:
         # Overlap check on the resolved track.
         self._check_no_overlap(
             actual_track_id, tl_start_sec, tl_end_sec,
-            op_name=f"add_image_clip({asset_id})")
+            op_name=f"add_image_clip({asset_id})",
+            timeline_id=timeline_id)
 
         clip = Clip(
             clip_id=f"c{uuid.uuid4().hex[:6]}",
             asset_id=asset_id,
+            timeline_id=tl.timeline_id,
             source_range=TimeRange(start=src_start_sec, end=src_end_sec),
             timeline_range=TimeRange(start=tl_start_sec, end=tl_end_sec),
             track_id=actual_track_id,
@@ -544,7 +685,8 @@ class CommandLayer:
     def trim_image_clip_frame(self, clip_id: str,
                                timeline_start_frame: int | None = None,
                                timeline_end_frame: int | None = None,
-                               why: str = "") -> Operation:
+                               why: str = "",
+                               timeline_id: str | None = None) -> Operation:
         """GUI-03B: trim an IMAGE clip's on-screen duration.
 
         Only the timeline side is adjustable; image clips have a
@@ -556,7 +698,8 @@ class CommandLayer:
 
         Returns an Operation record (revertable).
         """
-        clip = self._clip(clip_id)
+        tl = self._timeline(timeline_id)
+        clip = self._clip(clip_id, timeline_id)
         asset = next((a for a in self.core.project.assets
                       if a.asset_id == clip.asset_id), None)
         if asset is None or asset.type.value != "image":
@@ -609,10 +752,12 @@ class CommandLayer:
             tool="timeline.trim_image_clip_frame",
         )
 
-    def remove_clip(self, clip_id: str, why: str = "") -> Operation:
-        clip = self._clip(clip_id)
+    def remove_clip(self, clip_id: str, why: str = "",
+                    timeline_id: str | None = None) -> Operation:
+        tl = self._timeline(timeline_id)
+        clip = self._clip(clip_id, timeline_id)
         before = clip.model_dump()
-        track = next((t for t in self.core.project.timeline.tracks
+        track = next((t for t in tl.tracks
                       if clip_id in t.clip_ids), None)
         if track:
             track.clip_ids.remove(clip_id)
@@ -620,16 +765,18 @@ class CommandLayer:
         return self._record("remove_clip", clip_id, before, {}, why=why,
                             tool="timeline.remove_clip")
 
-    def ripple_delete_clip(self, clip_id: str, why: str = "") -> Operation:
+    def ripple_delete_clip(self, clip_id: str, why: str = "",
+                          timeline_id: str | None = None) -> Operation:
         """Ripple delete：删除 clip 并把同轨后面的 clip 全部前移收拢（不留黑洞）。
         同时按 Semantic Link (STRONG) 联动字幕/音频轨。
         """
         from yroll.core.links import infer_relationships
 
-        clip = self._clip(clip_id)
+        tl = self._timeline(timeline_id)
+        clip = self._clip(clip_id, timeline_id)
         dur = clip.timeline_range.end - clip.timeline_range.start
         removed_start = clip.timeline_range.start
-        track = next((t for t in self.core.project.timeline.tracks
+        track = next((t for t in tl.tracks
                       if clip_id in t.clip_ids), None)
 
         # 推断关系图（确保 Relationship 已建立）
@@ -689,12 +836,14 @@ class CommandLayer:
     # ---------- 字幕（text 轨） ----------
 
     def add_subtitle(self, text: str, start: float, end: float,
-                     track_id: str | None = None, why: str = "") -> Clip:
+                     track_id: str | None = None, why: str = "",
+                     timeline_id: str | None = None) -> Clip:
         """在 text 轨加字幕 clip（无源素材，asset_id=""，内容在 context.text）。
         GUI-03C: track_id is None by default; the Core-owned
         allocator routes to the first compatible TEXT/SUBTITLE
         track. Pass track_id to pin to a specific track (must be
         text/subtitle kind)."""
+        tl = self._timeline(timeline_id)
         if end <= start:
             raise CommandError("字幕时间范围无效")
         track = self.allocate_track_for(
@@ -704,6 +853,7 @@ class CommandLayer:
         clip = Clip(
             clip_id=f"c{uuid.uuid4().hex[:6]}",
             asset_id="",
+            timeline_id=tl.timeline_id,
             source_range=TimeRange(start=0.0, end=end - start),
             timeline_range=TimeRange(start=start, end=end),
             track_id=actual_track_id,
@@ -799,9 +949,10 @@ class CommandLayer:
             why=why or f"从转写生成 {len(created)} 条字幕",
             tool="text.generate_subtitles")
 
-    def edit_subtitle(self, clip_id: str, text: str, why: str = "") -> Operation:
+    def edit_subtitle(self, clip_id: str, text: str, why: str = "",
+                      timeline_id: str | None = None) -> Operation:
         """改字幕文字（TEXT 类 Problem 的 L0 方案 text.correct 的真实执行体）。"""
-        clip = self._clip(clip_id)
+        clip = self._clip(clip_id, timeline_id)
         before = {"text": clip.context.get("text", "")}
         clip.context["text"] = text
         return self._record("subtitle_edit", clip_id, before, {"text": text},
@@ -821,10 +972,11 @@ class CommandLayer:
     # ---------- Clip 修改（X 轴基础编辑，成本 0，离线可用） ----------
 
     def trim_clip(self, clip_id: str, new_source_start: float | None = None,
-                  new_source_end: float | None = None, why: str = "") -> Operation:
+                  new_source_end: float | None = None, why: str = "",
+                  timeline_id: str | None = None) -> Operation:
         """Trim by SOURCE seconds (legacy). For frame-native, use
         `trim_clip_frame` which calls this with frame-derived seconds."""
-        clip = self._clip(clip_id)
+        clip = self._clip(clip_id, timeline_id)
         before = {"source_range": clip.source_range.model_dump(),
                   "timeline_range": clip.timeline_range.model_dump()}
         sr = clip.source_range
@@ -849,7 +1001,8 @@ class CommandLayer:
                             time_range=clip.timeline_range)
 
     def trim_clip_frame(self, clip_id: str, src_start_frame: int | None = None,
-                        src_end_frame: int | None = None, why: str = '') -> Operation:
+                        src_end_frame: int | None = None, why: str = '',
+                        timeline_id: str | None = None) -> Operation:
         """Frame-native trim. Math in frames throughout; TimeMap is
         used for source<->timeline conversion (also in frames). The
         frame→seconds conversion happens once at the storage boundary
@@ -908,11 +1061,13 @@ class CommandLayer:
         return self._record("trim", clip_id, before, after, why=why,
                             time_range=clip.timeline_range)
 
-    def split_clip(self, clip_id: str, at_source_time: float, why: str = "") -> tuple[Clip, Clip]:
+    def split_clip(self, clip_id: str, at_source_time: float, why: str = "",
+                   timeline_id: str | None = None) -> tuple[Clip, Clip]:
         """Split at SOURCE seconds (legacy). For frame-native, use
         `split_clip_frame(at_timeline_frame)` which uses Core's TimeMap
         to convert timeline_frame -> source_frame."""
-        clip = self._clip(clip_id)
+        tl = self._timeline(timeline_id)
+        clip = self._clip(clip_id, timeline_id)
         sr = clip.source_range
         if not (sr.start < at_source_time < sr.end):
             raise CommandError("切分点不在 clip 范围内")
@@ -933,7 +1088,7 @@ class CommandLayer:
         sr.end = at_source_time
         clip.timeline_range.end = mid_timeline
         self.core.project.clips[right.clip_id] = right
-        track = next(t for t in self.core.project.timeline.tracks
+        track = next(t for t in tl.tracks
                      if t.track_id == clip.track_id)
         idx = track.clip_ids.index(clip_id)
         track.clip_ids.insert(idx + 1, right.clip_id)
@@ -943,13 +1098,14 @@ class CommandLayer:
                      time_range=TimeRange(start=at_source_time, end=at_source_time))
         return clip, right
 
-    def split_clip_frame(self, clip_id: str, at_timeline_frame: int, why: str = '') -> tuple:
+    def split_clip_frame(self, clip_id: str, at_timeline_frame: int, why: str = '',
+                         timeline_id: str | None = None) -> tuple:
         """Frame-native split. `at` is in TIMELINE frame coordinates;
         TimeMap handles source<->timeline conversion in frames."""
         from yroll.core.timebase import Rational
         from yroll.core.timemap import TimeMap
         fps = self._fps_rational()
-        clip = self._clip(clip_id)
+        clip = self._clip(clip_id, timeline_id)
         src_fps = self._source_fps_for_clip(clip)
         if src_fps is None:
             src_fps = fps
@@ -994,7 +1150,7 @@ class CommandLayer:
         # clips in track if no range).
         target_ids = list(selection.clip_ids)
         if not target_ids and selection.track_ids:
-            for t in self.core.project.timeline.tracks:
+            for t in tl.tracks:
                 if t.track_id in selection.track_ids:
                     for cid in t.clip_ids:
                         c = self.core.project.clips.get(cid)
@@ -1033,11 +1189,11 @@ class CommandLayer:
             # Direct state mutation: composite op captures before/after.
             if nt and nt != c.track_id:
                 # Cross-track move
-                old_track = next((t for t in self.core.project.timeline.tracks
+                old_track = next((t for t in tl.tracks
                                   if cid in t.clip_ids), None)
                 if old_track:
                     old_track.clip_ids.remove(cid)
-                dst = next((t for t in self.core.project.timeline.tracks
+                dst = next((t for t in tl.tracks
                             if t.track_id == nt), None)
                 if dst is None:
                     raise CommandError(f"目标轨道不存在: {nt}")
@@ -1053,14 +1209,16 @@ class CommandLayer:
             tool="selection.move")
 
     def delete_selection(self, selection: 'Selection', ripple: bool = False,
-                         why: str = "") -> Operation:
+                         why: str = "",
+                         timeline_id: str | None = None) -> Operation:
         """Delete all clips in selection. ripple=True → collapse subsequent clips."""
+        tl = self._timeline(timeline_id)
         from yroll.core.selection import Selection as _Selection
         if not isinstance(selection, _Selection):
             selection = _Selection.from_clip_or_id(selection)
         ids = list(selection.clip_ids)
         if not ids and selection.track_ids:
-            for t in self.core.project.timeline.tracks:
+            for t in tl.tracks:
                 if t.track_id in selection.track_ids:
                     ids.extend(t.clip_ids)
         if not ids:
@@ -1074,7 +1232,7 @@ class CommandLayer:
                 continue
             before[cid] = c.model_dump()
             self.core.project.clips.pop(cid, None)
-            for t in self.core.project.timeline.tracks:
+            for t in tl.tracks:
                 if cid in t.clip_ids:
                     t.clip_ids.remove(cid)
         if ripple:
@@ -1087,7 +1245,7 @@ class CommandLayer:
                     touched_tracks[bd["track_id"]] = (
                         touched_tracks.get(bd["track_id"], 0.0) + dur)
             for tid, shift in touched_tracks.items():
-                track = next((t for t in self.core.project.timeline.tracks
+                track = next((t for t in tl.tracks
                               if t.track_id == tid), None)
                 if not track:
                     continue
@@ -1107,12 +1265,14 @@ class CommandLayer:
             tool="selection.delete")
 
     def move_clip(self, clip_id: str, new_timeline_start: float,
-                  new_track_id: str | None = None, why: str = "") -> Operation:
+                  new_track_id: str | None = None, why: str = "",
+                  timeline_id: str | None = None) -> Operation:
+        tl = self._timeline(timeline_id)
         """Move to new TIMELINE seconds (legacy). For frame-native, use
         `move_clip_frame(new_timeline_start_frame)`."""
         from yroll.core.links import infer_relationships
 
-        clip = self._clip(clip_id)
+        clip = self._clip(clip_id, timeline_id)
         before = {"timeline_range": clip.timeline_range.model_dump(),
                   "track_id": clip.track_id}
         old_start = clip.timeline_range.start
@@ -1141,7 +1301,6 @@ class CommandLayer:
         clip.timeline_range = TimeRange(
             start=new_timeline_start, end=new_timeline_start + length)
         if new_track_id and new_track_id != clip.track_id:
-            tl = self.core.project.timeline
             old = next((t for t in tl.tracks if clip_id in t.clip_ids), None)
             if old:
                 old.clip_ids.remove(clip_id)
@@ -1176,13 +1335,15 @@ class CommandLayer:
 
     def move_clip_frame(self, clip_id: str, new_timeline_start_frame: int,
                         new_track_id: str | None = None,
-                        why: str = "") -> Operation:
+                        why: str = "",
+                        timeline_id: str | None = None) -> Operation:
         """Frame-native move. Math in frames; conversion at storage
         boundary only."""
         fps = self._fps_rational()
         new_timeline_start = new_timeline_start_frame * fps.den / fps.num
         return self.move_clip(clip_id, new_timeline_start,
-                              new_track_id=new_track_id, why=why)
+                              new_track_id=new_track_id, why=why,
+                              timeline_id=timeline_id)
 
     def set_speed(self, clip_id: str, speed: float, why: str = "") -> Operation:
         clip = self._clip(clip_id)
@@ -1211,13 +1372,15 @@ class CommandLayer:
                             time_range=clip.timeline_range)
 
     def replace_clip_voice(self, clip_id: str, text: str,
-                           voice_id: str | None = None, why: str = "") -> Operation:
+                           voice_id: str | None = None, why: str = "",
+                           timeline_id: str | None = None) -> Operation:
         """L2 语音重配：TTS 合成正确文本的语音 → 新音频 clip 对齐原 clip → 原 clip 静音。
         非破坏（原素材不动；撤销即恢复原声）。voice_id 缺省用 MiniMax 系统音色。
 
         Atomic (P0-04D): 一个用户意图 = 一个 voice_replace Operation。
         不再产生独立的 add_clip / mute 子 op；Undo 一次回到替换前状态。
         """
+        tl = self._timeline(timeline_id)
         import hashlib
         import uuid
 
@@ -1245,7 +1408,7 @@ class CommandLayer:
         atrack = next((t for t in project.timeline.tracks
                        if t.kind == TrackKind.AUDIO and not t.muted), None)
         if atrack is None:
-            atrack = self._add_track_no_op(TrackKind.AUDIO, "a1")
+            atrack = self._add_track_no_op(TrackKind.AUDIO, "a1", tl=tl)
         dur = clip.timeline_range.end - clip.timeline_range.start
         new_clip = self._add_clip_no_op(
             asset.asset_id, 0.0, dur,
@@ -1271,28 +1434,39 @@ class CommandLayer:
             why=why or f"语音重配：{text[:20]}", cost=0.05,
             tool="voice.clone_replace")
 
-    def _add_track_no_op(self, kind, track_id):
-        """Atomic helper: add a track without emitting an Operation."""
+    def _add_track_no_op(self, kind, track_id, tl=None):
+        """Atomic helper: add a track without emitting an Operation.
+        GUI-03E-2A: takes an optional Timeline; falls back to the
+        active Timeline when None."""
         from yroll.core.manifest import Track
-        track = Track(track_id=track_id, kind=kind)
-        self.core.project.timeline.tracks.append(track)
+        if tl is None:
+            tl = self._timeline(None)  # legacy fallback to active
+        track = Track(track_id=track_id, timeline_id=tl.timeline_id, kind=kind)
+        tl.tracks.append(track)
         return track
 
     def _add_clip_no_op(self, asset_id: str, source_start: float, source_end: float,
-                        timeline_start: float, track_id: str = "v1"):
-        """Atomic helper: add a clip without emitting an Operation."""
+                        timeline_start: float, track_id: str = "v1",
+                        tl=None):
+        """Atomic helper: add a clip without emitting an Operation.
+        GUI-03E-2A: takes an optional Timeline; falls back to the
+        active Timeline when None. The new Clip's `timeline_id` is
+        stamped from the resolved Timeline."""
         import uuid
         from yroll.core.manifest import Clip
+        if tl is None:
+            tl = self._timeline(None)
         clip = Clip(
             clip_id=f"c{uuid.uuid4().hex[:6]}",
             asset_id=asset_id,
+            timeline_id=tl.timeline_id,
             source_range=TimeRange(start=source_start, end=source_end),
             timeline_range=TimeRange(start=timeline_start,
                                      end=timeline_start + (source_end - source_start)),
             track_id=track_id,
         )
         self.core.project.clips[clip.clip_id] = clip
-        track = next((t for t in self.core.project.timeline.tracks
+        track = next((t for t in tl.tracks
                       if t.track_id == track_id), None)
         if track:
             track.clip_ids.append(clip.clip_id)
@@ -1331,13 +1505,15 @@ class CommandLayer:
     # ---------- 本地 AI/确定性工具（L1 路由的真实执行体） ----------
 
     def remove_silence(self, clip_id: str, noise_db: float = -35.0,
-                       min_duration: float = 0.5, why: str = "") -> Operation:
+                       min_duration: float = 0.5, why: str = "",
+                       timeline_id: str | None = None) -> Operation:
         """去停顿/气口：检测 clip 源区间内的静音段，把 clip 重建成不含静音的多个片段。
         时间轴总长度收缩（删掉的静音不再占位）。
         """
         from yroll.tools.audio_tools import complement_ranges, detect_silences
 
-        clip = self._clip(clip_id)
+        tl = self._timeline(timeline_id)
+        clip = self._clip(clip_id, timeline_id)
         asset = next((a for a in self.core.project.assets
                       if a.asset_id == clip.asset_id), None)
         if asset is None:
@@ -1359,7 +1535,7 @@ class CommandLayer:
         removed_total = (whole.end - whole.start) - sum(k.end - k.start for k in keeps)
 
         # 原 clip 变成第一个保留段
-        track = next(t for t in self.core.project.timeline.tracks
+        track = next(t for t in tl.tracks
                      if clip_id in t.clip_ids)
         idx = track.clip_ids.index(clip_id)
         cursor = tl_start
@@ -1506,7 +1682,8 @@ class CommandLayer:
 
     # ---------- 调整图层（带羽化，局部修改不硬切割） ----------
 
-    def analyze_loudness(self, clip_id: str, why: str = "") -> Operation:
+    def analyze_loudness(self, clip_id: str, why: str = "",
+                        timeline_id: str | None = None) -> Operation:
         """响度分析：测量 clip 源区间的 mean/max 音量，结果落 Operation.after。
         分析也是工程事件（蓝图：'AI 分析一次，长期使用'）。"""
         from yroll.tools.audio_tools import measure_loudness
@@ -1826,3 +2003,277 @@ class CommandLayer:
                             f"Slide {delta_seconds:+.3f}s",
                             time_range=clip.timeline_range,
                             tool="timeline.slide")
+
+    # ---------- GUI-03E-2A: Timeline Lifecycle Commands ----------
+    #
+    # These four commands manage the Project's peer Timelines. They
+    # are Project-global (they touch project.timelines,
+    # project.active_timeline_id, etc.). Each command records the
+    # target Timeline id in the Operation.parameters['timeline_id']
+    # audit metadata so future history views can show WHICH Timeline
+    # a mutation affected.
+
+    def _record_lifecycle(self, op_type: str, timeline_id: str,
+                           before: dict, after: dict,
+                           why: str = "", tool: str | None = None) -> Operation:
+        """GUI-03E-2A: lifecycle ops always carry timeline_id in
+        parameters + a dedicated Operation field for fast filtering.
+        """
+        op = self.core.new_operation(
+            who=self.who, type=op_type, target=timeline_id,
+            parameters=after, before=before, after=after,
+            why=why, tool=tool or f"timeline.{op_type}",
+            approved_by=self.who,
+        )
+        # GUI-03E-2A: stamp timeline_id into the parameters so audit
+        # / search can filter by Timeline. (Operation.parameters is
+        # dict[str, Any] so we can add a structured key.)
+        op.parameters["timeline_id"] = timeline_id
+        return self.core.log(op)
+
+    def add_timeline(self, name: str, derived_from: str | None = None,
+                     why: str = "") -> Timeline:
+        """Create a new empty Timeline and append it to the Project.
+
+        Args:
+          name:         user-visible label (NOT canonical key).
+          derived_from: stable source timeline_id when this Timeline
+                        is duplicated from another. None for a fresh
+                        independent Timeline.
+        """
+        if not name or not name.strip():
+            raise CommandError("add_timeline: name 不能为空")
+        if derived_from is not None:
+            src = self.core.project.get_timeline(derived_from)
+            if src is None:
+                raise CommandError(
+                    f"add_timeline: derived_from timeline 不存在: "
+                    f"{derived_from!r}")
+        new_id = f"tl{uuid.uuid4().hex[:8]}"
+        if self.core.project.get_timeline(new_id) is not None:
+            # Vanishingly unlikely; reject for safety.
+            raise CommandError(
+                f"add_timeline: timeline id collision {new_id!r}")
+        new_tl = Timeline(
+            timeline_id=new_id,
+            name=name.strip(),
+            derived_from=derived_from,
+            tracks=[],
+            markers=[],
+            beats=[],
+        )
+        before = {
+            "timelines": [t.timeline_id for t in self.core.project.timelines],
+        }
+        self.core.project.timelines.append(new_tl)
+        after = {
+            "timelines": [t.timeline_id for t in self.core.project.timelines],
+            "added": new_id,
+            "name": new_tl.name,
+            "derived_from": derived_from,
+        }
+        self._record_lifecycle(
+            "add_timeline", new_id, before, after,
+            why=why or f"新增时间线 {new_tl.name}",
+        )
+        return new_tl
+
+    def switch_active_timeline(self, timeline_id: str,
+                                why: str = "") -> Operation:
+        """Make `timeline_id` the active Timeline. The Open Order
+        invariant (active → default → first) only applies when the
+        configured `active_timeline_id` is missing; a user/agent can
+        switch to any existing Timeline."""
+        tl = self._timeline(timeline_id)
+        before = {"active_timeline_id": self.core.project.active_timeline_id}
+        self.core.project.active_timeline_id = tl.timeline_id
+        after = {"active_timeline_id": tl.timeline_id}
+        return self._record_lifecycle(
+            "switch_active_timeline", tl.timeline_id, before, after,
+            why=why or f"切到时间线 {tl.name}",
+        )
+
+    def duplicate_timeline(self, source_timeline_id: str,
+                            new_name: str | None = None,
+                            why: str = "") -> Timeline:
+        """Duplicate a Timeline into a new Timeline with fresh IDs.
+
+        Spec: copy Tracks / Clips / Markers / Beats / Timeline metadata;
+        generate new globally unique Timeline/Track/Clip/Marker/Beat
+        IDs; preserve each Clip's asset_id (shared, never copied);
+        never copy media files or Asset objects; set
+        derived_from=source_timeline_id.
+        """
+        src = self._timeline(source_timeline_id)
+        if not new_name or not new_name.strip():
+            new_name = f"{src.name} 副本"
+        new_id = f"tl{uuid.uuid4().hex[:8]}"
+        if self.core.project.get_timeline(new_id) is not None:
+            raise CommandError(
+                f"duplicate_timeline: timeline id collision {new_id!r}")
+
+        # Map old Track.id → new Track.id. Preserve kind/role/labels.
+        track_id_map: dict[str, str] = {}
+        new_tracks: list[Track] = []
+        for t in src.tracks:
+            new_tid = f"t{uuid.uuid4().hex[:8]}_{t.kind.value}"
+            track_id_map[t.track_id] = new_tid
+            new_tracks.append(Track(
+                track_id=new_tid,
+                timeline_id=new_id,
+                kind=t.kind,
+                clip_ids=[],  # filled below
+                muted=t.muted,
+                locked=t.locked,
+                hidden=t.hidden,
+                role=t.role,
+                label=t.label,
+            ))
+
+        # Map old Clip.id → new Clip.id. New clips share asset_id,
+        # get fresh track_id (mapped), fresh timeline_id, deep copy
+        # of all state.
+        clip_id_map: dict[str, str] = {}
+        new_clips: dict[str, Clip] = {}
+        for old_cid, old_clip in self.core.project.clips.items():
+            if old_clip.timeline_id != src.timeline_id:
+                continue
+            new_cid = f"c{uuid.uuid4().hex[:8]}"
+            clip_id_map[old_cid] = new_cid
+            new_clip = old_clip.model_copy(deep=True)
+            new_clip.clip_id = new_cid
+            new_clip.timeline_id = new_id
+            new_clip.track_id = track_id_map.get(
+                old_clip.track_id, old_clip.track_id)
+            new_clips[new_cid] = new_clip
+
+        # Fill new Track.clip_ids now that we have the mapping.
+        for src_t, new_t in zip(src.tracks, new_tracks):
+            new_t.clip_ids = [clip_id_map.get(cid, cid)
+                               for cid in src_t.clip_ids]
+
+        # Map old Marker.id / Beat.id → new ids. The dicts get a new
+        # timeline_id field; the rest of the payload is copied.
+        new_markers: list[dict] = []
+        for m in (src.markers or []):
+            mid = m.get("marker_id") or f"mk{uuid.uuid4().hex[:6]}"
+            new_mid = f"mk{uuid.uuid4().hex[:6]}"
+            d = dict(m)
+            d["marker_id"] = new_mid
+            d["timeline_id"] = new_id
+            new_markers.append(d)
+            del mid  # silence unused warning if any
+        new_beats: list[dict] = []
+        for b in (src.beats or []):
+            bid = b.get("beat_id") or f"b{uuid.uuid4().hex[:6]}"
+            new_bid = f"b{uuid.uuid4().hex[:6]}"
+            d = dict(b)
+            d["beat_id"] = new_bid
+            d["timeline_id"] = new_id
+            new_beats.append(d)
+            del bid
+
+        new_tl = Timeline(
+            timeline_id=new_id,
+            name=new_name.strip(),
+            derived_from=src.timeline_id,
+            tracks=new_tracks,
+            markers=new_markers,
+            beats=new_beats,
+        )
+
+        before = {
+            "timelines": [t.timeline_id for t in self.core.project.timelines],
+            "source_clip_count": sum(
+                1 for c in self.core.project.clips.values()
+                if c.timeline_id == src.timeline_id),
+        }
+        self.core.project.timelines.append(new_tl)
+        for cid, clip in new_clips.items():
+            self.core.project.clips[cid] = clip
+        after = {
+            "timelines": [t.timeline_id for t in self.core.project.timelines],
+            "added_timeline": new_id,
+            "source_timeline": src.timeline_id,
+            "new_clip_ids": list(new_clips.keys()),
+            "new_track_ids": [t.track_id for t in new_tracks],
+            "new_marker_ids": [m["marker_id"] for m in new_markers],
+            "new_beat_ids": [b["beat_id"] for b in new_beats],
+            "asset_ids_preserved": sorted({
+                c.asset_id for c in new_clips.values()}),
+            "destination_clip_count": sum(
+                1 for c in self.core.project.clips.values()
+                if c.timeline_id == new_id),
+        }
+        self._record_lifecycle(
+            "duplicate_timeline", new_id, before, after,
+            why=why or f"复制时间线 {src.name} → {new_tl.name}",
+        )
+        return new_tl
+
+    def delete_timeline(self, timeline_id: str,
+                        why: str = "") -> Operation:
+        """Delete a Timeline. Refuses if it would leave the Project empty.
+
+        Active selection after deletion:
+          - If `timeline_id` is the active, pick via Open Order:
+            active → default → first (where active/default now point
+            at surviving Timelines, NOT the deleted one).
+          - If `timeline_id` is not the active, leave active alone.
+        """
+        tl = self._timeline(timeline_id)
+        if len(self.core.project.timelines) <= 1:
+            raise CommandError(
+                "delete_timeline: 至少需要保留一条时间线；最后一个不可删")
+
+        was_active = (self.core.project.active_timeline_id == tl.timeline_id)
+        before = {
+            "timelines": [t.timeline_id for t in self.core.project.timelines],
+            "active_timeline_id": self.core.project.active_timeline_id,
+            "default_timeline_id": self.core.project.default_timeline_id,
+            "removed_clips": sorted([
+                cid for cid, c in self.core.project.clips.items()
+                if c.timeline_id == tl.timeline_id
+            ]),
+        }
+        # Remove Timeline from list.
+        self.core.project.timelines = [
+            t for t in self.core.project.timelines
+            if t.timeline_id != tl.timeline_id]
+        # Remove all Clips owned by the deleted Timeline.
+        self.core.project.clips = {
+            cid: c for cid, c in self.core.project.clips.items()
+            if c.timeline_id != tl.timeline_id
+        }
+        # Patch active/default if they pointed at the deleted one.
+        if self.core.project.active_timeline_id == tl.timeline_id:
+            self.core.project.active_timeline_id = self._pick_open_target(
+                exclude=tl.timeline_id,
+                prefer=self.core.project.default_timeline_id)
+        if self.core.project.default_timeline_id == tl.timeline_id:
+            self.core.project.default_timeline_id = (
+                self.core.project.timelines[0].timeline_id)
+        after = {
+            "timelines": [t.timeline_id for t in self.core.project.timelines],
+            "active_timeline_id": self.core.project.active_timeline_id,
+            "default_timeline_id": self.core.project.default_timeline_id,
+            "removed_clips": before["removed_clips"],
+            "was_active": was_active,
+        }
+        return self._record_lifecycle(
+            "delete_timeline", tl.timeline_id, before, after,
+            why=why or f"删除时间线 {tl.name}",
+        )
+
+    def _pick_open_target(self, exclude: str,
+                           prefer: str | None = None) -> str:
+        """Open-order resolver for delete: prefer `prefer` if it's a
+        surviving id, else fall back to first surviving Timeline."""
+        if prefer and prefer != exclude:
+            if self.core.project.get_timeline(prefer) is not None:
+                return prefer
+        for t in self.core.project.timelines:
+            if t.timeline_id != exclude:
+                return t.timeline_id
+        # Caller's precondition guarantees ≥1 surviving timeline.
+        return self.core.project.timelines[0].timeline_id

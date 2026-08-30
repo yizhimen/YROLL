@@ -163,17 +163,26 @@ def _build_layer(c, asset, track, timeline_frame, fps, layer_index,
 
 
 def composite_preview_at_frame(project: Project, timeline_frame: int,
-                                fps: Rational) -> CompositePreview:
+                                fps: Rational,
+                                timeline_id: str | None = None) -> CompositePreview:
     """L1 Timeline Composite Preview. Pure function of (project, frame).
 
-    Iterates `project.timeline.tracks` in declared order (z-order):
-    earlier tracks render below later ones. Within each track, the
-    first matching clip is the active layer for that track. Empty
-    tracks (no clip covering the frame) contribute nothing.
+    GUI-03E-2A: `timeline_id` is required. The function resolves the
+    target Timeline explicitly; mismatched (timeline_id, clip) never
+    resolves. `timeline_id=None` falls back to the active Timeline
+    (legacy). Iterates the target Timeline's tracks in declared
+    order (z-order): earlier tracks render below later ones. Within
+    each track, the first matching clip is the active layer for that
+    track. Empty tracks (no clip covering the frame) contribute
+    nothing.
     """
     pv = CompositePreview(timeline_frame=timeline_frame, fps=fps)
     visual_index = 0
-    for track in project.timeline.tracks:
+    # GUI-03E-2A: resolve target Timeline. None → active (legacy).
+    tl = project.get_timeline(timeline_id or project.active_timeline_id)
+    if tl is None:
+        return pv  # unknown timeline → empty preview
+    for track in tl.tracks:
         # Find the FIRST clip on this track that covers the frame.
         # We must check every clip (not break early) so that a clip
         # whose half-open interval ends at the frame is correctly

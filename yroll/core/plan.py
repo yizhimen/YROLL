@@ -119,10 +119,14 @@ def build_preview_plan(project: Project, timeline_id: str = "main",
         timeline_id=timeline_id,
         fps=fps,
     )
-    # Find the target timeline. ProjectCore has exactly one
-    # `timeline`; for multi-timeline support (GUI-03E), iterate.
-    timeline = project.timeline
+    # Find the target Timeline by stable id. ProjectCore has exactly
+    # one `timeline`; for multi-Timeline support (GUI-03E), look up
+    # by id so the plan is scoped to that Timeline's clips only.
+    timeline = project.get_timeline(timeline_id)
     layer_index = 0
+    if timeline is None:
+        # Unknown timeline → empty plan.
+        return plan
     for track in timeline.tracks:
         layers: list[PreviewLayer] = []
         for cid in track.clip_ids:

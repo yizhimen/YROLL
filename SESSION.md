@@ -1,6 +1,6 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-30 GUI-03E-1 已完工，待 push）
+## 当前状态（2026-08-30 GUI-03E-2A 已完工，待 push）
 - **GUI-01（Session + Mutation Gate + Revision）已完整交付**
 - **GUI-02 Closure** 02-1 → 02-6.1 + 02-7 已完成：
   - 02-1 `f674a56` 标准 NTSC DF + reject dropped labels
@@ -21,23 +21,24 @@
     - `gui/src/preview-plan.ts` — `usePreviewPlan` hook + pure helpers
     - PreviewPlayer 用 cached plan 解析 active layer，0 per-frame HTTP
     - FrameClock 推 TimelineFrame，per-layer source timebase 算 media time
-- **GUI-03E Multiple Timelines** 拆 5 个 batch，**03E-1 已完成**（Schema/migration + 全部 14 个测试绿）：
-  - `Project.timelines: list[Timeline]`（peer，**不是** child/nested）
-  - `active_timeline_id: str` + `default_timeline_id: str`
-  - `schema_version: "0.2"`
-  - `Timeline.name`（user label，**非** 规范唯一键）+ `derived_from: Optional[str]`（source 稳定 id，**不是** name）
-  - 旧工程 `project.timeline` 自动迁移到 `timelines[0]`（lossless + idempotent）
-  - Canonical accessors：`active_timeline` / `default_timeline` / `get_timeline(id)` / `require_timeline(id)`
-  - 打开顺序：**active → default → 第一个**（用户已锁定）
-  - 不可变不变量：**至少一个 Timeline**（`save_state()` 拒绝零 Timeline）
-  - 旧 `project.timeline` 保留为 **deprecated property** 返回 active timeline（commands/server/GUI 不动；mutations 通过 reference sharing 落到 active）
-  - 共享 vs Timeline-local（用户已锁定）：
-    - Project-global：`project_id` / `name` / `intent` / `sequence` / `assets` / `relationships` / `problems` / `solutions` / `generations` / `publishing` / `extensions` / op log / version tree
-    - Timeline-local：`tracks` / `track.muted/locked/hidden/role/label` / `clips`（dict by id，今日全局，未来 03E-2 拆分）/ `markers`（extensions）/ `beats`（extensions）
-    - **Asset 全部跨 Timeline 共享**；媒体文件**永不复制**
-  - 03E-2 / 03E-3 / 03E-4 / 03E-5 **待办**
+- **GUI-03E Multiple Timelines** 拆 5 个 batch，**03E-1 + 03E-2A 已完成**：
+  - 03E-1：Schema/migration（timelines[] + accessors + 14 测试绿）
+  - **03E-2A（pragmatic safe scoping）** — 安全所有权 + 4 lifecycle commands：
+    - **Ownership fields**: `Clip.timeline_id` / `Track.timeline_id` / `Timeline.markers[]` / `Timeline.beats[]`（每个 marker/beat dict 携带 timeline_id）
+    - **5 canonical accessors**: `_timeline(id)` / `_clip(timeline_id, clip_id)` / `_track(timeline_id, track_id)` / `_marker(timeline_id, marker_id)` / `_beat(timeline_id, beat_id)` — **cross-scope mismatch rejects with zero mutation** (no state / revision / op change)
+    - **4 lifecycle commands**: `add_timeline(name, derived_from=None)` / `switch_active_timeline(id)` / `duplicate_timeline(src_id, new_name)` / `delete_timeline(id)` (last one undeletable)
+      - `duplicate_timeline` 复制 Tracks/Clips/Markers/Beats + metadata；新生成 stable IDs；**保留** Asset IDs（共享）；**不复制**媒体；`derived_from=src.timeline_id`
+    - **Explicit high-frequency commands**: `add_clip` / `add_image_clip` / `move_clip` / `trim_clip` / `split_clip` / `remove_clip` / `add_subtitle` / `set_track_*` 现在接受 `timeline_id: str | None = None`
+    - **Legacy fallback**: Python command layer `timeline_id=None` → active Timeline + counter ++。**Counter is exposed** (`_legacy_fallback_used()`); tests + regression guard read it. **New code MUST pass explicit `timeline_id`.**
+    - **HTTP API endpoints**: `/preview/plan?timeline_id=` / `/preview/at_frame?timeline_id=` / `/clips` / `/clips/{id}/trim|move|split` / `/clips/{id}` (DELETE) / `/tracks` / `/tracks/{id}/mute|lock|hide` / `/subtitles` / `/markers` / `/beats` — 全部接受 `timeline_id` query param
+    - **Audit metadata**: 每个 mutation Operation 现在 `parameters["timeline_id"]` 字段记录 owner Timeline（lifecycle 用 `_record_lifecycle`，standard mutations 通过 `_record(timeline_id=...)`）
+    - **Static guard** (`tests/test_timeline_safety.py::test_no_project_timeline_in_commands_module`): commands.py 中 `self.core.project.timeline` (singular) 引用**必须为 0**，除了 `_timeline()` 的错误消息（line 86 allowlisted）。其他 lifecycle 4 个命令仍可读 `self.core.project.timelines` (plural list — Project-global)。
+  - **Mutual exclusion guarantee**: 不同 Timeline 的同 `track_id` (e.g. `v1`) **不** 视为冲突 — overlap check scope 是 Timeline 而非 Project。两个 Timeline 可以各自有 `v1` 各放各的 clip。
+  - **Safety invariants** (14 tests in `test_timeline_safety.py`): ownership 携带 / 显式 Seed 修改不污染 Full / cross-scope clip reject 0 mutation / duplicate 保留 Asset / last Timeline 不可删 / delete active 走 Open Order / Preview A 不解析 B / Agent+Human 跨 Timeline 安全 / 旧单 Timeline 工程兼容 / rename 不改 id / static guard
+  - **Completion criterion met**: 两个独立 Timeline 可共存，每条 Timeline-local edit 显式 scope 到目标 timeline_id，无可能误改 active/other Timeline；duplicate 共享 Asset 不复制媒体；所有新 public mutation path 显式标识 Timeline。
+  - **03E-3 / 03E-4 / 03E-5 待办**
 - 沙盒工程：`projects/sanlihe-slice-30s/`（10 图 + 6 字幕 + 36s）
-- Core 测试：**567 passed + 1 skipped**（含 14 个新 migration 测试）
+- Core 测试：**581 passed + 1 skipped**（含 14 个新 migration + 14 个新 safety 测试）
 - GUI 测试：**171 vitest** + Playwright gui-01 / gui-02
 
 ### GUI-03E 计划（用户已确认）
@@ -65,15 +66,16 @@
 - 媒体文件本身：**永远不复制**（Asset 引用即可）
 
 ### 待办
-- 03E-1（Schema/migration）✅ 已完工（commit 待 push）
-- **03E-2（Core / Command / API）← 下一步**
-  - `add_timeline(name, derived_from=None)` 命令；返回新 Timeline（`timeline_id` 由 Core 生成 stable id）
-  - `duplicate_timeline(source_id, new_name)` 命令（**UI 名 Duplicate，底层记 `derived_from=source_id`**）
-  - `switch_active_timeline(timeline_id)` 命令（写 `active_timeline_id`）
-  - `delete_timeline(timeline_id)` 命令（**最后一个 Timeline 不可删**）
-  - 所有 mutation 必须带 `timeline_id`；commands 通过 `ProjectCore.require_timeline(timeline_id)` 找到目标 Timeline
-  - Server API：增 4 个 endpoint；`/preview/plan`、`/sequence`、`/timeline` 等加 `?timeline_id=` 参数或返回多 Timeline
-  - 03E-2 完成后做 03E-3（GUI 切换条）→ 03E-4（Duplicate UX）→ 03E-5（Revision scope）
+- 03E-1（Schema/migration）✅
+- 03E-2A（Pragmatic Safe Scoping）✅ — safety invariant + 4 lifecycle commands + explicit high-frequency + HTTP API + audit metadata + static guard；**581 passed**
+- **03E-3（GUI Timeline Switcher）← 下一步**
+  - 顶部版本切换条：`[完整版] [种草版] [IP版] [抖音版] [+]`；点击切换 → refetch plan
+  - 当前 Timeline 高亮
+  - 新 Timeline 创建 modal（name + derived_from）
+  - Duplicate 按钮（基于当前 Timeline）
+  - Timeline 删除（最后一个保护）
+- 03E-4（Duplicate UI 完善 — Track 颜色 / 资产面板 / 占位 Track 命名 / 编辑友好）
+- 03E-5（Revision scope 到 Timeline：第一版：每次 Timeline mutation 推 Project revision，mutation 必须带 `timeline_id`；未来：Timeline-local revision）
 - 然后再做一次真实生产测试：拿《三里河·陶鬶》做完整版 + 种草版 两条 timeline
 
 ## 关键不变量（4 个 closure）

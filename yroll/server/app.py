@@ -425,16 +425,17 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         return st.core.versions()
 
     @app.post("/clips")
-    def add_clip(req: AddClipReq, sessionId: str = "", baseRevision: int = None):
+    def add_clip(req: AddClipReq, timeline_id: str = "", sessionId: str = "", baseRevision: int = None):
+        # GUI-03E-2A: timeline_id is required on the public HTTP path.
         def _do():
             if sessionId:
                 require_edit_right(st.core, sessionId)
-            return st.cmd.add_clip(**req.model_dump())
+            return st.cmd.add_clip(timeline_id=(timeline_id or None), **req.model_dump())
         return guard(_check_rev(baseRevision, _do))
 
     @app.post("/clips/add_image")
-    def add_image_clip(req: AddImageClipReq, sessionId: str = "",
-                        baseRevision: int = None):
+    def add_image_clip(req: AddImageClipReq, timeline_id: str = "",
+                        sessionId: str = "", baseRevision: int = None):
         """GUI-03B: add an IMAGE clip with frame-native coordinates.
 
         Body: {asset_id, timeline_start_frame, timeline_duration_frames,
@@ -450,6 +451,7 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
                 timeline_duration_frames=req.timeline_duration_frames,
                 track_id=req.track_id,
                 why=req.why,
+                timeline_id=(timeline_id or None),
             )
         return guard(_check_rev(baseRevision, _do))
 
@@ -473,22 +475,29 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         return guard(_check_rev(baseRevision, _do))
 
     @app.post("/tracks")
-    def add_track(kind: str, track_id: str | None = None):
+    def add_track(kind: str, timeline_id: str = "", track_id: str | None = None):
         from yroll.core.manifest import TrackKind
 
-        return guard(lambda: st.cmd.add_track(TrackKind(kind), track_id))
+        return guard(lambda: st.cmd.add_track(TrackKind(kind), track_id,
+                                              timeline_id=(timeline_id or None)))
 
     @app.post("/tracks/{track_id}/mute")
-    def track_mute(track_id: str, muted: bool = True, why: str = ""):
-        return guard(lambda: st.cmd.set_track_muted(track_id, muted, why=why))
+    def track_mute(track_id: str, timeline_id: str = "",
+                    muted: bool = True, why: str = ""):
+        return guard(lambda: st.cmd.set_track_muted(
+            track_id, muted, why=why, timeline_id=(timeline_id or None)))
 
     @app.post("/tracks/{track_id}/lock")
-    def track_lock(track_id: str, locked: bool = True, why: str = ""):
-        return guard(lambda: st.cmd.set_track_locked(track_id, locked, why=why))
+    def track_lock(track_id: str, timeline_id: str = "",
+                    locked: bool = True, why: str = ""):
+        return guard(lambda: st.cmd.set_track_locked(
+            track_id, locked, why=why, timeline_id=(timeline_id or None)))
 
     @app.post("/tracks/{track_id}/hide")
-    def track_hide(track_id: str, hidden: bool = True, why: str = ""):
-        return guard(lambda: st.cmd.set_track_hidden(track_id, hidden, why=why))
+    def track_hide(track_id: str, timeline_id: str = "",
+                    hidden: bool = True, why: str = ""):
+        return guard(lambda: st.cmd.set_track_hidden(
+            track_id, hidden, why=why, timeline_id=(timeline_id or None)))
 
     @app.post("/clips/{clip_id}/transform")
     def set_transform(clip_id: str, transform: dict, why: str = ""):
@@ -535,13 +544,17 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         return guard(lambda: st.cmd.set_dissolve(clip_id, duration, kind, why=why))
 
     @app.delete("/clips/{clip_id}")
-    def remove_clip(clip_id: str, why: str = "", ripple: bool = False):
+    def remove_clip(clip_id: str, timeline_id: str = "",
+                     why: str = "", ripple: bool = False):
         if ripple:
-            return guard(lambda: st.cmd.ripple_delete_clip(clip_id, why=why))
-        return guard(lambda: st.cmd.remove_clip(clip_id, why=why))
+            return guard(lambda: st.cmd.ripple_delete_clip(
+                clip_id, why=why, timeline_id=(timeline_id or None)))
+        return guard(lambda: st.cmd.remove_clip(
+            clip_id, why=why, timeline_id=(timeline_id or None)))
 
     @app.post("/clips/{clip_id}/trim")
-    def trim(clip_id: str, req: TrimReq, baseRevision: int = None):
+    def trim(clip_id: str, req: TrimReq, timeline_id: str = "",
+              baseRevision: int = None):
         # GUI-02: frame-native. Body: {new_source_start_frame,
         # new_source_end_frame, why}. Reject any legacy seconds fields.
         for legacy in ("new_source_start", "new_source_end"):
@@ -552,20 +565,24 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             src_start_frame=req.new_source_start_frame,
             src_end_frame=req.new_source_end_frame,
             why=req.why,
+            timeline_id=(timeline_id or None),
         )))
 
     @app.post("/clips/{clip_id}/split")
-    def split(clip_id: str, req: SplitReq, baseRevision: int = None):
+    def split(clip_id: str, req: SplitReq, timeline_id: str = "",
+               baseRevision: int = None):
         # GUI-02: body {at_timeline_frame, why}. Core's TimeMap
         # converts timeline_frame -> source_frame.
         if "at_source_time" in req.model_fields_set:
             raise HTTPException(400, "GUI-02: 'at_source_time' (seconds) is no longer accepted; use 'at_timeline_frame'")
         left, right = guard(_check_rev(baseRevision, lambda: st.cmd.split_clip_frame(
-            clip_id, at_timeline_frame=req.at_timeline_frame, why=req.why)))
+            clip_id, at_timeline_frame=req.at_timeline_frame,
+            why=req.why, timeline_id=(timeline_id or None))))
         return {"left": left, "right": right}
 
     @app.post("/clips/{clip_id}/move")
-    def move(clip_id: str, req: MoveReq, baseRevision: int = None):
+    def move(clip_id: str, req: MoveReq, timeline_id: str = "",
+              baseRevision: int = None):
         if "new_timeline_start" in req.model_fields_set:
             raise HTTPException(400, "GUI-02: 'new_timeline_start' (seconds) is no longer accepted; use 'new_timeline_start_frame'")
         return guard(_check_rev(baseRevision, lambda: st.cmd.move_clip_frame(
@@ -573,6 +590,7 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
             new_timeline_start_frame=req.new_timeline_start_frame,
             new_track_id=req.new_track_id,
             why=req.why,
+            timeline_id=(timeline_id or None),
         )))
 
     @app.get("/clip/{clip_id}/timemap")
@@ -1470,8 +1488,10 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         return guard(lambda: st.cmd.set_subtitle_style(clip_id, style, why=why))
 
     @app.post("/subtitles")
-    def add_subtitle(text: str, start: float, end: float, why: str = ""):
-        return guard(lambda: st.cmd.add_subtitle(text, start, end, why=why))
+    def add_subtitle(text: str, start: float, end: float,
+                      timeline_id: str = "", why: str = ""):
+        return guard(lambda: st.cmd.add_subtitle(
+            text, start, end, why=why, timeline_id=(timeline_id or None)))
 
     @app.post("/subtitles/generate")
     def generate_subtitles(clip_id: str | None = None, why: str = ""):
@@ -1615,7 +1635,7 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
 
     # ---------- GUI-03D.1: /preview/plan (L1 Preview Plan cache) ----------
     @app.get("/preview/plan")
-    def preview_plan():
+    def preview_plan(timeline_id: str):
         """Structural snapshot of the current timeline for GUI
         caching. Keyed by (project_revision, timeline_id); the GUI
         invalidates the cache when the revision changes.
@@ -1624,11 +1644,16 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         resolution; this endpoint returns the FULL plan so the GUI
         can resolve the active layer at any TimelineFrame LOCALLY
         without per-frame HTTP.
+
+        GUI-03E-2A: timeline_id is required. The plan only contains
+        clips owned by that Timeline; cross-Timeline clipping is
+        impossible.
         """
         from yroll.core.plan import (
             PreviewPlan, build_preview_plan, PreviewLayer,
         )
-        plan: PreviewPlan = build_preview_plan(st.core.project)
+        plan: PreviewPlan = build_preview_plan(
+            st.core.project, timeline_id=(timeline_id or None))
 
         def _layer_to_dict(l: PreviewLayer) -> dict:
             return {
@@ -1663,20 +1688,25 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
 
     # ---------- GUI-03D: /preview/at_frame (L1 Timeline Composite) ----------
     @app.get("/preview/at_frame")
-    def preview_at_frame(frame: int = 0):
+    def preview_at_frame(frame: int = 0, timeline_id: str = ""):
         """L1 Timeline Composite Preview. Returns ALL active visual
         + audio + subtitle layers at `frame`, z-ordered by track
         iteration order. The GUI consumes this and renders each
         layer in its z-order (image statically for the clip's full
         TimelineFrameRange; video at source_seconds; subtitle as
-        text overlay; audio synced to source_seconds)."""
+        text overlay; audio synced to source_seconds).
+
+        GUI-03E-2A: `timeline_id` is the recommended explicit
+        query param. Empty falls back to active Timeline (legacy).
+        """
         from yroll.core.frame_preview import (
             composite_preview_at_frame, CompositeLayer,
         )
         from yroll.core.timebase import Rational
         fps = Rational(st.core.project.fps_num,
                        st.core.project.fps_den or 1)
-        pv = composite_preview_at_frame(st.core.project, frame, fps)
+        pv = composite_preview_at_frame(
+            st.core.project, frame, fps, timeline_id=(timeline_id or None))
 
         def _layer_to_dict(l: CompositeLayer):
             return {
