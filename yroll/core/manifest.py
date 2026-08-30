@@ -190,9 +190,21 @@ class Track(BaseModel):
 
 
 class Timeline(BaseModel):
-    """X 轴：只记录最终作品结构。"""
+    """X 轴：只记录最终作品结构。
+
+    GUI-03E: a Project owns multiple peer Timelines. Each Timeline is
+    an independent editing answer/version (完整版/种草版/收割版/...),
+    NOT a child/nested timeline. Timeline identity is the stable
+    `timeline_id`; `name` is a user-visible label and is NOT a
+    canonical unique key. `derived_from` stores the source Timeline's
+    stable ID (never its name) when this Timeline was duplicated from
+    another via "Duplicate Timeline".
+    """
 
     timeline_id: str = "main"
+    name: str = "main"
+    derived_from: Optional[str] = None  # stable source timeline_id, never name
+    created_at: datetime = Field(default_factory=datetime.now)
     tracks: list[Track] = Field(default_factory=list)
 
     def find_clip(self, clip_id: str) -> Optional["ClipRef"]:
@@ -303,9 +315,27 @@ class Publishing(BaseModel):
 
 
 class Project(BaseModel):
-    """YROLL Manifest v0.1 顶层对象。"""
+    """YROLL Manifest v0.1 顶层对象。
+
+    GUI-03E: a Project owns multiple peer Timelines. Each Timeline
+    is an independent editing answer/version, NOT a child/nested
+    timeline. Identity is `timeline_id`; `name` is a user label and
+    is NOT a canonical key. Assets are SHARED across Timelines —
+    duplication of a Timeline does NOT copy media files, only the
+    editing state (tracks/clips/markers/beats).
+
+    Fields:
+      timelines:           the Project's peer Timelines. Must contain
+                           at least one Timeline at all times.
+      active_timeline_id:  the last/current editing context. Mutable
+                           via `switch_active_timeline` (03E-2).
+      default_timeline_id: the Project-designated default Timeline.
+      schema_version:      monotonically increasing. GUI-03E bumps to
+                           "0.2" (timeline_id-based multi-Timeline).
+    """
 
     manifest_version: str = "0.1"
+    schema_version: str = "0.2"  # GUI-03E: timeline_id-based multi-Timeline
     project_id: str
     name: str
     created_at: datetime = Field(default_factory=datetime.now)
@@ -318,7 +348,14 @@ class Project(BaseModel):
     width: int = 1920
     height: int = 1080
     assets: list[Asset] = Field(default_factory=list)
-    timeline: Timeline = Field(default_factory=Timeline)
+    # GUI-03E: multiple peer Timelines. `timeline` (singular) below
+    # is a deprecated property that returns the active Timeline —
+    # kept for backward compatibility with pre-03E command/server
+    # code, but new code MUST go through `timelines[]` +
+    # `active_timeline_id`.
+    timelines: list[Timeline] = Field(default_factory=list)
+    active_timeline_id: str = "main"
+    default_timeline_id: str = "main"
     clips: dict[str, Clip] = Field(default_factory=dict)
     relationships: list[Relationship] = Field(default_factory=list)
     problems: list[Problem] = Field(default_factory=list)
@@ -326,6 +363,78 @@ class Project(BaseModel):
     generations: list[Generation] = Field(default_factory=list)
     publishing: Publishing = Field(default_factory=Publishing)
     extensions: dict[str, Any] = Field(default_factory=dict)
+
+    # ----------------------------------------------------------------
+    # GUI-03E-1: canonical Timeline accessors.
+    #
+    # Open order (used by ProjectCore.open() and any UI fallback):
+    #   active_timeline_id → default_timeline_id → timelines[0]
+    # ----------------------------------------------------------------
+
+    def get_timeline(self, timeline_id: str) -> Optional[Timeline]:
+        """Return the Timeline with the given stable id, or None."""
+        return next((t for t in self.timelines if t.timeline_id == timeline_id), None)
+
+    def require_timeline(self, timeline_id: str) -> Timeline:
+        """Strict variant: raise KeyError if the id is unknown. Used
+        by command layer after schema validation."""
+        t = self.get_timeline(timeline_id)
+        if t is None:
+            raise KeyError(
+                f"project {self.project_id!r} has no timeline {timeline_id!r}; "
+                f"known ids: {[t.timeline_id for t in self.timelines]}")
+        return t
+
+    @property
+    def active_timeline(self) -> Optional[Timeline]:
+        """Return the currently active Timeline. Falls back through
+        open order if `active_timeline_id` is missing or stale. The
+        caller should treat the returned Timeline as mutable — it is
+        a reference to the actual entry in `self.timelines`, so
+        mutations propagate (verified by tests).
+
+        Returns None iff the Project has zero Timelines. After
+        ProjectCore.open()/create() the Project is guaranteed to
+        contain at least one Timeline, so this is only None for
+        bare-constructed Project objects used in tests.
+        """
+        if not self.timelines:
+            return None
+        t = self.get_timeline(self.active_timeline_id)
+        if t is not None:
+            return t
+        t = self.get_timeline(self.default_timeline_id)
+        if t is not None:
+            return t
+        return self.timelines[0]
+
+    @property
+    def default_timeline(self) -> Optional[Timeline]:
+        """Return the Project-designated default Timeline. Same
+        fallback order as `active_timeline`."""
+        if not self.timelines:
+            return None
+        t = self.get_timeline(self.default_timeline_id)
+        if t is not None:
+            return t
+        return self.timelines[0]
+
+    @property
+    def timeline(self) -> Optional[Timeline]:
+        """DEPRECATED GUI-03E-1: returns the active Timeline.
+
+        This property exists only so pre-03E commands/server code can
+        keep reading `project.timeline.tracks` without churn. New code
+        MUST go through `project.timelines[]` + `active_timeline_id`.
+
+        Important: the returned Timeline is the same reference as
+        `timelines[active_idx]`; mutations propagate. We do NOT cache
+        or copy here — that would break the shared-reference contract.
+
+        Returns None iff the Project has zero Timelines (bare
+        construction only).
+        """
+        return self.active_timeline
 
     # ----------------------------------------------------------------
     # GUI-02.3: Media conformance

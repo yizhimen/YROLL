@@ -1,6 +1,6 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-30 commit 待 push）
+## 当前状态（2026-08-30 GUI-03E-1 已完工，待 push）
 - **GUI-01（Session + Mutation Gate + Revision）已完整交付**
 - **GUI-02 Closure** 02-1 → 02-6.1 + 02-7 已完成：
   - 02-1 `f674a56` 标准 NTSC DF + reject dropped labels
@@ -21,8 +21,23 @@
     - `gui/src/preview-plan.ts` — `usePreviewPlan` hook + pure helpers
     - PreviewPlayer 用 cached plan 解析 active layer，0 per-frame HTTP
     - FrameClock 推 TimelineFrame，per-layer source timebase 算 media time
+- **GUI-03E Multiple Timelines** 拆 5 个 batch，**03E-1 已完成**（Schema/migration + 全部 14 个测试绿）：
+  - `Project.timelines: list[Timeline]`（peer，**不是** child/nested）
+  - `active_timeline_id: str` + `default_timeline_id: str`
+  - `schema_version: "0.2"`
+  - `Timeline.name`（user label，**非** 规范唯一键）+ `derived_from: Optional[str]`（source 稳定 id，**不是** name）
+  - 旧工程 `project.timeline` 自动迁移到 `timelines[0]`（lossless + idempotent）
+  - Canonical accessors：`active_timeline` / `default_timeline` / `get_timeline(id)` / `require_timeline(id)`
+  - 打开顺序：**active → default → 第一个**（用户已锁定）
+  - 不可变不变量：**至少一个 Timeline**（`save_state()` 拒绝零 Timeline）
+  - 旧 `project.timeline` 保留为 **deprecated property** 返回 active timeline（commands/server/GUI 不动；mutations 通过 reference sharing 落到 active）
+  - 共享 vs Timeline-local（用户已锁定）：
+    - Project-global：`project_id` / `name` / `intent` / `sequence` / `assets` / `relationships` / `problems` / `solutions` / `generations` / `publishing` / `extensions` / op log / version tree
+    - Timeline-local：`tracks` / `track.muted/locked/hidden/role/label` / `clips`（dict by id，今日全局，未来 03E-2 拆分）/ `markers`（extensions）/ `beats`（extensions）
+    - **Asset 全部跨 Timeline 共享**；媒体文件**永不复制**
+  - 03E-2 / 03E-3 / 03E-4 / 03E-5 **待办**
 - 沙盒工程：`projects/sanlihe-slice-30s/`（10 图 + 6 字幕 + 36s）
-- Core 测试：**553 passed + 1 skipped**
+- Core 测试：**567 passed + 1 skipped**（含 14 个新 migration 测试）
 - GUI 测试：**171 vitest** + Playwright gui-01 / gui-02
 
 ### GUI-03E 计划（用户已确认）
@@ -50,7 +65,15 @@
 - 媒体文件本身：**永远不复制**（Asset 引用即可）
 
 ### 待办
-- 03E-1（Schema/migration）→ 03E-2（Core/API）→ 03E-3（GUI 切换）→ 03E-4（Duplicate）→ 03E-5（Revision scope）
+- 03E-1（Schema/migration）✅ 已完工（commit 待 push）
+- **03E-2（Core / Command / API）← 下一步**
+  - `add_timeline(name, derived_from=None)` 命令；返回新 Timeline（`timeline_id` 由 Core 生成 stable id）
+  - `duplicate_timeline(source_id, new_name)` 命令（**UI 名 Duplicate，底层记 `derived_from=source_id`**）
+  - `switch_active_timeline(timeline_id)` 命令（写 `active_timeline_id`）
+  - `delete_timeline(timeline_id)` 命令（**最后一个 Timeline 不可删**）
+  - 所有 mutation 必须带 `timeline_id`；commands 通过 `ProjectCore.require_timeline(timeline_id)` 找到目标 Timeline
+  - Server API：增 4 个 endpoint；`/preview/plan`、`/sequence`、`/timeline` 等加 `?timeline_id=` 参数或返回多 Timeline
+  - 03E-2 完成后做 03E-3（GUI 切换条）→ 03E-4（Duplicate UX）→ 03E-5（Revision scope）
 - 然后再做一次真实生产测试：拿《三里河·陶鬶》做完整版 + 种草版 两条 timeline
 
 ## 关键不变量（4 个 closure）

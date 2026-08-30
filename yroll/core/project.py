@@ -24,6 +24,96 @@ from yroll.core.manifest import Operation, Project, Version
 LAYOUT = ("operations", "versions", "media", "cache", "generated")
 
 
+# ----------------------------------------------------------------------
+# GUI-03E-1: multi-Timeline migration (raw JSON in → raw JSON out).
+#
+# Pre-03E project files use:
+#   project.timeline: Timeline     # single, "main"
+#
+# Post-03E storage is:
+#   project.timelines: list[Timeline]
+#   project.active_timeline_id: str
+#   project.default_timeline_id: str
+#   project.schema_version: "0.2"
+#
+# Migration policy (lossless + idempotent):
+#   1. If raw["timeline"] is a dict AND raw["timelines"] is absent
+#      or empty → lift it into timelines[0], copy its timeline_id to
+#      both active/default, and bump schema_version to "0.2". The
+#      `timeline` field is left untouched on disk (the loader strips
+#      it via the model migration step); the next save_state() will
+#      rewrite the file without it.
+#   2. If raw["timelines"] is present (post-03E save), do nothing.
+#      This makes the migration idempotent across repeated opens.
+#   3. If raw lacks BOTH legacy `timeline` AND `timelines`, create
+#      a default `main` Timeline so a brand-new project still works.
+#      (Defense in depth — ProjectCore.create() already sets these.)
+# ----------------------------------------------------------------------
+
+_DEFAULT_TIMELINE_ID = "main"
+
+
+def _migrate_raw_to_multi_timeline(raw: dict) -> dict:
+    """Return a new dict with multi-Timeline fields populated. The
+    input is not mutated."""
+    has_legacy = isinstance(raw.get("timeline"), dict)
+    has_new = isinstance(raw.get("timelines"), list) and len(raw["timelines"]) > 0
+    if has_new and not has_legacy:
+        # Already post-03E. Repair missing ids defensively.
+        timelines = raw["timelines"]
+        ids = {t["timeline_id"] for t in timelines if isinstance(t, dict)
+               and "timeline_id" in t}
+        if "active_timeline_id" not in raw or raw["active_timeline_id"] not in ids:
+            raw = dict(raw)
+            raw["active_timeline_id"] = (
+                raw.get("default_timeline_id") if raw.get("default_timeline_id") in ids
+                else (next(iter(ids)) if ids else _DEFAULT_TIMELINE_ID)
+            )
+        if "default_timeline_id" not in raw or raw["default_timeline_id"] not in ids:
+            raw = dict(raw)
+            raw["default_timeline_id"] = (
+                raw["active_timeline_id"] if "active_timeline_id" in raw
+                else next(iter(ids)) if ids else _DEFAULT_TIMELINE_ID
+            )
+        raw.setdefault("schema_version", "0.2")
+        return raw
+
+    if has_legacy:
+        legacy = raw["timeline"]
+        legacy_id = legacy.get("timeline_id", _DEFAULT_TIMELINE_ID)
+        lifted = {
+            "timeline_id": legacy_id,
+            "name": legacy.get("name", legacy_id),
+            "derived_from": legacy.get("derived_from"),
+            "tracks": legacy.get("tracks", []),
+        }
+        raw = dict(raw)
+        raw["timelines"] = [lifted]
+        raw["active_timeline_id"] = (
+            raw.get("active_timeline_id") or legacy_id)
+        raw["default_timeline_id"] = (
+            raw.get("default_timeline_id") or legacy_id)
+        # Pydantic will silently drop the legacy `timeline` field on
+        # model_validate (Pydantic 2 default extra='ignore'). The
+        # Project.timeline property still resolves correctly via
+        # active_timeline.
+        raw["schema_version"] = "0.2"
+        return raw
+
+    # Neither present: create default `main` so empty/hand-written
+    # projects still validate.
+    raw = dict(raw)
+    raw["timelines"] = [{
+        "timeline_id": _DEFAULT_TIMELINE_ID,
+        "name": _DEFAULT_TIMELINE_ID,
+        "tracks": [],
+    }]
+    raw["active_timeline_id"] = raw.get("active_timeline_id", _DEFAULT_TIMELINE_ID)
+    raw["default_timeline_id"] = raw.get("default_timeline_id", _DEFAULT_TIMELINE_ID)
+    raw["schema_version"] = "0.2"
+    return raw
+
+
 class ProjectCore:
     def __init__(self, path: str | Path, project: Project):
         self.path = Path(path)
@@ -37,8 +127,15 @@ class ProjectCore:
         path = Path(root) / name
         for d in LAYOUT:
             (path / d).mkdir(parents=True, exist_ok=True)
+        import uuid as _uuid
+        from yroll.core.manifest import Timeline
+        project_id = _uuid.uuid4().hex[:12]
         project = Project(
-            project_id=uuid.uuid4().hex[:12], name=name, intent=intent or {}
+            project_id=project_id, name=name, intent=intent or {},
+            timelines=[Timeline(timeline_id="main", name="main")],
+            active_timeline_id="main",
+            default_timeline_id="main",
+            schema_version="0.2",
         )
         # GUI-03C: no pre-created default tracks. Tracks are allocated
         # on demand by `cmd.allocate_track_for` (and `cmd.add_track` for
@@ -81,6 +178,9 @@ class ProjectCore:
                 "width": raw.get("width", 1920),
                 "height": raw.get("height", 1080),
             }
+        # GUI-03E-1: migrate pre-03E single-timeline projects to the
+        # multi-Timeline container. Lossless and idempotent.
+        raw = _migrate_raw_to_multi_timeline(raw)
         project = Project.model_validate(raw)
         # Ensure the flat fields match Sequence (denormalized sync).
         project.sequence.sync_to_project(project)
@@ -90,6 +190,13 @@ class ProjectCore:
         # GUI-02: sync canonical Sequence → flat fields on save so
         # legacy v0.1 readers still see fps_num/fps_den correctly.
         self.project.sequence.sync_to_project(self.project)
+        # GUI-03E-1 invariant: a Project must always contain at
+        # least one Timeline. Refuse to persist a zero-timeline
+        # state — the caller must explicitly add one first.
+        if not self.project.timelines:
+            raise ValueError(
+                "save_state: project must contain at least one Timeline; "
+                "cannot persist zero-timeline project")
         (self.path / "current.json").write_text(
             self.project.model_dump_json(indent=2), encoding="utf-8"
         )

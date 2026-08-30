@@ -26,7 +26,11 @@ def test_get_project_state(core):
     agent = YrollAgent(core)
     state = agent.get_project_state()
     assert state["name"] == "agent-contract-test"
-    assert "timeline" in state
+    # GUI-03E-1: schema now exposes peer Timelines, not a singular
+    # `timeline` field. The agent state mirrors model_dump().
+    assert "timelines" in state
+    assert "active_timeline_id" in state
+    assert "default_timeline_id" in state
 
 
 def test_get_timeline(core):
