@@ -755,7 +755,9 @@ export default function App() {
 
       <div className="main">
         <div className="asset-pane" style={{ width: assetW }}>
-          <AssetPanel project={project} activeTimelineId={activeTimelineId} onChanged={refresh} onStatus={(ok, text) => setStatus({ ok, text })}
+          <AssetPanel project={project} activeTimelineId={activeTimelineId}
+            playheadFrame={playheadFrame} onChanged={refresh}
+            onStatus={(ok, text) => setStatus({ ok, text })}
             onPreview={(assetId) => {
               const a = project.assets.find((x) => x.asset_id === assetId);
               if (!a) return;

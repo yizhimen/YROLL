@@ -6,6 +6,10 @@ import { api, Project } from "../api";
 interface Props {
   project: Project;
   activeTimelineId: string;
+  /** GUI-03R2 P1-I: the "+" / "⧉" buttons insert at the CURRENT
+   *  playhead, not at frame 0. Pass the App's playheadFrame so the
+   *  user's mental model ("add at playhead") is honored. */
+  playheadFrame: number;
   onChanged: () => Promise<void>;
   onStatus: (ok: boolean, text: string) => void;
   onPreview: (assetId: string) => void;
@@ -19,7 +23,7 @@ function baseName(p: string) {
   return p.split(/[\\/]/).pop() || p;
 }
 
-export default function AssetPanel({ project, activeTimelineId, onChanged, onStatus, onPreview }: Props) {
+export default function AssetPanel({ project, activeTimelineId, playheadFrame, onChanged, onStatus, onPreview }: Props) {
   const [filter, setFilter] = useState("");
   const importFiles = async (files: FileList) => {
     try {
@@ -49,6 +53,10 @@ export default function AssetPanel({ project, activeTimelineId, onChanged, onSta
       // Explicit-track behavior (drop-on-track → App.tsx
       // onAssetDrop) is unchanged: the drop target's track_id is
       // forwarded to Core, and Core rejects overlap there.
+      //
+      // GUI-03R2 P1-I: insert at the CURRENT playhead, not frame 0.
+      // The original "tlStart = 0" behavior falsely implied "add to
+      // the end" while actually inserting at the project start.
       let explicitTrackId: string | null = null;
       if (mode === "overlay") {
         // Overlay = "create a new dedicated PiP/B-roll video
@@ -62,7 +70,11 @@ export default function AssetPanel({ project, activeTimelineId, onChanged, onSta
           `v${vTracks.length + 1}`);
         explicitTrackId = newTrack.track_id;
       }
-      const tlStart = 0;  // Core allocator picks the start frame
+      // `tlStart` is integer TimelineFrame (sequence-fps). The Core's
+      // TrackAllocator still picks the start frame when track_id=null,
+      // but we seed the request with the playhead as a hint for the
+      // case where the allocator can't move (e.g., explicit track).
+      const tlStart = Math.max(0, Math.round(playheadFrame ?? 0));
       if (asset.type === "image") {
         // GUI-03R: image goes through the frame-native
         // /clips/add_image endpoint. No set_speed, no seconds-as-

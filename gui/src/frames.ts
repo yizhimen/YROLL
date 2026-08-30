@@ -61,9 +61,7 @@ export function secondsToFrames(seconds: number, fps: Rational): number {
 
 /** The zoom slider's value domain is *perceived seconds* — what the
  * user thinks "how many pixels per second of timeline". Internally
- * we anchor in frames: `pxPerFrame = pxPerSec * fps.den / fps.num`.
- *
- * The default `pxPerSec = 12` is the migration default only. */
+ * we anchor in frames: `pxPerFrame = pxPerSec * fps.den / fps.num`. */
 export function pxPerFrame(pxPerSec: number, fps: Rational): number {
   return pxPerSec * fps.den / fps.num;
 }
@@ -74,29 +72,32 @@ export function pxPerSecFromFrame(pxFrame: number, fps: Rational): number {
   return pxFrame * fps.num / fps.den;
 }
 
-/** Convert an integer playhead frame to a pixel x position from the
- * timeline content origin. The `originPx` defaults to
- * `LABEL_GUTTER_PX` so frame 0 is not at the leftmost edge of the
- * screen. */
+/** Width of the track-name header column (OUTSIDE the coord space).
+ *  This constant sizes the sticky left column; the ContentViewport
+ *  itself starts at x=0 from frame 0 (no offset). */
 export const LABEL_GUTTER_PX = 80;
 
+/** Convert an integer playhead frame to a pixel x position from the
+ * timeline ContentViewport origin. Default originPx=0 so frame 0
+ * sits exactly at x=0 inside the ContentViewport — the header column
+ * is OUTSIDE this coord space. */
 export function playheadFrameToPixel(
   frame: number,
   zoom: number,
   fps: Rational,
-  originPx: number = LABEL_GUTTER_PX,
+  originPx: number = 0,
 ): number {
   return originPx + Math.round(frame * pxPerFrame(zoom, fps));
 }
 
 /** Inverse: which frame is at this pixel x? Uses
  * roundHalfAwayFromZero so the boundary semantics match the editor
- * spec. */
+ * spec. Default originPx=0 to match playheadFrameToPixel. */
 export function pixelToPlayheadFrame(
   pixelX: number,
   zoom: number,
   fps: Rational,
-  originPx: number = LABEL_GUTTER_PX,
+  originPx: number = 0,
 ): number {
   const rel = (pixelX - originPx) / pxPerFrame(zoom, fps);
   return roundHalfAwayFromZero(rel);

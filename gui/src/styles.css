@@ -51,21 +51,63 @@ body {
 .inspector button.danger { border-color: #a33; color: #f88; }
 .inspector .meta { color: #888; font-size: 12px; line-height: 1.7; }
 
-.timeline-pane { background: #181818; border-top: 1px solid #333; display: flex; flex-direction: column; overflow-x: auto; }
+/* ── GUI-03R2 P0-A: Unified ContentViewport ─────────────────────────────
+ * .timeline-pane is a flex row:
+ *   - .timeline-headers (left, sticky, OUTSIDE coord space)  → labels
+ *   - .timeline-content (right, scrollable, INSIDE coord space) →
+ *       minimap / ruler / tracks / ONE PlayheadOverlay
+ * Inside .timeline-content frame 0 = x=0 — no arbitrary offsets.
+ * ───────────────────────────────────────────────────────────────────── */
+.timeline-pane {
+  background: #181818; border-top: 1px solid #333;
+  display: flex; flex-direction: row; overflow: hidden;
+  min-height: 0;
+}
+.timeline-headers {
+  flex-shrink: 0; width: 80px;
+  background: #1c1c1c; border-right: 1px solid #2a2a2a;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.timeline-headers-spacer { height: 18px; flex-shrink: 0; border-bottom: 1px solid #2a2a2a; }
+.track-label-row {
+  height: 56px; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 4px 6px; border-bottom: 1px solid #2a2a2a;
+  background: #1c1c1c; overflow: hidden;
+}
+.track-label-title {
+  font-size: 11px; color: #ccc;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.track-label-buttons { display: flex; gap: 4px; flex-wrap: wrap; }
+.track-label-buttons button {
+  background: #2a2a2a; border: 1px solid #444; color: #aaa;
+  font-size: 10px; padding: 1px 5px; border-radius: 3px; cursor: pointer;
+}
+.track-label-buttons button:hover { background: #3a3a3a; }
+.track-label-buttons button.muted { color: #ff8; }
+.track-label-buttons button.locked { color: #f88; }
+.track-label-buttons button.hidden-active { color: #8cf; }
+
+.timeline-content {
+  flex: 1; min-width: 0; position: relative;
+  display: flex; flex-direction: column;
+  overflow-x: auto; overflow-y: auto;
+}
 
 .ruler {
   position: relative; height: 26px; background: #202020;
   border-bottom: 1px solid #333; cursor: pointer; flex-shrink: 0;
+  /* NO paddingLeft — frame 0 is at x=0 inside ContentViewport. */
 }
-.ruler .tick { position: absolute; top: 0; height: 100%; border-left: 1px solid #444; color: #777; font-size: 10px; padding-left: 3px; line-height: 26px; }
-.playhead {
+.ruler .tick { position: absolute; top: 0; height: 100%; border-left: 1px solid #444; color: #777; font-size: 10px; padding-left: 3px; line-height: 26px; white-space: nowrap; }
+
+/* PlayheadOverlay — ONE absolute element inside .timeline-content.
+ * Spans ruler + all tracks. pointer-events: none. Classname fixed
+ * (was .playhead-full / .playhead-frame-full — both were typo'd). */
+.playhead-overlay {
   position: absolute; top: 0; bottom: 0; width: 2px;
-  background: #ffd479; z-index: 10; pointer-events: none;
-}
-.timeline-body { position: relative; flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
-.playhead-full {
-  position: absolute; top: 0; bottom: 0; width: 2px;
-  background: #ff5050; pointer-events: none; z-index: 10;
+  background: #ff5050; pointer-events: none; z-index: 9;
   box-shadow: 0 0 6px rgba(255,80,80,0.6);
 }
 
@@ -127,6 +169,28 @@ body {
 .preview-stage { flex: 1; display: flex; align-items: center; justify-content: center;
   padding: 16px; min-height: 0; min-width: 0; }
 
+/* GUI-03R2 P0-F: Preview progress bar — TimelineFrame-authoritative.
+   Sits at the bottom of the preview stage, spans full width. The
+   fill is `playheadFrame / endFrame` (computed from FrameClock, NOT
+   from v.currentTime). The thumb mirrors the playhead position. */
+.preview-pane { position: relative; }
+.preview-progress {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 4px; background: rgba(255,255,255,0.10);
+  z-index: 6; pointer-events: none;
+}
+.preview-progress-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, #ffd479, #ff5050);
+  transition: width 80ms linear;
+}
+.preview-progress-thumb {
+  position: absolute; top: -3px; bottom: -3px; width: 3px;
+  background: #ff5050; transform: translateX(-50%);
+  box-shadow: 0 0 6px rgba(255,80,80,0.8);
+  transition: left 80ms linear;
+}
+
 /* 字幕编辑器 */
 .subtitle-editor { padding: 16px; min-width: 540px; }
 .subtitle-editor-header { display: flex; align-items: center; gap: 8px;
@@ -175,8 +239,16 @@ body {
   border-radius: 4px; font-size: 12px; }
 .export-files ul { margin: 4px 0; padding-left: 24px; line-height: 1.6; }
 
-.tracks { flex: 1; overflow-y: auto; overflow-x: visible; position: relative; }
-.track-row { position: relative; height: 72px; border-bottom: 1px solid #2a2a2a; }
+.tracks { position: relative; flex-shrink: 0; }
+.track-row {
+  position: relative; height: 56px;
+  border-bottom: 1px solid #2a2a2a;
+  /* frame 0 = x=0 inside .track-row. Children .clip use position:absolute
+     with left: tlStart * pxPerF (no gutter offset). */
+}
+.track-content {
+  position: absolute; inset: 0;
+}
 .track-label {
   position: absolute; left: 4px; top: 2px; z-index: 5;
   color: #666; font-size: 10px; pointer-events: none;

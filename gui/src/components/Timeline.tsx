@@ -1,24 +1,25 @@
-// GUI-02: Timeline — frame-px layout.
+// GUI-02 + GUI-03R2: Timeline — frame-px layout with UNIFIED ContentViewport origin.
 //
-// Frame is the canonical coordinate. Seconds exist only in the
-// server's `clip.timeline_range` (TimeRange in seconds). The layout
-// here converts seconds → frames → pixels via the canonical
-// TimeMap (when needed) and frames.ts (for px math).
+// GUI-03R2 P0-A: the timeline pane is split into TWO columns:
+//   - .timeline-headers (sticky left, OUTSIDE coord space) → track-name labels
+//   - .timeline-content (scrollable right, INSIDE coord space) → ruler + tracks + ONE PlayheadOverlay
+// Inside .timeline-content, frame 0 is EXACTLY x=0. No arbitrary +/- gutter
+// offsets are applied to ruler / playhead / clip / drop coords. The
+// LABEL_GUTTER_PX constant is now ONLY used to size the sticky header column
+// (it's still the physical track-name column width, but it lives OUTSIDE the
+// coordinate space).
 //
-// LABEL_GUTTER_PX is the left margin so the "0" tick label and
-// playhead at frame 0 do NOT collide with the track-name column
-// (封面 / 配乐 / 字幕).
+// Seconds exist only in the server's `clip.timeline_range`. Layout converts
+// seconds → frames → pixels via frames.ts and the project's sequence fps.
 
 import { useMemo, useRef, useState } from "react";
 import { Project } from "../api";
 import { useProjectSequence } from "../sequence";
 import {
-  LABEL_GUTTER_PX,
   chooseTickStep,
   chooseZoomProfile,
   frameToRulerSeconds,
   frameRulerLabel,
-  framesToTimecode,
   pixelToPlayheadFrame,
   playheadFrameToPixel,
   pxPerFrame,
@@ -82,8 +83,17 @@ export default function Timeline({
   const activeTimelineTracks = (project.timelines?.find(
     (tl) => tl.timeline_id === project.active_timeline_id,
   ) ?? project.timelines?.[0])?.tracks ?? [];
-  void activeTimelineTracks;  // alias scoped below
-  const paneRef = useRef<HTMLDivElement | null>(null);
+  const visibleTracks = useMemo(
+    // GUI-03C: hide empty tracks by default. The Core still
+    // owns them; the GUI just chooses not to render them.
+    // Toggle via the showEmptyTracks prop (default false).
+    () => [...activeTimelineTracks].reverse().filter(
+      (track) => showEmptyTracks || track.clip_ids.length > 0 || track.hidden,
+    ),
+    [activeTimelineTracks, showEmptyTracks],
+  );
+  const paneRef = useRef<HTMLDivElement | null>(null);   // .timeline-pane (outer flex container)
+  const contentRef = useRef<HTMLDivElement | null>(null); // .timeline-content (SCROLLABLE; the coord space)
   const [viewport, setViewport] = useState({ left: 0, width: 1 });
   // Sequence (canonical timebase) — provides fps for frame↔px math
   const seq = useProjectSequence();
@@ -92,25 +102,27 @@ export default function Timeline({
     () => pxPerFrame(pxPerSec, seq.fps),
     [pxPerSec, seq.fps],
   );
-  // Total content width in pixels: gutter + frame pixels + small tail.
-  const contentWidth = LABEL_GUTTER_PX + pxPerF * 30 * 60 + 40;  // assume >=30 min
+  // Total content width in pixels: frame pixels + small tail.
+  // Inside .timeline-content the coord space starts at x=0 for frame 0,
+  // so we DO NOT add any gutter offset here.
+  const contentWidth = pxPerF * 30 * 60 + 40;  // assume >=30 min
   const syncViewport = () => {
-    const pane = paneRef.current;
-    if (!pane) return;
+    const c = contentRef.current;
+    if (!c) return;
     setViewport({
-      left: pane.scrollLeft / contentWidth,
-      width: Math.min(1, pane.clientWidth / contentWidth),
+      left: c.scrollLeft / Math.max(1, contentWidth),
+      width: Math.min(1, c.clientWidth / Math.max(1, contentWidth)),
     });
   };
 
-  // The timeline width is derived from the latest clip end (in frames),
-  // not seconds. We compute it via framesToTimecode for display.
+  // The timeline width is derived from the latest clip end (in frames).
   const durationFrames = Math.max(
     300,  // 10s @ 30fps; ensures ruler isn't squished when empty
     ...Object.values(project.clips).map((c) => Math.round(c.timeline_range.end * seq.fps.num / seq.fps.den)),
   );
-  // Width in pixels: LABEL_GUTTER_PX + durationFrames * pxPerF + 40
-  const width = LABEL_GUTTER_PX + durationFrames * pxPerF + 40;
+  // Width in pixels inside ContentViewport: durationFrames * pxPerF + 40
+  // (NO gutter offset — frame 0 is at x=0 inside ContentViewport).
+  const width = durationFrames * pxPerF + 40;
 
   // Ruler ticks. Use chooseTickStep + chooseZoomProfile to pick a
   // step that lands ticks 60-120 px apart. Labels are timecode strings.
@@ -119,65 +131,61 @@ export default function Timeline({
   const ticks: number[] = [];
   for (let t = 0; t <= durationFrames; t += tickStepFrames) ticks.push(t);
 
-  // Mouse → frame helpers
-  const mouseXToFrame = (mouseX: number, rect: DOMRect): number => {
-    // mouseX is relative to the pane (includes gutter offset)
-    return pixelToPlayheadFrame(mouseX, pxPerSec, seq.fps, 0);
+  // Mouse → frame helper. mouseX is in ContentViewport coords (x=0 at frame 0).
+  // No gutter offset — the headers column lives OUTSIDE this coord space.
+  const mouseXToFrame = (mouseXInContent: number): number => {
+    return pixelToPlayheadFrame(mouseXInContent, pxPerSec, seq.fps, 0);
   };
 
-  // Wheel zoom: keep mouse position stable
+  // Wheel zoom: keep mouse position stable.
+  // GUI-03R2 P1-G: step reduced from 1.25/0.8 → 1.08/1/1.08
+  // (≈8% per notch, much less aggressive). Anchor frame is preserved
+  // by adjusting .timeline-content scrollLeft after the zoom applies.
   const onWheel = (e: React.WheelEvent) => {
     if (!e.ctrlKey && Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
-    const pane = paneRef.current;
-    if (!pane) return;
+    const content = contentRef.current;
+    if (!content) return;
     e.preventDefault();
-    const rect = pane.getBoundingClientRect();
-    const mouseXInContent = e.clientX - rect.left + pane.scrollLeft;
-    const anchorFrame = mouseXToFrame(mouseXInContent, rect);
-    const factor = e.deltaY < 0 ? 1.25 : 0.8;
-    const next = Math.min(60, Math.max(4, pxPerSec * factor));
+    const rect = content.getBoundingClientRect();
+    const mouseXInContent = e.clientX - rect.left + content.scrollLeft;
+    const anchorFrame = mouseXToFrame(mouseXInContent);
+    const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+    const next = Math.min(120, Math.max(4, pxPerSec * factor));
     onZoomPx(next);
     requestAnimationFrame(() => {
       const newPxPerF = pxPerFrame(next, seq.fps);
-      pane.scrollLeft = anchorFrame * newPxPerF - (e.clientX - rect.left);
+      content.scrollLeft = anchorFrame * newPxPerF - (e.clientX - rect.left);
     });
   };
 
-  // Ruler drag = time-range select; click = seek
+  // Ruler drag = time-range select; click = seek.
+  // GUI-03R2 P0-A: ruler lives INSIDE ContentViewport. ruler rect.left
+  // is the ContentViewport's left edge (where frame 0 sits), so
+  // e.clientX - rect.left is already the ContentViewport x — NO
+  // gutter offset needed.
   const dragStartFrame = useRef<number | null>(null);
   const onRulerDown = (e: React.PointerEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    // The ruler is offset by paddingLeft = LABEL_GUTTER_PX in CSS, so
-    // the ruler's local x is e.clientX - rect.left - LABEL_GUTTER_PX.
-    const localX = e.clientX - rect.left - LABEL_GUTTER_PX;
-    dragStartFrame.current = pixelToPlayheadFrame(LABEL_GUTTER_PX + localX, pxPerSec, seq.fps);
+    const localX = e.clientX - rect.left;
+    dragStartFrame.current = mouseXToFrame(localX);
     const move = (ev: PointerEvent) => {
       if (dragStartFrame.current === null) return;
-      const lx = ev.clientX - rect.left - LABEL_GUTTER_PX;
-      const t = pixelToPlayheadFrame(LABEL_GUTTER_PX + lx, pxPerSec, seq.fps);
-      // Threshold: 4 px in the timeline. Convert to frame threshold.
-      const thresholdFrames = Math.max(1, Math.round(4 / pxPerF));
+      const lx = ev.clientX - rect.left;
+      const t = mouseXToFrame(lx);
+      const thresholdFrames = Math.max(1, Math.round(4 / Math.max(0.001, pxPerF)));
       if (Math.abs(t - dragStartFrame.current) > thresholdFrames) {
-        // Range in seconds for legacy selRange API.
-        const a = framesToTimecode(dragStartFrame.current, seq.fps, seq.dropFrame);
-        const b = framesToTimecode(t, seq.fps, seq.dropFrame);
-        // For the legacy seconds API, we just store the start/end
-        // as the timecode strings' second values. (This is a
-        // simplification: selRange is being phased out.)
         const fps = seq.fps.num / seq.fps.den;
         onRangeSelect([
           Math.min(dragStartFrame.current, t) / fps,
           Math.max(dragStartFrame.current, t) / fps,
         ]);
-        // Suppress unused-var warning
-        void a; void b;
       }
     };
     const up = (ev: PointerEvent) => {
       if (dragStartFrame.current !== null) {
-        const lx = ev.clientX - rect.left - LABEL_GUTTER_PX;
-        const t = pixelToPlayheadFrame(LABEL_GUTTER_PX + lx, pxPerSec, seq.fps);
-        const thresholdFrames = Math.max(1, Math.round(4 / pxPerF));
+        const lx = ev.clientX - rect.left;
+        const t = mouseXToFrame(lx);
+        const thresholdFrames = Math.max(1, Math.round(4 / Math.max(0.001, pxPerF)));
         if (Math.abs(t - dragStartFrame.current) <= thresholdFrames) {
           onSeek(t);
           onRangeSelect(null);
@@ -191,76 +199,110 @@ export default function Timeline({
     window.addEventListener("pointerup", up);
   };
 
-  // Playhead at frame 0 sits at LABEL_GUTTER_PX, not at 0 — prevents
-  // collision with the track-name column.
-  const playheadX = playheadFrameToPixel(playheadFrame, pxPerSec, seq.fps);
+  // Playhead at frame 0 sits at ContentViewport x=0 (NO gutter offset).
+  const playheadX = playheadFrameToPixel(playheadFrame, pxPerSec, seq.fps, 0);
 
   return (
-    <div className="timeline-pane" ref={paneRef} onWheel={onWheel} onScroll={syncViewport}
+    <div className="timeline-pane" ref={paneRef} onWheel={onWheel}
       style={{ height, flexShrink: 0 }}>
-      {/* Minimap: click/drag to jump */}
-      <div
-        className="minimap"
-        onPointerDown={(e) => {
-          const pane = paneRef.current;
-          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          const jump = (clientX: number) => {
-            const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-            // ratio → frame → seek
-            const targetFrame = Math.round(ratio * durationFrames);
-            onSeek(targetFrame);
-            if (pane) {
-              const newPxPerF = pxPerFrame(pxPerSec, seq.fps);
-              pane.scrollLeft = targetFrame * newPxPerF - pane.clientWidth / 2;
-            }
-          };
-          jump(e.clientX);
-          const move = (ev: PointerEvent) => jump(ev.clientX);
-          const up = () => {
-            window.removeEventListener("pointermove", move);
-            window.removeEventListener("pointerup", up);
-          };
-          window.addEventListener("pointermove", move);
-          window.addEventListener("pointerup", up);
-        }}
-      >
-        {activeTimelineTracks.flatMap((track) =>
-          track.clip_ids.map((cid) => {
-            const c = project.clips[cid];
-            if (!c) return null;
-            const cStartF = Math.round(c.timeline_range.start * seq.fps.num / seq.fps.den);
-            const cEndF = Math.round(c.timeline_range.end * seq.fps.num / seq.fps.den);
-            const w = Math.max(0, cEndF - cStartF);
-            return (
-              <div
-                key={cid}
-                className={`minimap-clip ${track.kind}`}
-                style={{
-                  left: `${(cStartF / durationFrames) * 100}%`,
-                  width: `${(w / durationFrames) * 100}%`,
-                }}
-              />
-            );
-          })
-        )}
-        <div
-          className="minimap-viewport"
-          style={{ left: `${viewport.left * 100}%`, width: `${viewport.width * 100}%` }}
-        />
-        <div className="minimap-playheadFrame" style={{ left: `${(playheadFrame / durationFrames) * 100}%` }} />
+      {/* ── LEFT STICKY: track-name headers (OUTSIDE coord space) ─────────── */}
+      <div className="timeline-headers">
+        {/* Spacer above the tracks, matching the minimap height */}
+        <div className="timeline-headers-spacer" />
+        {visibleTracks.map((track) => (
+          <div
+            key={track.track_id}
+            className={`track-label-row ${track.hidden ? "track-hidden" : ""}`}
+            data-track-id={track.track_id}
+            style={{ display: track.hidden ? "none" : "flex" }}
+          >
+            <div className="track-label-title">{TRACK_NAME[track.kind] || track.kind} · {track.track_id}</div>
+            <div className="track-label-buttons">
+              {track.kind !== "text" && (
+                <button
+                  className={track.muted ? "muted" : ""}
+                  title={track.muted ? "取消轨道静音" : "轨道静音"}
+                  onClick={() => onTrackMute?.(track.track_id, !track.muted)}
+                >
+                  {track.muted ? "取消静音" : "静音"}
+                </button>
+              )}
+              <button
+                className={track.locked ? "locked" : ""}
+                title={track.locked ? "解锁轨道" : "锁定轨道（禁拖动）"}
+                onClick={() => onTrackLock?.(track.track_id, !track.locked)}
+              >
+                {track.locked ? "解锁" : "锁定"}
+              </button>
+              <button
+                className={track.hidden ? "hidden-active" : ""}
+                title={track.hidden ? "显示轨道（点击恢复）" : "隐藏轨道（仅 GUI 不显示，渲染仍参与）"}
+                onClick={() => onTrackHide?.(track.track_id, !track.hidden)}
+              >
+                {track.hidden ? "显示" : "隐藏"}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
-      <div className="timeline-body">
-        {/* Playhead spans ruler + all tracks (剪映/Premiere style).
-            playheadX is the frame-anchored x; LABEL_GUTTER_PX keeps
-            frame 0 off the leftmost edge. */}
-        <div className="playheadFrame-full" style={{ left: playheadX }} />
-        <div className="ruler" style={{ width, paddingLeft: LABEL_GUTTER_PX }} onPointerDown={onRulerDown}>
+
+      {/* ── RIGHT: ContentViewport (scrollable; frame 0 = x=0) ─────────────── */}
+      <div className="timeline-content" ref={contentRef} onScroll={syncViewport}>
+        {/* Minimap: click/drag to jump. Top of ContentViewport. */}
+        <div
+          className="minimap"
+          onPointerDown={(e) => {
+            const content = contentRef.current;
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            const jump = (clientX: number) => {
+              const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+              const targetFrame = Math.round(ratio * durationFrames);
+              onSeek(targetFrame);
+              if (content) {
+                const newPxPerF = pxPerFrame(pxPerSec, seq.fps);
+                content.scrollLeft = targetFrame * newPxPerF - content.clientWidth / 2;
+              }
+            };
+            jump(e.clientX);
+            const move = (ev: PointerEvent) => jump(ev.clientX);
+            const up = () => {
+              window.removeEventListener("pointermove", move);
+              window.removeEventListener("pointerup", up);
+            };
+            window.addEventListener("pointermove", move);
+            window.addEventListener("pointerup", up);
+          }}
+        >
+          {activeTimelineTracks.flatMap((track) =>
+            track.clip_ids.map((cid) => {
+              const c = project.clips[cid];
+              if (!c) return null;
+              const cStartF = Math.round(c.timeline_range.start * seq.fps.num / seq.fps.den);
+              const cEndF = Math.round(c.timeline_range.end * seq.fps.num / seq.fps.den);
+              const w = Math.max(0, cEndF - cStartF);
+              return (
+                <div
+                  key={cid}
+                  className={`minimap-clip ${track.kind}`}
+                  style={{
+                    left: `${(cStartF / durationFrames) * 100}%`,
+                    width: `${(w / durationFrames) * 100}%`,
+                  }}
+                />
+              );
+            })
+          )}
+          <div
+            className="minimap-viewport"
+            style={{ left: `${viewport.left * 100}%`, width: `${viewport.width * 100}%` }}
+          />
+          <div className="minimap-playhead" style={{ left: `${(playheadFrame / durationFrames) * 100}%` }} />
+        </div>
+
+        {/* Ruler (frame 0 = x=0, NO gutter offset) */}
+        <div className="ruler" style={{ width }} onPointerDown={onRulerDown}>
           {ticks.map((t) => {
-            const x = LABEL_GUTTER_PX + Math.round(t * pxPerF);
-            // GUI-03R: normal zoom shows `MM:SS.mmm`. Precise zoom
-            // (≥24 px/sec) appends ` · F<frame>` so frame-level work
-            // can read both. The trailing `.mmm` field is
-            // milliseconds, NOT a frame field.
+            const x = Math.round(t * pxPerF);
             const seconds = frameToRulerSeconds(t, seq.fps);
             const precise = pxPerSec >= 24;
             const label = precise
@@ -273,11 +315,9 @@ export default function Timeline({
             );
           })}
           {selRange && (() => {
-            // selRange is in seconds (legacy). Convert to frame-space
-            // pixel positions for display.
             const startF = selRange[0] * seq.fps.num / seq.fps.den;
             const endF = selRange[1] * seq.fps.num / seq.fps.den;
-            const startX = LABEL_GUTTER_PX + Math.round(startF * pxPerF);
+            const startX = Math.round(startF * pxPerF);
             const w = Math.max(0, Math.round((endF - startF) * pxPerF));
             return (
               <div className="range-sel" style={{ left: startX, width: w }} />
@@ -286,138 +326,92 @@ export default function Timeline({
           {inPoint != null && (() => {
             const f = inPoint * seq.fps.num / seq.fps.den;
             return (
-              <div className="io-marker" style={{ left: LABEL_GUTTER_PX + Math.round(f * pxPerF) }}>I</div>
+              <div className="io-marker" style={{ left: Math.round(f * pxPerF) }}>I</div>
             );
           })()}
           {outPoint != null && (() => {
             const f = outPoint * seq.fps.num / seq.fps.den;
             return (
-              <div className="io-marker out" style={{ left: LABEL_GUTTER_PX + Math.round(f * pxPerF) }}>O</div>
+              <div className="io-marker out" style={{ left: Math.round(f * pxPerF) }}>O</div>
             );
           })()}
         </div>
+
+        {/* Tracks (frame 0 = x=0) */}
         <div className="tracks">
-        {[...activeTimelineTracks].reverse()
-          // GUI-03C: hide empty tracks by default. The Core still
-          // owns them; the GUI just chooses not to render them.
-          // Toggle via the showEmptyTracks prop (default false).
-          .filter((track) => showEmptyTracks || track.clip_ids.length > 0 || track.hidden)
-          .map((track) => (
-          <div
-            key={track.track_id}
-            className={`track-row ${track.hidden ? "track-hidden" : ""}`}
-            style={{ width, display: track.hidden ? "none" : "flex" }}
-            data-track-id={track.track_id}
-          >
-            <div className="track-label-gutter"
-                 style={{ width: LABEL_GUTTER_PX, minWidth: LABEL_GUTTER_PX, maxWidth: LABEL_GUTTER_PX }}
-                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "none"; }}>
-              <span className="track-label-title">{TRACK_NAME[track.kind] || track.kind} · {track.track_id}</span>
-              <div className="track-label-buttons">
-              {track.kind !== "text" && (
-                <button
-                  className={track.muted ? "muted" : ""}
-                  title={track.muted ? "取消轨道静音" : "轨道静音"}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTrackMute?.(track.track_id, !track.muted);
-                  }}
-                >
-                  {track.muted ? "取消静音" : "静音"}
-                </button>
-              )}
-              <button
-                className={track.locked ? "locked" : ""}
-                title={track.locked ? "解锁轨道" : "锁定轨道（禁拖动）"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTrackLock?.(track.track_id, !track.locked);
+          {visibleTracks.map((track) => (
+            <div
+              key={track.track_id}
+              className={`track-row ${track.hidden ? "track-hidden" : ""}`}
+              style={{ width, display: track.hidden ? "none" : "flex" }}
+              data-track-id={track.track_id}
+            >
+              <div
+                className="track-content"
+                onDragOver={(e) => {
+                  if (e.dataTransfer.types.includes("text/yroll-asset")) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "copy";
+                  }
                 }}
-              >
-                {track.locked ? "解锁" : "锁定"}
-              </button>
-              <button
-                className={track.hidden ? "hidden-active" : ""}
-                title={track.hidden ? "显示轨道（点击恢复）" : "隐藏轨道（仅 GUI 不显示，渲染仍参与）"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTrackHide?.(track.track_id, !track.hidden);
+                onDrop={(e) => {
+                  const assetId = e.dataTransfer.getData("text/yroll-asset");
+                  if (!assetId) return;
+                  e.preventDefault();
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  // track-content rect.left is the ContentViewport's x=0 edge.
+                  const frame = Math.max(0, pixelToPlayheadFrame(
+                    e.clientX - rect.left, pxPerSec, seq.fps, 0));
+                  onAssetDrop?.(assetId, track.track_id, frame);
                 }}
+                data-track-content={track.track_id}
               >
-                {track.hidden ? "显示" : "隐藏"}
-              </button>
+                {track.clip_ids.map((cid) => {
+                  const clip = project.clips[cid];
+                  if (!clip) return null;
+                  const siblings = track.clip_ids
+                    .filter((sid) => sid !== cid)
+                    .map((sid) => {
+                      const s = project.clips[sid];
+                      if (!s) return null;
+                      const sStart = s.timeline_range.start * seq.fps.num / seq.fps.den;
+                      const sEnd = s.timeline_range.end * seq.fps.num / seq.fps.den;
+                      return { id: sid, start: sStart, end: sEnd };
+                    })
+                    .filter(Boolean) as Array<{ id: string; start: number; end: number }>;
+                  return (
+                    <ClipBlock
+                      key={cid}
+                      clip={clip}
+                      locked={track.locked}
+                      selected={selectedIds.has(cid)}
+                      pxPerFrame={pxPerF}
+                      seqFps={seq.fps}
+                      sourceFps={undefined}
+                      snapMode={snapMode}
+                      highlightRel={highlightRel}
+                      isRelated={highlightRel && selectedIds.size > 0 && Array.from(selectedIds).some((selId) => {
+                        const sel = project.clips[selId];
+                        if (!sel || sel.track_id === clip.track_id) return false;
+                        return clip.timeline_range.start < sel.timeline_range.end &&
+                               sel.timeline_range.start < clip.timeline_range.end;
+                      })}
+                      siblings={siblings}
+                      onSelect={onSelect}
+                      onDragMove={onDragMove}
+                      onMoveCommit={onMoveCommit}
+                      onTrimCommit={onTrimCommit}
+                    />
+                  );
+                })}
               </div>
             </div>
-            <div
-              className="track-content"
-              onDragOver={(e) => {
-                if (e.dataTransfer.types.includes("text/yroll-asset")) {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = "copy";
-                }
-              }}
-              onDrop={(e) => {
-                const assetId = e.dataTransfer.getData("text/yroll-asset");
-                if (!assetId) return;
-                e.preventDefault();
-                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                const frame = Math.max(0, pixelToPlayheadFrame(
-                  e.clientX - rect.left, pxPerSec, seq.fps));
-                onAssetDrop?.(assetId, track.track_id, frame);
-              }}
-              data-track-content={track.track_id}
-            >
-            {track.clip_ids.map((cid) => {
-              const clip = project.clips[cid];
-              if (!clip) return null;
-              const siblings = track.clip_ids
-                .filter((sid) => sid !== cid)
-                .map((sid) => {
-                  const s = project.clips[sid];
-                  if (!s) return null;
-                  const sStart = s.timeline_range.start * seq.fps.num / seq.fps.den;
-                  const sEnd = s.timeline_range.end * seq.fps.num / seq.fps.den;
-                  return { id: sid, start: sStart, end: sEnd };
-                })
-                .filter(Boolean) as Array<{ id: string; start: number; end: number }>;
-              return (
-                <ClipBlock
-                  key={cid}
-                  clip={clip}
-                  locked={track.locked}
-                  selected={selectedIds.has(cid)}
-                  pxPerFrame={pxPerF}
-                  seqFps={seq.fps}
-                  // GUI-02.3: ClipBlock degrades gracefully when the
-                  // asset's source FPS is unknown. Per the closure
-                  // invariant, we never ASSUME source_fps == sequence_fps
-                  // for TimeMap business math — but display labels
-                  // (timecode, waveform slicing) need SOME fps and
-                  // falling back to seq fps with a "// display fallback"
-                  // marker is acceptable here.
-                  // TODO(02-7): hook up ProjectSequence.assetSourceFps
-                  // populated from /project/validate_media_conformance.
-                  sourceFps={undefined}
-                  snapMode={snapMode}
-                  highlightRel={highlightRel}
-                  isRelated={highlightRel && selectedIds.size > 0 && Array.from(selectedIds).some((selId) => {
-                    const sel = project.clips[selId];
-                    if (!sel || sel.track_id === clip.track_id) return false;
-                    return clip.timeline_range.start < sel.timeline_range.end &&
-                           sel.timeline_range.start < clip.timeline_range.end;
-                  })}
-                  siblings={siblings}
-                  onSelect={onSelect}
-                  onDragMove={onDragMove}
-                  onMoveCommit={onMoveCommit}
-                  onTrimCommit={onTrimCommit}
-                />
-              );
-            })}
-            </div>
-          </div>
-        ))}
+          ))}
         </div>
+
+        {/* ONE absolute PlayheadOverlay — spans ruler + all tracks.
+            pointer-events: none. position = canonical frameToPixel. */}
+        <div className="playhead-overlay" style={{ left: playheadX }} />
       </div>
     </div>
   );

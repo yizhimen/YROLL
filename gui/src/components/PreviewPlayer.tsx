@@ -111,14 +111,22 @@ export default function PreviewPlayer({
   // FrameClock (pure function of performance.now()), pushes it via
   // onPlayhead, and re-renders. The clock itself never accumulates
   // from RAF — RAF is purely a render trigger.
+  //
+  // GUI-03R2 P0-E: re-schedule the RAF loop whenever the play state
+  // changes. The original implementation scheduled one RAF at mount
+  // and bailed if the clock wasn't playing yet — so play() could
+  // never re-arm the loop. We now run while `playing` is true, and
+  // ALSO start the loop when it flips to true.
   useEffect(() => {
+    if (!playing) return;
     let rafId = 0;
+    let stopped = false;
     const tick = () => {
+      if (stopped) return;
       const c = clockRef.current;
       if (c && c.playing) {
         const f = frameClockCurrentFrame(c);
         onPlayhead(f);
-        // End-of-timeline: stop the clock if we've hit the end.
         if (f >= c.endFrame) {
           frameClockPause(c);
         }
@@ -129,8 +137,11 @@ export default function PreviewPlayer({
       }
     };
     rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [onPlayhead]);
+    return () => {
+      stopped = true;
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [playing, onPlayhead]);
 
   // When the user drags the playhead externally (e.g. clicking on
   // the timeline ruler), the prop playheadFrame changes. We sync
@@ -432,6 +443,23 @@ export default function PreviewPlayer({
         ))}
       </div>
       <div className="preview-stage">
+        {/* GUI-03R2 P0-F: visible TimelineFrame progress indicator.
+            TimelineFrame is authoritative; HTMLMediaElement.currentTime
+            is NEVER read for state (per closure invariant §02-5).
+            The bar visualizes playheadFrame / max(1, endFrame). */}
+        <div
+          className="preview-progress"
+          aria-label="Preview progress"
+        >
+          <div
+            className="preview-progress-fill"
+            style={{ width: `${Math.min(100, Math.max(0, (playheadFrame / Math.max(1, clockRef.current?.endFrame ?? 1)) * 100))}%` }}
+          />
+          <div
+            className="preview-progress-thumb"
+            style={{ left: `${Math.min(100, Math.max(0, (playheadFrame / Math.max(1, clockRef.current?.endFrame ?? 1)) * 100))}%` }}
+          />
+        </div>
         <div style={frameStyle}>
           {mode === "rendered" && renderedUrl ? (
             <video key={renderedUrl} ref={videoRef} src={renderedUrl}

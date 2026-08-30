@@ -36,6 +36,7 @@ import {
   roundHalfAwayFromZero,
 } from "../frames";
 
+
 /** Local helper: convert a pixel delta to a frame delta given the
  *  ALREADY-DERIVED pxPerFrame (frame-domain parameter naming). This
  *  avoids the legacy `pxPerSec` variable name leaking into the
@@ -304,14 +305,16 @@ export default function ClipBlock({
     // then commit the final frame mutation. The local snap above is
     // only a visual aid during drag; Core's SnapEngine is the
     // authority on commit.
+    //
+    // GUI-03R2 P0-D: collision target must use the TARGET track's
+    // siblings (not the source track's `siblings` prop). If we
+    // dropped onto a different track-row, we re-clamp against that
+    // row's clips so the GUI never commits an HTTP 400. A normal
+    // user drag must always finish with the move accepted; the
+    // clip just lands at a non-overlapping frame.
     const up = async (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      // The current candidate is the last `candidate` we computed in
-      // `move`. We don't have it here directly, so recompute via the
-      // same formula (deterministic pure function of clientX, startX,
-      // pxPerFrame, seqFps, origStartFrame — no side effects, no
-      // business time mapping).
       const pixelDelta = ev.clientX - startX;
       const deltaFrame = pxPerFrameToFrameDelta(pixelDelta, pxPerFrame);
       let finalFrame = origStartFrame + deltaFrame;
@@ -327,15 +330,52 @@ export default function ClipBlock({
       } catch {
         // Snap is best-effort; commit the unsnapped frame on error.
       }
-      // GUI-03R: snap can land on a frame that re-introduces an
-      // overlap. Re-clamp AFTER snap, so the snap cannot commit
-      // overlap. Then resolve the track-drop target (if any) and
-      // dispatch a SINGLE onMoveCommit that carries both the frame
-      // and the target track. No two-step mutation.
+      // Re-clamp after snap so snap cannot reintroduce overlap.
       finalFrame = clamp(finalFrame);
+      // Resolve the track-drop target from the DOM (uses track-id on
+      // the track-row). If the pointer ended over a different track,
+      // we MUST re-clamp using THAT track's siblings — Core's
+      // collision policy is per-track.
       const row = document.elementsFromPoint(ev.clientX, ev.clientY)
         .find((el) => (el as HTMLElement).dataset?.trackId) as HTMLElement | undefined;
       const tid = row?.dataset.trackId;
+      if (tid && tid !== clip.track_id) {
+        // Cross-track drop. Re-clamp against the target track's clips.
+        // We read positions from the DOM (.clip elements inside the
+        // target track-row), which is the simplest way to obtain the
+        // target's siblings without restructuring the prop API.
+        const targetRow = document.querySelector(
+          `[data-track-id="${CSS.escape(tid)}"]`);
+        const targetClips = targetRow
+          ? Array.from(targetRow.querySelectorAll('.clip')).map((el) => {
+              const id = (el as HTMLElement).dataset.clipId ?? "";
+              const left = parseFloat((el as HTMLElement).style.left || "0");
+              const widthPx = parseFloat((el as HTMLElement).style.width || "0");
+              const start = roundHalfAwayFromZero(left / Math.max(0.001, pxPerFrame));
+              const end = start + Math.max(0, roundHalfAwayFromZero(widthPx / Math.max(0.001, pxPerFrame)));
+              return { id, start, end };
+            }).filter((r) => r.id !== clip.clip_id)
+          : [];
+        // Direction-aware clamp on the target track.
+        const targetClamp = (tryStart: number): number => {
+          const tryEnd = tryStart + lenFrames;
+          const conflicts = targetClips.filter(
+            (r) => tryStart < r.end && r.start < tryEnd,
+          );
+          if (conflicts.length === 0) return Math.max(0, tryStart);
+          if (tryStart >= origStartFrame) {
+            const first = conflicts.reduce((a, b) => a.start < b.start ? a : b);
+            return Math.max(0, first.start - lenFrames);
+          } else {
+            const last = conflicts.reduce((a, b) => a.end > b.end ? a : b);
+            return Math.max(0, last.end);
+          }
+        };
+        finalFrame = targetClamp(finalFrame);
+        // Snap again against the target's clips? Skip — we already
+        // clamped; committing the clamped frame is the spec'd
+        // behavior (move always succeeds for normal drag).
+      }
       onMoveCommit(clip.clip_id, finalFrame, tid);
     };
     window.addEventListener("pointermove", move);
@@ -410,6 +450,7 @@ export default function ClipBlock({
     <div
       className={`clip ${kindClass} ${selected ? "selected" : ""} ${isRelated && highlightRel ? "related" : ""}`}
       style={{ left, width, boxShadow: isRelated && highlightRel ? "0 0 0 2px #ffd479" : undefined }}
+      data-clip-id={clip.clip_id}
       onPointerDown={onPointerDown}
       title={isRelated ? "跨轨关联 clip（Semantic Link）" : undefined}
     >
