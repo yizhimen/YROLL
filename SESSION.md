@@ -226,6 +226,40 @@ Baseline: c36764d。Audit 文档：`docs/GUI-03R3-1-AUDIT.md`。脚本：`gui/sm
 - tsc **0 errors**
 - Sanlihe browser **6/6 acceptance PASS**（vs audit baseline 4/4 测量）
 
+### GUI-03R3-2 Viewport Geometry Audit (✅ 测量完成，算法未改)
+Baseline: baf8ed6 (post-03R3-1E)。Audit 文档：`docs/GUI-03R3-2-AUDIT.md`。脚本：`gui/smoke/03r3-2-audit.mjs`。
+
+**TL;DR**：03R3-1E 的 frame math 是对的。"drag flies" 不是 frame 问题，是 **viewport 几何问题**。
+
+| 关键测量 | 值 |
+|----------|-----|
+| Viewport (1440×900) 内可见内容 | 1360 px ≈ **45 秒** |
+| Sanlihe 项目总长 | ~41095 px ≈ **23 分钟** |
+| 当前 pxPerSec | 30（1 px = 1 frame） |
+| Fit-content 所需的 pxPerSec | **1** |
+| 当前 / Fit-content 比值 | **30×** |
+| 用户可见的项目占比 | **3.3%** |
+| 拖拽中 scrollLeft 变化 | **从不** |
+| 拖 10 px → 真实屏幕位移 | 126150 px（远超 viewport，见下） |
+
+**根因**：
+1. 默认 zoom 是项目最佳 zoom 的 30 倍。用户只能看到 3.3% 的内容。
+2. 拖拽期间**没有任何 auto-scroll / auto-center**。`scrollLeft` 在所有拖拽中保持 0。
+3. 一个 10 px 的拖拽会把 clip 推到 viewport 右边缘以外，clip 立即消失。
+
+**副发现**：drag_10 测试中 pointer delta=10px，但 `style.left` 跳了 126150 px（= 126,150 帧）。算法本身算的是 `deltaFrame = 10`（03R3-1E audit 验证过），所以这是 **commit path 的 amplification**——`/clips/{id}/move` 接受了远超合理范围的 frame 值。**与 frame math 无关**——frame math 仍然正确。后续 fix：服务端 `[0, project_max_frame]` 校验 + GUI-side finalFrame cap。
+
+**所有 frame math 不变量仍然成立**：1 px = 1 frame / preview 1:1 / snap-only-on-release / snap-creates-overlap → abort。
+
+**Recommended fixes（out of scope；measurement-only per user instruction）**：
+- Default zoom = fit-content（或 open-on-fit-content）
+- Auto-scroll during drag
+- Clamp finalFrame to [0, maxFrame] server-side
+
+修改文件：
+- `docs/GUI-03R3-2-AUDIT.md` — 完整 audit 报告
+- `gui/smoke/03r3-2-audit.mjs` — 测量脚本（Playwright + CDP）
+
 ## 关键不变量（4 个 closure）
 1. Frame-native edit chain
 2. TimelineFrame / ClipFrame / SourceFrame 显式区分
