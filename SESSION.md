@@ -1,6 +1,6 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + **GUI-03R3-1E Reliable Drag Invariant + Snap Validation v0.1 ✅**；Sanlihe rerun 待补）
+## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + **GUI-03R3-W-A Keyboard bugs + Selection-level Delete v0.1 ✅**；Sanlihe manual smoke 待补）
 
 ### GUI-03R2 Timeline Interaction Reliability v0.1 (commit c36764d, push origin ✅)
 Driven by real Sanlihe browser usage. Baseline = main@e601608. Audit-first (no code changes until measured), then fix in spec order, then verify.
@@ -259,6 +259,51 @@ Baseline: baf8ed6 (post-03R3-1E)。Audit 文档：`docs/GUI-03R3-2-AUDIT.md`。�
 修改文件：
 - `docs/GUI-03R3-2-AUDIT.md` — 完整 audit 报告
 - `gui/smoke/03r3-2-audit.mjs` — 测量脚本（Playwright + CDP）
+
+### GUI-03R3-W-A Keyboard bugs + Selection-level Delete v0.1 (✅ pytest 615+2, vitest 200+2, tsc clean, commit ff5125a, push origin ✅)
+Baseline: 03R3-2 (bd088af). Audit: `docs/GUI-03R3-Workspace-Reality-Audit-v0.2.md`. Plan: `docs/GUI-03R3-Implementation-Plan-v0.1.md` (with 6 corrections applied per user feedback).
+
+**Two audit-confirmed real bugs fixed**:
+1. **Spacebar could not play/pause.** `transportRef.current?.toggle?.()` was a dead call (ref never assigned). Fix: PreviewPlayer publishes a stable `toggle` handle via new `onTransportReady` callback prop; App stores it in `transportRef`. The toolbar Play button and Space/K keydown now share the SAME toggle closure — FrameClock is the single source of truth.
+2. **Delete key was wrongly merged with ArrowUp/Down** into `jumpBoundary` (App.tsx:499). Fix: split the dispatch. `delete_selection` is its own branch with selection-aware behavior; ArrowUp/Down resolve via the new `_nudge_playhead_boundary` keymap binding.
+
+**Selection-level mutation path** (per user correction: "Foundation already exposes `delete_selection` / `move_selection`. Do not harden the GUI into a loop of individual `removeClip()`."):
+- Core command `cmd.delete_selection(Selection, ripple)` existed (commands.py:1211, P0-04B) but was unreachable.
+- New server endpoint `POST /selection/delete` wraps `cmd.delete_selection(Selection.many(clip_ids), ripple, why)`. Emits ONE composite Operation regardless of selection size.
+- New gui `api.deleteSelection(clipIds, ripple, why)` method.
+- Keyboard Delete + Shift+Delete + the multi-select batch panel's "全部删除" + new "Ripple" button ALL route through the new path. One user intent = one Core Operation.
+- Space/K is described in the Core keymap as `_toggle_play` local action (empty params, no fake Core mutation, no `/keyboard/execute` endpoint). Pure GUI-local transport.
+
+**Keymap additions** (yroll/core/keyboard.py):
+- `ArrowUp` / `ArrowDown` → `_nudge_playhead_boundary` with `params.direction = ±1`. Pre-W-A these fell through silently.
+
+**Files**:
+- `yroll/server/app.py` — `SelectionDeleteReq` model + `POST /selection/delete` endpoint
+- `yroll/core/keyboard.py` — ArrowUp/ArrowDown bindings
+- `gui/src/api.ts` — `api.deleteSelection(clipIds, ripple, why)`
+- `gui/src/components/PreviewPlayer.tsx` — `onTransportReady` prop + `togglePlay` closure
+- `gui/src/App.tsx` — split keyboard dispatch + populated transportRef + batch panel uses deleteSelection
+- `gui/src/keymap.test.ts` — 4 new W-A contract tests (Delete/Shift+Delete/Space+K/ArrowUp+Down)
+- `tests/test_keyboard.py` — 1 new arrow-boundary test + updated keymap list (16 → 14 explicit + 1 new)
+- `tests/test_selection_delete.py` (new) — 7 server contract tests
+
+**Regression**:
+- pytest **615 passed + 2 skipped** (was 601+2 baseline; +14 new: 7 selection_delete + 1 keyboard + 6 from prior batch rerun)
+- vitest **200 passed + 2 skipped** (was 196+2; +4 new keymap contract tests)
+- tsc clean (only pre-existing Timeline.drag.test.ts errors remain)
+
+**Invariants protected**:
+- One user intent = one Core Operation (no GUI loop of removeClip).
+- FrameClock remains authoritative for playback time.
+- Mutation Gate preserved (every deletion flows through `mutate()`).
+- Track structure unchanged (no auto-delete yet — that is W-B).
+- Keymap is source of truth for Delete / Shift+Delete / Space / K / ArrowUp / ArrowDown.
+
+**Known gaps after this batch** (deferred per plan):
+- Marquee selection — W-F
+- Track auto-add / auto-delete — W-B
+- Close Gap / Batch Close Gaps — W-G
+- Single-clip Inspector "Ripple" button still uses `api.removeClip(id, ripple=true)` — already one Core op; cosmetic swap deferred.
 
 ### GUI-03R3-2 Timeline Workspace Stabilization v0.1 (✅ 11/11 browser PASS)
 Baseline: 6ac72a0 + 03R3-1E changes。
