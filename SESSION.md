@@ -1,6 +1,45 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + GUI-03R3-W-B ✅ + GUI-03R3-W-C ✅ + GUI-03R3-W-C Runtime Verification ✅ + GUI-03R3-W-D ✅ + **GUI-03R4 NLE Editing Surface ✅ (audit + R1..R7; 7 commits; pytest 683+1; vitest 217+2; 8/8 browser PASS)**；Stale Help UI fixed in W-D；404 follow-up recorded separately；Sanlihe fixture v10 hidden extent fixed via R4-2 + fit-content zoom 1→3 px/sec）
+## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + GUI-03R3-W-B ✅ + GUI-03R3-W-C ✅ + GUI-03R3-W-C Runtime Verification ✅ + GUI-03R3-W-D ✅ + GUI-03R4 NLE Editing Surface (R4-1..R4-7; 7 commits) + **GUI-03R4 HUV (Human Usability Validation)**；Stale Help UI fixed in W-D；404 follow-up recorded separately；Sanlihe fixture v10 hidden extent fixed via R4-2 + fit-content zoom 1→3 px/sec）
+
+### GUI-03R4 HUV (Human Usability Validation) — ⚠ NOT PASSED ⚠
+
+**Acceptance accounting (corrected per user feedback)**:
+- Automated tests: **900 passed + 3 skipped** (pytest 683+1, vitest 217+2; +38 new R4 tests)
+- Browser smoke (automated): **8/8** scenarios via `gui/smoke/03r4-acceptance.mjs` (R4-7)
+- Browser interaction (automated, R4-HUV): **5/10 pass, 2 partial, 3 aborted** via `gui/smoke/03r4-huv.mjs`
+- **Human validation (manual): 0 / NOT yet run by a real inspector**
+
+**Confirmed UX defect**: drag lacks auto-scroll (R4 audit §1 Bucket C, classified but not implemented). At `pxPerSec=3` and viewport=1707px, dragging a clip to the viewport edge moves the clip to `style.left=45900px` with `scrollLeft=0` — the clip disappears off-screen and the user cannot recover without scrolling manually.
+
+**Suspected synthetic-click gap**: scenario 4 (Delete selection) — `afterBatchVisible: true` after the click suggests the React `onClick` handler may not fire on synthetic DOM `click()` events for some controls. Cannot be ruled out without a real human mouse click.
+
+### Sanlihe fixture cleanup (recommended before next pass)
+
+The visible extent is **608.51s** instead of the intended **~36s** because of two compounding issues on disk:
+
+**Issue 1 — 3 stale auto-test clips at [600, 608.51]** (drives Fit Content zoom):
+- `v3/cc61634` — added by `op00192.json` at 2026-08-30 13:46:31 (why=`🤖 自动测试`)
+- `v5/c0f1e08` — added by `op00196.json` at 2026-08-30 13:47:04 (why=`🤖 自动测试`)
+- `v7/c884a18` — added by `op00204.json` at 2026-08-30 13:48:02 (why=`🤖 自动测试`)
+- Cleanup: delete these 3 clips (or revert their 3 add operations); Fit Content zoom drops from 3 px/sec back to ~25 px/sec.
+
+**Issue 2 — One editorial outlier subtitle**:
+- `t1/c61ee32` at `[31.50, 81.50s]` (50s duration, beyond editorial end v9=18.51s)
+- Likely a leftover from the Sanlihe Story project (38 clips + 18 subtitles)
+
+**True editorial content** (where v1 + v9 actually have clips): `[0, 49.51s]`.
+
+### STOP gating
+
+The Per-user instruction "do NOT start Publish Metadata / Timeline-local Revision / Keyframes" remains in effect. R4 must clear:
+1. **Drag auto-scroll implementation** (audit §1 Bucket C).
+2. **Sanlihe fixture cleanup** (delete the 3 stale clips; decide on c61ee32).
+3. **Real human click-through validation** by a human inspector.
+
+Only after all three clear, R4 can be promoted to "production-ready" and a new feature batch (W-E Publish Metadata, etc.) can be considered.
+
+### GUI-03R4 NLE Editing Surface ✅ (audit + R1..R7; 7 commits; pytest 683+1; vitest 217+2)
 
 ### GUI-03R4 NLE Editing Surface ✅ (audit + R1..R7; 7 commits; pytest 683+1; vitest 217+2)
 
