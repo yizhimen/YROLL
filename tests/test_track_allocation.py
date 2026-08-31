@@ -186,15 +186,16 @@ def test_subtitle_clip_allocates_subtitle_track(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 6. removing all clips hides empty tracks in GUI (Core keeps them)
+# 6. GUI-03R3-W-B: removing all clips auto-removes the now-empty track.
 # ---------------------------------------------------------------------------
 
-def test_remove_all_clips_keeps_tracks_in_core(tmp_path):
-    """When a clip is removed, its track is kept in the Core
-    timeline.tracks (so future references don't break) but the
-    track's clip_ids list becomes empty. The GUI's Timeline
-    component filters out empty tracks by default — see
-    gui/src/components/Timeline.test.tsx for the GUI filter."""
+def test_remove_all_clips_auto_removes_track(tmp_path):
+    """GUI-03R3-W-B: when the last clip is removed from a track,
+    the track is auto-removed (atomic with the remove_clip
+    Operation). Empty tracks don't persist as user-facing structure.
+    Pinning the new invariant: timeline.tracks contains only tracks
+    with len(clip_ids) >= 1.
+    """
     path, core = _new_project(tmp_path)
     _add_asset(core, "img1")
     layer = CommandLayer(core, who=Actor.HUMAN)
@@ -206,9 +207,17 @@ def test_remove_all_clips_keeps_tracks_in_core(tmp_path):
     # Remove both clips.
     layer.remove_clip(c1.clip_id)
     layer.remove_clip(c2.clip_id)
-    # The track is still in the timeline but has no clips.
-    track = next(t for t in core.project.timeline.tracks if t.track_id == track_id)
-    assert track.clip_ids == []
+    # W-B: the now-empty track is auto-removed. No empty tracks
+    # persist in tl.tracks. Use any_match=False to confirm absence.
+    surviving = [t for t in core.project.timeline.tracks if t.track_id == track_id]
+    assert surviving == [], (
+        f"empty track {track_id!r} should be auto-removed but is still present"
+    )
+    # Sanity: no orphan empty tracks anywhere in the timeline.
+    for t in core.project.timeline.tracks:
+        assert len(t.clip_ids) >= 1, (
+            f"orphan empty track {t.track_id!r} present after remove_clip"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -324,6 +333,18 @@ def test_track_role_optional_and_round_trips(tmp_path):
                             label="A1 旁白")
     assert track2.role == TrackRole.VOICE
     assert track2.label == "A1 旁白"
+    # W-B: empty tracks are auto-cleaned on load. Add a clip to
+    # track2 so it survives the load-time migration. The role +
+    # label round-trip is still what we're verifying.
+    # _add_asset uses AssetType.IMAGE; we need an audio asset for
+    # track2. Add one quickly.
+    from yroll.core.models import AssetType
+    audio_asset = Asset(
+        asset_id="aud1", type=AssetType.AUDIO, path="/tmp/aud1.mp3",
+        identity=AssetIdentity(md5="a" * 32, size_bytes=1, duration_sec=10.0),
+    )
+    core.project.assets.append(audio_asset)
+    layer.add_clip("aud1", 0.0, 1.0, timeline_start=0.0, track_id=track2.track_id)
     # save/reload preserves.
     core.save_state()
     core2 = ProjectCore.open(path)
@@ -338,13 +359,18 @@ def test_track_role_optional_and_round_trips(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_asset_type_to_kinds_map():
-    assert ASSET_TYPE_TO_TRACK_KINDS["video"] == {"video"}
-    assert ASSET_TYPE_TO_TRACK_KINDS["image"] == {"video"}
-    assert ASSET_TYPE_TO_TRACK_KINDS["audio"] == {"audio"}
+    # W-B: ASSET_TYPE_TO_TRACK_KINDS uses tuples (ordered) for the
+    # kind fallback in allocate_track_for. First element is the
+    # preferred kind; subsequent elements are accepted aliases.
+    assert ASSET_TYPE_TO_TRACK_KINDS["video"] == ("video",)
+    assert ASSET_TYPE_TO_TRACK_KINDS["image"] == ("video",)
+    assert ASSET_TYPE_TO_TRACK_KINDS["audio"] == ("audio",)
     assert "text" in ASSET_TYPE_TO_TRACK_KINDS["subtitle"]
+    assert "subtitle" in ASSET_TYPE_TO_TRACK_KINDS["subtitle"]
     assert "text" in ASSET_TYPE_TO_TRACK_KINDS["text"]
-    assert "document" not in ASSET_TYPE_TO_TRACK_KINDS or \
-        ASSET_TYPE_TO_TRACK_KINDS["document"] == set()
+    assert "subtitle" in ASSET_TYPE_TO_TRACK_KINDS["text"]
+    # Document has no Timeline media; must be empty tuple.
+    assert ASSET_TYPE_TO_TRACK_KINDS["document"] == ()
 
 
 # ---------------------------------------------------------------------------

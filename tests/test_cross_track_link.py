@@ -111,8 +111,12 @@ def test_p01_cross_track_move():
         # 加一个干净字幕对齐到 v_clip 时间
         layer.add_subtitle("test sub", v_clip.timeline_range.start,
                            v_clip.timeline_range.end, why="test setup")
+        # W-B: removing all text clips auto-removed the (empty) text
+        # track. add_subtitle auto-created a new track of kind
+        # 'subtitle' (the asset type's primary kind per ASSET_TYPE_TO_
+        # TRACK_KINDS). Find whatever text-or-subtitle track now exists.
         text_track = next(t for t in core.project.timeline.tracks
-                          if t.kind.value == "text")
+                          if t.kind.value in ("text", "subtitle"))
         sub_id = text_track.clip_ids[-1]
         sub = core.project.clips[sub_id]
 

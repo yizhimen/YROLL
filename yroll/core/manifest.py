@@ -43,17 +43,22 @@ class TrackRole(str, Enum):
     CAPTION = "caption"     # subtitle / karaoke text
 
 
-# Map asset.type.value → allowed TrackKind(s).
+# Map asset.type.value → allowed TrackKinds.
 # Image and video share VIDEO tracks. Audio and subtitle are
 # exclusive to their own kinds. TrackKind.TEXT and TrackKind.SUBTITLE
 # are aliases (subtitle clips are text-only assets).
-ASSET_TYPE_TO_TRACK_KINDS: dict[str, set[str]] = {
-    "video":    {"video"},
-    "image":    {"video"},
-    "audio":    {"audio"},
-    "subtitle": {"subtitle", "text"},   # accept both for legacy
-    "text":     {"subtitle", "text"},
-    "document": set(),                  # documents aren't a Timeline media
+#
+# GUI-03R3-W-B: tuples (ordered) replace sets (hash-ordered) so the
+# kind fallback in allocate_track_for / ensure_track_for_drop is
+# deterministic. The first element is the "preferred" kind for that
+# asset type when no prefer_kind is given.
+ASSET_TYPE_TO_TRACK_KINDS: dict[str, tuple[str, ...]] = {
+    "video":    ("video",),
+    "image":    ("video",),
+    "audio":    ("audio",),
+    "subtitle": ("subtitle", "text"),   # subtitle preferred; text accepted
+    "text":     ("text", "subtitle"),   # text preferred; subtitle accepted
+    "document": (),                     # documents aren't a Timeline media
 }
 
 

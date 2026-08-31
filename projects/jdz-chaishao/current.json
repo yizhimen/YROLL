@@ -1,11 +1,27 @@
 {
   "manifest_version": "0.1",
+  "schema_version": "0.2",
   "project_id": "4eaf892d0fe6",
   "name": "jdz-chaishao",
   "created_at": "2026-08-24T00:52:31.940668",
   "intent": {
     "goal": "柴烧茶器种草短视频，30秒小红书"
   },
+  "sequence": {
+    "sequence_id": "527cc839c6d34585b74a29dea5724cd1",
+    "fps": {
+      "num": 30,
+      "den": 1
+    },
+    "width": 1920,
+    "height": 1080,
+    "timecode_format": "SMPTE",
+    "drop_frame": false
+  },
+  "fps_num": 30,
+  "fps_den": 1,
+  "width": 1920,
+  "height": 1080,
   "assets": [
     {
       "asset_id": "dcf18ce36f24",
@@ -22,7 +38,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "10b49bdcdd69",
@@ -39,7 +58,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "d3eeb13dda88",
@@ -56,7 +78,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "f2681f435d07",
@@ -73,7 +98,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "b3b9aa4624ad",
@@ -90,7 +118,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "0bfb96bb087a",
@@ -107,7 +138,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "2bfc156120ed",
@@ -124,7 +158,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "ce69f03d09d4",
@@ -141,7 +178,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "76b6ae2299ef",
@@ -158,7 +198,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "74014056dde2",
@@ -175,7 +218,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "8e7ead3b2e8a",
@@ -192,7 +238,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "c7d55a82dc17",
@@ -209,7 +258,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "3ea00dbdc035",
@@ -226,7 +278,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "4ce9b796c4d9",
@@ -243,7 +298,10 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     },
     {
       "asset_id": "53a1132af99c",
@@ -260,112 +318,116 @@
       },
       "caption": null,
       "tags": [],
-      "gen": null
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
     }
   ],
-  "timeline": {
-    "timeline_id": "main",
-    "tracks": [
-      {
-        "track_id": "v1",
-        "kind": "video",
-        "clip_ids": [
-          "c8d5377",
-          "caf3a5a",
-          "c432650",
-          "cf7c849",
-          "cae68f5",
-          "c895d32",
-          "cc4322f",
-          "c1aadc3",
-          "c3859ee",
-          "c828e92",
-          "cadfeef",
-          "c752b35",
-          "c744768",
-          "cd55ef7"
-        ],
-        "muted": false,
-        "locked": false,
-        "hidden": true
-      },
-      {
-        "track_id": "t1",
-        "kind": "text",
-        "clip_ids": [
-          "c47e773",
-          "c39d8cf",
-          "ce8c434",
-          "c4962d0",
-          "c88eb09"
-        ],
-        "muted": false,
-        "locked": false,
-        "hidden": false
-      },
-      {
-        "track_id": "v2",
-        "kind": "video",
-        "clip_ids": [
-          "cdf7e27",
-          "cdbd5e8",
-          "c03d1fe",
-          "cd8caee"
-        ],
-        "muted": false,
-        "locked": false,
-        "hidden": false
-      },
-      {
-        "track_id": "v3",
-        "kind": "video",
-        "clip_ids": [
-          "c7510cc"
-        ],
-        "muted": false,
-        "locked": false,
-        "hidden": false
-      },
-      {
-        "track_id": "a1",
-        "kind": "audio",
-        "clip_ids": [],
-        "muted": false,
-        "locked": false,
-        "hidden": false
-      },
-      {
-        "track_id": "a2",
-        "kind": "audio",
-        "clip_ids": [
-          "cccd968"
-        ],
-        "muted": false,
-        "locked": false,
-        "hidden": false
-      },
-      {
-        "track_id": "a3",
-        "kind": "audio",
-        "clip_ids": [],
-        "muted": false,
-        "locked": false,
-        "hidden": false
-      },
-      {
-        "track_id": "t2",
-        "kind": "text",
-        "clip_ids": [],
-        "muted": false,
-        "locked": false,
-        "hidden": false
-      }
-    ]
-  },
+  "timelines": [
+    {
+      "timeline_id": "main",
+      "name": "main",
+      "derived_from": null,
+      "created_at": "2026-08-31T11:05:27.614090",
+      "tracks": [
+        {
+          "track_id": "v1",
+          "timeline_id": "main",
+          "kind": "video",
+          "clip_ids": [
+            "c8d5377",
+            "caf3a5a",
+            "c432650",
+            "cf7c849",
+            "cae68f5",
+            "c895d32",
+            "cc4322f",
+            "c1aadc3",
+            "c3859ee",
+            "c828e92",
+            "cadfeef",
+            "c752b35",
+            "c744768",
+            "cd55ef7"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": true,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "t1",
+          "timeline_id": "main",
+          "kind": "text",
+          "clip_ids": [
+            "c47e773",
+            "c39d8cf",
+            "ce8c434",
+            "c4962d0",
+            "c88eb09"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "v2",
+          "timeline_id": "main",
+          "kind": "video",
+          "clip_ids": [
+            "cdf7e27",
+            "cdbd5e8",
+            "c03d1fe",
+            "cd8caee"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "v3",
+          "timeline_id": "main",
+          "kind": "video",
+          "clip_ids": [
+            "c7510cc"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "a2",
+          "timeline_id": "main",
+          "kind": "audio",
+          "clip_ids": [
+            "cccd968"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        }
+      ],
+      "markers": [],
+      "beats": []
+    }
+  ],
+  "active_timeline_id": "main",
+  "default_timeline_id": "main",
   "clips": {
     "c8d5377": {
       "clip_id": "c8d5377",
       "asset_id": "8e7ead3b2e8a",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 3.066666666666667
@@ -398,6 +460,7 @@
     "caf3a5a": {
       "clip_id": "caf3a5a",
       "asset_id": "c7d55a82dc17",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 3.373333
@@ -417,6 +480,7 @@
     "c432650": {
       "clip_id": "c432650",
       "asset_id": "c7d55a82dc17",
+      "timeline_id": "main",
       "source_range": {
         "start": 3.373333,
         "end": 12.529261146728516
@@ -436,6 +500,7 @@
     "cf7c849": {
       "clip_id": "cf7c849",
       "asset_id": "c7d55a82dc17",
+      "timeline_id": "main",
       "source_range": {
         "start": 9.936667,
         "end": 13.75
@@ -455,6 +520,7 @@
     "cae68f5": {
       "clip_id": "cae68f5",
       "asset_id": "4ce9b796c4d9",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 6.4
@@ -474,6 +540,7 @@
     "c895d32": {
       "clip_id": "c895d32",
       "asset_id": "53a1132af99c",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 10.580245971679688
@@ -503,6 +570,7 @@
     "c7510cc": {
       "clip_id": "c7510cc",
       "asset_id": "3ea00dbdc035",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 21.533333333333335
@@ -535,6 +603,7 @@
     "cc4322f": {
       "clip_id": "cc4322f",
       "asset_id": "c7d55a82dc17",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 4.5777811686197865
@@ -554,6 +623,7 @@
     "c3859ee": {
       "clip_id": "c3859ee",
       "asset_id": "3ea00dbdc035",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 21.546667
@@ -573,6 +643,7 @@
     "c47e773": {
       "clip_id": "c47e773",
       "asset_id": "",
+      "timeline_id": "main",
       "source_range": {
         "start": 1.9,
         "end": 9.388890584309895
@@ -594,6 +665,7 @@
     "c828e92": {
       "clip_id": "c828e92",
       "asset_id": "c7d55a82dc17",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 13.75
@@ -613,6 +685,7 @@
     "cadfeef": {
       "clip_id": "cadfeef",
       "asset_id": "c7d55a82dc17",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 13.75
@@ -632,6 +705,7 @@
     "cccd968": {
       "clip_id": "cccd968",
       "asset_id": "dcf18ce36f24",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 5.0
@@ -651,6 +725,7 @@
     "cdf7e27": {
       "clip_id": "cdf7e27",
       "asset_id": "8e7ead3b2e8a",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 3.0
@@ -670,6 +745,7 @@
     "cdbd5e8": {
       "clip_id": "cdbd5e8",
       "asset_id": "dcf18ce36f24",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 5.0
@@ -689,6 +765,7 @@
     "c03d1fe": {
       "clip_id": "c03d1fe",
       "asset_id": "dcf18ce36f24",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 5.0
@@ -708,6 +785,7 @@
     "cd8caee": {
       "clip_id": "cd8caee",
       "asset_id": "8e7ead3b2e8a",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 3.0
@@ -727,6 +805,7 @@
     "c752b35": {
       "clip_id": "c752b35",
       "asset_id": "f2681f435d07",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 5.0
@@ -746,6 +825,7 @@
     "c744768": {
       "clip_id": "c744768",
       "asset_id": "f2681f435d07",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 4.166666666666667
@@ -765,6 +845,7 @@
     "cd55ef7": {
       "clip_id": "cd55ef7",
       "asset_id": "c7d55a82dc17",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 13.75
@@ -784,6 +865,7 @@
     "c1aadc3": {
       "clip_id": "c1aadc3",
       "asset_id": "c7d55a82dc17",
+      "timeline_id": "main",
       "source_range": {
         "start": 4.5777811686197865,
         "end": 13.75
@@ -803,6 +885,7 @@
     "c39d8cf": {
       "clip_id": "c39d8cf",
       "asset_id": "",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 6.242424011230469
@@ -824,6 +907,7 @@
     "ce8c434": {
       "clip_id": "ce8c434",
       "asset_id": "",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 2.6329566240310665
@@ -845,6 +929,7 @@
     "c4962d0": {
       "clip_id": "c4962d0",
       "asset_id": "",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 2.0
@@ -866,6 +951,7 @@
     "c88eb09": {
       "clip_id": "c88eb09",
       "asset_id": "",
+      "timeline_id": "main",
       "source_range": {
         "start": 0.0,
         "end": 12.277778625488281

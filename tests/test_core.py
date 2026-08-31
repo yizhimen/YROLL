@@ -68,9 +68,15 @@ def test_move_and_cross_track(cmd: CommandLayer, clip):
     cmd.move_clip(clip.clip_id, new_timeline_start=30.0, new_track_id="v2")
     assert clip.timeline_range.start == 30.0
     tl = cmd.core.project.timeline
-    v1 = next(t for t in tl.tracks if t.track_id == "v1")
+    # W-B: moving the only clip from v1 → v2 leaves v1 empty, so
+    # v1 is auto-removed. The surviving tracks keep their ids
+    # (no renumber — v2 is still v2).
+    surviving_ids = [t.track_id for t in tl.tracks]
+    assert "v2" in surviving_ids, "v2 must survive (now holds the clip)"
+    assert "v1" not in surviving_ids, (
+        "empty v1 should be auto-removed after the cross-track move"
+    )
     v2 = next(t for t in tl.tracks if t.track_id == "v2")
-    assert clip.clip_id not in v1.clip_ids
     assert clip.clip_id in v2.clip_ids
 
 

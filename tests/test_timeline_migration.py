@@ -28,7 +28,9 @@ from pathlib import Path
 import pytest
 
 from yroll.core.manifest import (
+    Clip,
     Project,
+    TimeRange,
     Timeline,
     Track,
     TrackKind,
@@ -311,6 +313,31 @@ def test_timeline_local_state_isolated(tmp_path):
 
     core.project.require_timeline("seed").tracks.append(
         Track(track_id="v2", kind=TrackKind.VIDEO))
+    # W-B: empty tracks are auto-cleaned on load. Add clips to
+    # main's v1 AND seed's v1 + v2 so they survive the migration.
+    # The test still verifies Timeline-local state isolation: seed
+    # has 2 tracks after the append, main has 1.
+    core.project.clips["c-main-1"] = Clip(
+        clip_id="c-main-1", asset_id="a-shared",
+        source_range=TimeRange(start=0, end=1),
+        timeline_range=TimeRange(start=0, end=1),
+        track_id="v1", timeline_id="main",
+    )
+    core.project.clips["c-seed-1"] = Clip(
+        clip_id="c-seed-1", asset_id="a-shared",
+        source_range=TimeRange(start=0, end=1),
+        timeline_range=TimeRange(start=0, end=1),
+        track_id="v1", timeline_id="seed",
+    )
+    core.project.clips["c-seed-2"] = Clip(
+        clip_id="c-seed-2", asset_id="a-shared",
+        source_range=TimeRange(start=0, end=1),
+        timeline_range=TimeRange(start=10, end=11),
+        track_id="v2", timeline_id="seed",
+    )
+    core.project.require_timeline("main").tracks[0].clip_ids.append("c-main-1")
+    core.project.require_timeline("seed").tracks[0].clip_ids.append("c-seed-1")
+    core.project.require_timeline("seed").tracks[1].clip_ids.append("c-seed-2")
     core.save_state()
     core2 = ProjectCore.open(str(Path(tmp_path) / "p1"))
     main_after = core2.project.require_timeline("main")
@@ -348,7 +375,14 @@ def test_shared_asset_remains_one_reference(tmp_path):
 def test_existing_legacy_fixture_loads_clean(tmp_path):
     """A realistic pre-03E shape (with v1/v2/v3/a1/t1 pre-created tracks,
     as GUI-03C's `ensure_default_tracks` used to ship). After migration
-    we should have exactly one Timeline with all those tracks intact."""
+    we should have exactly one Timeline.
+
+    W-B: empty tracks are auto-cleaned on load (load-time migration).
+    The pre-W-B test asserted all 8 tracks survived; under W-B they
+    are removed because they have no clips. We now assert the
+    load-time migration ran and left the Timeline with NO empty
+    tracks (preserves the new invariant).
+    """
     raw = _make_legacy_raw(
         timeline_id="main",
         tracks=[
@@ -365,13 +399,11 @@ def test_existing_legacy_fixture_loads_clean(tmp_path):
     proj_dir = _write_project(raw, str(tmp_path))
     core = ProjectCore.open(proj_dir)
     assert len(core.project.timelines) == 1
-    track_kinds = sorted(
-        (t.track_id, t.kind.value) for t in core.project.timelines[0].tracks)
-    assert track_kinds == [
-        ("a1", "audio"), ("a2", "audio"), ("a3", "audio"),
-        ("t1", "text"), ("t2", "text"),
-        ("v1", "video"), ("v2", "video"), ("v3", "video"),
-    ]
+    # W-B: empty tracks are auto-cleaned on load. Surviving tracks
+    # have >= 1 clip; with the fixture's empty tracks, none survive.
+    assert core.project.timelines[0].tracks == [], (
+        "load-time migration must remove all empty tracks"
+    )
     # Re-save must drop the legacy field and bump schema_version.
     core.save_state()
     raw_after = json.loads(Path(proj_dir, "current.json").read_text(encoding="utf-8"))

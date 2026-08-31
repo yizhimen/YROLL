@@ -102,6 +102,36 @@ class SelectionDeleteReq(BaseModel):
     why: str = ""
 
 
+class EnsureTrackForDropReq(BaseModel):
+    """GUI-03R3-W-B: explicit track creation/resolution for a drop.
+
+    Takes STRUCTURAL INTENT ONLY — no pixel coordinates. The GUI
+    resolves pointer geometry into these fields before calling:
+      - asset_type: 'video' | 'image' | 'audio' | 'subtitle' | 'text'
+      - prefer_kind: optional kind hint (default = asset type's primary)
+      - insert_after_track_id: if non-null, create a new track of the
+        right kind (existing tracks keep their ids; this method
+        never renumbers)
+    """
+    asset_type: str
+    prefer_kind: str | None = None
+    insert_after_track_id: str | None = None
+    why: str = ""
+
+
+class DeleteTrackReq(BaseModel):
+    """GUI-03R3-W-B: explicit track deletion (public).
+
+    Refuses if the track has clips — auto-delete of empty tracks
+    is the cleanup helper's job. Refuses with 400 if the track_id
+    is unknown (CommandError → HTTPException 400), distinguishing
+    the explicit public API from the internal cleanup helper
+    (which is idempotent and silent).
+    """
+    track_id: str
+    why: str = ""
+
+
 class SpeedReq(BaseModel):
     speed: float
     why: str = ""
@@ -529,6 +559,56 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
 
         return guard(lambda: st.cmd.add_track(TrackKind(kind), track_id,
                                               timeline_id=(timeline_id or None)))
+
+    @app.post("/tracks/delete")
+    def delete_track(req: DeleteTrackReq, timeline_id: str = "",
+                      sessionId: str = "", baseRevision: int = None):
+        """GUI-03R3-W-B: explicit track deletion.
+
+        Refuses if the track has clips (caller must move/delete them
+        first) or if the track_id is unknown. Returns the Operation
+        summary.
+        """
+        def _do():
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            op = st.cmd.delete_track(
+                req.track_id, why=req.why, timeline_id=(timeline_id or None),
+            )
+            return {
+                "removed_track_id": req.track_id,
+                "operation_id": op.operation_id,
+            }
+        return guard(_check_rev(baseRevision, _do))
+
+    @app.post("/tracks/ensure_for_drop")
+    def ensure_track_for_drop(req: EnsureTrackForDropReq,
+                                timeline_id: str = "",
+                                sessionId: str = "", baseRevision: int = None):
+        """GUI-03R3-W-B: resolve or create a track for a drop.
+
+        Takes structural intent only — no pixel coordinates. The
+        GUI has resolved the pointer geometry into:
+          - asset_type
+          - prefer_kind (optional)
+          - insert_after_track_id (optional)
+        Returns the resolved Track as JSON.
+        """
+        from yroll.core.manifest import TrackKind
+        def _do():
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            prefer_kind = (TrackKind(req.prefer_kind)
+                            if req.prefer_kind else None)
+            track = st.cmd.ensure_track_for_drop(
+                req.asset_type,
+                prefer_kind=prefer_kind,
+                insert_after_track_id=req.insert_after_track_id,
+                why=req.why,
+                timeline_id=(timeline_id or None),
+            )
+            return track.model_dump()
+        return guard(_check_rev(baseRevision, _do))
 
     @app.post("/tracks/{track_id}/mute")
     def track_mute(track_id: str, timeline_id: str = "",

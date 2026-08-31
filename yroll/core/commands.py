@@ -346,6 +346,134 @@ class CommandLayer:
                             why=why or f"轨道 {track_id} {'隐藏' if hidden else '显示'}",
                             tool="track.hide")
 
+    # ---------- GUI-03R3-W-B: track lifecycle (auto-create + auto-delete) ----------
+
+    def _cleanup_empty_tracks(self, tl: "Timeline",
+                                except_track_ids: tuple[str, ...] = ()
+                                ) -> list[str]:
+        """Remove tracks whose `clip_ids` is empty.
+
+        Internal helper, called at the end of every mutation that
+        may empty a track (remove_clip, move_clip, ripple_delete_clip,
+        delete_selection). NEVER renumbers remaining tracks — the
+        surviving tracks keep their existing ids. A future newly
+        allocated visual track uses the lowest unused id in its kind
+        bucket via `_next_track_id_for_kind`, which is a NEW track
+        creation, not a rename.
+
+        Returns the list of removed track ids.
+        """
+        removed: list[str] = []
+        kept: list[Track] = []
+        for t in tl.tracks:
+            if not t.clip_ids and t.track_id not in except_track_ids:
+                removed.append(t.track_id)
+            else:
+                kept.append(t)
+        if removed:
+            tl.tracks = kept
+        return removed
+
+    def delete_track(self, track_id: str, why: str = "",
+                      timeline_id: str | None = None) -> Operation:
+        """Explicitly delete a track (public API).
+
+        Refuses if the track has clips (the caller must move or delete
+        them first) — auto-delete of empty tracks is the cleanup
+        helper's job, not this method's. Refuses with a clear
+        `CommandError` if the track_id is unknown — distinguishes the
+        explicit public deletion (which must surface not-found) from
+        the internal cleanup helper (which is idempotent and silent).
+        """
+        tl = self._timeline(timeline_id)
+        track = next((t for t in tl.tracks if t.track_id == track_id), None)
+        if track is None:
+            raise CommandError(
+                f"delete_track: track not found: {track_id!r}"
+            )
+        if track.clip_ids:
+            raise CommandError(
+                f"delete_track: track {track_id!r} still has "
+                f"{len(track.clip_ids)} clip(s); move or delete them first"
+            )
+        before = {"track": track.model_dump()}
+        tl.tracks = [t for t in tl.tracks if t.track_id != track_id]
+        after = {"removed_track_id": track_id}
+        return self._record("delete_track", track_id, before, after,
+                            why=why or f"显式删除轨道 {track_id}",
+                            tool="track.delete")
+
+    def ensure_track_for_drop(
+        self,
+        asset_type_value: str,
+        prefer_kind: TrackKind | None = None,
+        insert_after_track_id: str | None = None,
+        tl_start_frame: int | None = None,
+        tl_end_frame: int | None = None,
+        timeline_id: str | None = None,
+    ) -> Track:
+        """Resolve or create a track for a drop (semantic intent).
+
+        Takes STRUCTURAL INTENT ONLY — no pixel coordinates. The GUI
+        resolves pointer geometry into this intent before calling:
+          - asset_type_value: 'video' | 'image' | 'audio' | 'subtitle' | 'text'
+          - prefer_kind: optional kind hint (defaults to the asset
+            type's primary kind from ASSET_TYPE_TO_TRACK_KINDS)
+          - insert_after_track_id: if non-null, create a new track
+            of the right kind (existing tracks keep their ids; this
+            method never renumbers).
+          - tl_start_frame / tl_end_frame: optional timeline frame
+            range of the upcoming clip. When provided, the allocator
+            uses them for overlap checking. When NOT provided, the
+            method assumes the caller wants the first compatible
+            track (any existing track fits since the range is unknown)
+            OR creates one if none exists.
+
+        Distinguishes explicit-target vs automatic-allocation:
+          - explicit target track_id passed elsewhere → Core rejects overlap
+          - no explicit target → allocator picks/creates a valid track
+
+        Returns the resolved Track. The caller is responsible for
+        adding the clip afterward via `add_clip` (which validates
+        overlap on the resolved track).
+        """
+        tl = self._timeline(timeline_id)
+        allowed_kinds = ASSET_TYPE_TO_TRACK_KINDS.get(asset_type_value)
+        if not allowed_kinds:
+            raise CommandError(
+                f"ensure_track_for_drop: asset type {asset_type_value!r} "
+                "is not a Timeline media"
+            )
+        if insert_after_track_id is not None:
+            # Anchor must exist — we don't create tracks "after" a phantom.
+            anchor = next(
+                (t for t in tl.tracks if t.track_id == insert_after_track_id),
+                None,
+            )
+            if anchor is None:
+                raise CommandError(
+                    f"ensure_track_for_drop: anchor track "
+                    f"{insert_after_track_id!r} not found"
+                )
+            # prefer_kind wins if it's in the allowed set; else the
+            # asset type's primary kind drives.
+            if prefer_kind is not None and prefer_kind.value in allowed_kinds:
+                kind_enum = prefer_kind
+            else:
+                kind_enum = TrackKind(allowed_kinds[0])
+            return self.add_track(kind_enum, timeline_id=timeline_id)
+        # No insertion intent → use the existing allocator's overlap
+        # policy. If tl_start/tl_end are provided, pass them; else
+        # fall back to a non-overlapping placeholder so the allocator
+        # still picks the first compatible track (and creates one if
+        # none exist).
+        s = float(tl_start_frame) if tl_start_frame is not None else 0.0
+        e = float(tl_end_frame) if tl_end_frame is not None else 0.0
+        return self.allocate_track_for(
+            asset_type_value, tl_start=s, tl_end=e,
+            prefer_track_id=None, timeline_id=timeline_id,
+        )
+
     def add_track(self, kind: TrackKind, track_id: str | None = None,
                   role: TrackRole | None = None,
                   label: str | None = None,
@@ -450,8 +578,9 @@ class CommandLayer:
                 continue
             if not self._track_overlaps(t, tl_start, tl_end):
                 return t
-        # No fit: create a new track.
-        kind_enum = TrackKind(list(allowed_kinds)[0])
+        # No fit: create a new track. W-B: allowed_kinds is an
+        # ordered tuple — first element is the preferred kind.
+        kind_enum = TrackKind(allowed_kinds[0])
         return self.add_track(kind_enum, timeline_id=timeline_id)
 
     # ---------- Clip 增删 ----------
@@ -762,7 +891,23 @@ class CommandLayer:
         if track:
             track.clip_ids.remove(clip_id)
         del self.core.project.clips[clip_id]
-        return self._record("remove_clip", clip_id, before, {}, why=why,
+        # W-B.2: auto-delete the track if it became empty. Atomic
+        # with this mutation. The remaining tracks keep their ids
+        # (no renumber).
+        removed_tracks = self._cleanup_empty_tracks(tl)
+        after: dict = {}
+        if removed_tracks:
+            after["removed_tracks"] = removed_tracks
+            # Capture the original track's state in `before` so
+            # revert can recreate it. The cleanup helper already
+            # captured it inside tl.tracks removal, so we read it
+            # back from before this point in time.
+            if track is not None and track.track_id in removed_tracks:
+                # Stash the original track dump under a reserved
+                # key. _apply_inverse reads it back.
+                before = dict(before)
+                before["removed_track"] = track.model_dump()
+        return self._record("remove_clip", clip_id, before, after, why=why,
                             tool="timeline.remove_clip")
 
     def ripple_delete_clip(self, clip_id: str, why: str = "",
@@ -828,6 +973,12 @@ class CommandLayer:
         }
         if cross_shifted:
             before["cross_shifted"] = cross_shifted
+        # W-B.2: cross-track shifts may have emptied the related tracks.
+        # Auto-clean. Source track may also be empty if it had only
+        # this clip; cleanup handles both atomically.
+        removed_tracks = self._cleanup_empty_tracks(tl)
+        if removed_tracks:
+            after["removed_tracks"] = removed_tracks
         return self._record("ripple_delete", clip_id, before, after,
                             why=why or f"Ripple 删除（收拢 {dur:.1f}s，"
                                        f"联动 {len(cross_shifted)} 个关联轨）",
@@ -1259,6 +1410,13 @@ class CommandLayer:
                         start=c2.timeline_range.start - shift,
                         end=c2.timeline_range.end - shift)
                     after[cid2] = {"timeline_range": c2.timeline_range.model_dump()}
+        # W-B.2: batch deletion may empty multiple tracks at once.
+        # Auto-clean runs once over all tracks (atomic with the
+        # delete_selection Operation). Remaining tracks keep their
+        # ids — no renumber.
+        removed_tracks = self._cleanup_empty_tracks(tl)
+        if removed_tracks:
+            after["removed_tracks"] = removed_tracks
         return self._apply_record(
             "delete_selection", ids[0], before, after,
             why=why or f"Selection 删除 {len(ids)} clip(s){' (ripple)' if ripple else ''}",
@@ -1330,6 +1488,13 @@ class CommandLayer:
         if cross_shifted:
             before["cross_shifted"] = cross_shifted
             after["cross_shifted_count"] = len(cross_shifted)
+        # W-B.2: cross-track moves may have emptied the source track.
+        # Auto-clean. The destination track is non-empty (it now
+        # contains this clip plus any pre-existing clips) so it
+        # survives the cleanup. The remaining tracks keep their ids.
+        removed_tracks = self._cleanup_empty_tracks(tl)
+        if removed_tracks:
+            after["removed_tracks"] = removed_tracks
         return self._record("move", clip_id, before, after, why=why,
                             time_range=clip.timeline_range)
 

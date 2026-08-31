@@ -19,7 +19,7 @@ import json
 import uuid
 from pathlib import Path
 
-from yroll.core.manifest import Operation, Project, Version
+from yroll.core.manifest import Actor, Operation, Project, Version
 
 LAYOUT = ("operations", "versions", "media", "cache", "generated")
 
@@ -247,7 +247,23 @@ class ProjectCore:
         project = Project.model_validate(raw)
         # Ensure the flat fields match Sequence (denormalized sync).
         project.sequence.sync_to_project(project)
-        return cls(path, project)
+        core = cls(path, project)
+        # GUI-03R3-W-B: load-time migration — remove empty tracks
+        # from legacy projects. Pre-W-B projects may have empty
+        # tracks on disk (from the old `ensure_default_tracks` which
+        # pre-created v1..v3, a1..a3, t1, t2 with no clips). The
+        # invariant is "every track has >= 1 clip"; enforce it on
+        # load. Idempotent: running twice is a no-op.
+        from yroll.core.commands import CommandLayer
+        cl = CommandLayer(core, who=Actor.HUMAN)
+        any_removed = False
+        for tl in core.project.timelines:
+            removed = cl._cleanup_empty_tracks(tl)
+            if removed:
+                any_removed = True
+        if any_removed:
+            core.save_state()
+        return core
 
     def save_state(self) -> None:
         # GUI-02: sync canonical Sequence → flat fields on save so
@@ -571,6 +587,14 @@ class ProjectCore:
         elif op_type in ("adjust", "adjust_remove") and clip:
             clip.adjustments = list(before.get("adjustments", []))
         elif op_type == "remove_clip" and op.target not in p.clips:
+            # W-B: if the auto-cleanup removed the clip's original
+            # track, recreate it before re-attaching the clip.
+            if "removed_track" in before:
+                from yroll.core.manifest import Track
+                restored_track = Track.model_validate(before["removed_track"])
+                if not any(t.track_id == restored_track.track_id
+                           for t in p.timeline.tracks):
+                    p.timeline.tracks.append(restored_track)
             # before 是完整 clip dump：恢复 clip 并挂回原轨道末尾
             restored = Clip.model_validate(before)
             p.clips[restored.clip_id] = restored
