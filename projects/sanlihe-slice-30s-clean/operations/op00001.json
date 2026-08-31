@@ -1,0 +1,46 @@
+{
+  "operation_id": "op00001",
+  "who": "human",
+  "at": "2026-08-31T12:00:00.000000",
+  "type": "fixture_cleanup",
+  "target": "sanlihe-slice-30s-clean",
+  "time_range": null,
+  "region": null,
+  "parameters": {
+    "derived_from": "sanlihe-slice-30s",
+    "removed_clip_ids": [
+      "c0f1e08",
+      "c3e7628",
+      "c61ee32",
+      "c884a18",
+      "cc61634",
+      "cf3267c"
+    ],
+    "removed_classification": {
+      "cc61634": "auto-test debris (asset ae45f65 @ 600s)",
+      "c0f1e08": "auto-test debris (asset ae45f65 @ 600s)",
+      "cf3267c": "auto-test debris (asset ae45f65 @ 600s)",
+      "c884a18": "auto-test debris (asset ae45f65 @ 600s)",
+      "c3e7628": "zero-duration test artifact @ 600s",
+      "c61ee32": "stale/test subtitle — classified by anomaly: 50s duration (vs 2.5-5.0s editorial); extends past V1 editorial end (49.51s); 10x longest sanlihe-story subtitle (8.0s)."
+    }
+  },
+  "before": {},
+  "after": {
+    "removed_clip_ids": [
+      "c0f1e08",
+      "c3e7628",
+      "c61ee32",
+      "c884a18",
+      "cc61634",
+      "cf3267c"
+    ],
+    "visible_extent_sec": 49.5085,
+    "v1_editorial_extent_sec": 49.5085
+  },
+  "why": "GUI-03R4.1 P0-2 fixture cleanup",
+  "tool": "scripts/build_clean_sanlihe_fixture.py",
+  "model": null,
+  "cost": 0.0,
+  "approved_by": "human"
+}

@@ -10,6 +10,8 @@ import {
   roundHalfAwayFromZero,
   type Rational,
 } from "./frames";
+import { fitContentEndSec, playbackDurationSec }
+  from "./fit-content";
 import Timeline from "./components/Timeline";
 import TimelineSwitcher from "./components/TimelineSwitcher";
 import NewTimelineDialog from "./components/NewTimelineDialog";
@@ -457,23 +459,13 @@ export default function App() {
     const t = setTimeout(() => {
       const cEl = document.querySelector('.timeline-content');
       if (!cEl) return;
-      const activeTl = project.timelines?.find(
-        (tl) => tl.timeline_id === activeTimelineId) ?? project.timelines?.[0];
-      const visibleTrackIds = new Set(
-        (activeTl?.tracks ?? []).filter((t) => !t.hidden).map((t) => t.track_id));
-      let maxEndVisible = 0;
-      let maxEndAny = 0;
-      for (const c of Object.values(project.clips)) {
-        const end = c.timeline_range?.end ?? 0;
-        if (end > maxEndAny) maxEndAny = end;
-        if (visibleTrackIds.has(c.track_id) && end > maxEndVisible) {
-          maxEndVisible = end;
-        }
-      }
-      // Use VISIBLE extent for Fit Content; if no visible track has
-      // content, fall back to the whole-project extent.
-      const maxEnd = maxEndVisible > 0 ? maxEndVisible : maxEndAny;
-      // Empty project: keep default 30 px/sec.
+      // GUI-03R4.1 P1-5: Fit Content uses EDITORIAL content bounds
+      // (V1 by default; project.intent.editorial_track_ids wins).
+      // Stale/test debris on visible tracks (e.g., Sanlihe's
+      // 600-608s clips) MUST NOT drag the zoom out — only the
+      // canonical story end should. Falls back to playback
+      // duration if no editorial content is found.
+      const maxEnd = fitContentEndSec(project as Project);
       if (maxEnd <= 0) { fitContentRanRef.current = true; return; }
       const target = Math.max(0.5, Math.min(120,
         cEl.clientWidth / Math.max(0.001, maxEnd)));
@@ -892,20 +884,9 @@ export default function App() {
           onClick={() => {
             const cEl = document.querySelector('.timeline-content');
             if (!cEl) return;
-            const activeTl = project.timelines?.find(
-              (tl) => tl.timeline_id === activeTimelineId) ?? project.timelines?.[0];
-            const visibleTrackIds = new Set(
-              (activeTl?.tracks ?? []).filter((t) => !t.hidden).map((t) => t.track_id));
-            let maxEndVisible = 0;
-            let maxEndAny = 0;
-            for (const c of Object.values(project.clips)) {
-              const end = c.timeline_range.end;
-              if (end > maxEndAny) maxEndAny = end;
-              if (visibleTrackIds.has(c.track_id) && end > maxEndVisible) {
-                maxEndVisible = end;
-              }
-            }
-            const maxEnd = maxEndVisible > 0 ? maxEndVisible : maxEndAny;
+            // GUI-03R4.1 P1-5: same editor as the auto-fit effect —
+            // EDITORIAL bounds, not stale/test extent.
+            const maxEnd = fitContentEndSec(project as Project);
             if (maxEnd <= 0) return;
             const target = Math.max(0.5, Math.min(120,
               cEl.clientWidth / Math.max(0.001, maxEnd)));

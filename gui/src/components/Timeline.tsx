@@ -29,6 +29,7 @@ import {
   HEADERS_SPACER_HEIGHT,
   HEADERS_TAIL_HEIGHT,
   TRACK_ROW_HEIGHT,
+  trackRowGeometry,
 } from "../timeline-geometry";
 import ClipBlock from "./ClipBlock";
 
@@ -167,15 +168,16 @@ function computeMarqueeSelection(
   const y1 = Math.min(m.startY, m.currentY);
   const y2 = Math.max(m.startY, m.currentY);
   const hit = new Set<string>();
-  // Y per track row in coord space: tracks start after the minimap
-  // (18px) + ruler (26px). Track N's top is 18 + 26 + N * 56,
-  // bottom is 18 + 26 + (N + 1) * 56.
+  // Y per track row in coord space: GUI-03R4.1 P1-6 mandates the
+  // SAME {top, height} as the header column, content column, clip,
+  // and drop zone. The trackRowGeometry() helper is the SINGLE
+  // source of truth — no magic offsets, no independent 18+26+idx*56
+  // calculation. If the layout constants ever change, this loop
+  // stays in sync automatically.
   for (const track of visibleTracks) {
-    // Index of this track in visibleTracks (top to bottom).
     const idx = visibleTracks.findIndex((t) => t.track_id === track.track_id);
     if (idx < 0) continue;
-    const trackTop = 18 + 26 + idx * 56;
-    const trackBottom = trackTop + 56;
+    const { top: trackTop, bottom: trackBottom } = trackRowGeometry(idx);
     // Does the marquee y-range intersect this track row?
     if (y2 < trackTop || y1 > trackBottom) continue;
     for (const cid of track.clip_ids) {

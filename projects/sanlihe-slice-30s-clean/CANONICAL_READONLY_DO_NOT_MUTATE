@@ -1,0 +1,29 @@
+CANONICAL CLEAN SANLIHE FIXTURE — DO NOT MUTATE
+==============================================
+
+This fixture is the source of truth for UX validation scenarios
+(GUI-03R4.1 P0-2). Browser smoke scripts MUST copy it to a
+working directory before performing mutations; never mutate in
+place.
+
+To use a mutated copy:
+    cp -r projects/sanlihe-slice-30s-clean projects/sanlihe-slice-30s-clean-<branch>
+
+Tests pinning this fixture: tests/test_sanlihe_clean_fixture.py
+Build script: scripts/build_clean_sanlihe_fixture.py
+Source project: projects/sanlihe-slice-30s (contains stale/test debris)
+Removal summary: see projects/sanlihe-slice-30s-clean/operations/op00001.json
+Classification for c61ee32: see operation's removed_classification map.
+
+Editorial content (preserved):
+  V1: 11 clips at [0, 49.51s]            ← main story
+  T1: 5 subtitles                         ← editorial subtitles (anomaly removed)
+  V3: 1 clip at [0, 5s]                  ← cc61634 removed
+  V5: 2 clips at [0, 6.77s]               ← c0f1e08 removed
+  V7: 1 clip at [0, 5s]                  ← c884a18 removed
+  V9: 3 clips at [0, 18.51s]
+  Hidden (V2/V6/V8/V10): preserved per R4-1 invariant
+
+Editorial track declaration (intent.editorial_track_ids = ["v1"]):
+  Used by gui/src/fit-content.ts to set Fit Content zoom to 49.51s
+  instead of the stale/test debris at 600s or v10's 1368s tail.

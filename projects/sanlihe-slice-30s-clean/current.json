@@ -1,0 +1,4681 @@
+{
+  "manifest_version": "0.1",
+  "schema_version": "0.2",
+  "project_id": "95f97ad371ad",
+  "name": "sanlihe-slice-30s-clean",
+  "created_at": "2026-08-29T23:36:07.776766",
+  "intent": {
+    "goal": "三里河陶鬶垂直切片测试",
+    "slice_duration_sec": "36",
+    "storyboard": "高凤翰→画→刘敦愿→按图索骥→三里河→龙山陶鬶",
+    "fixture_kind": "clean-ux-validation",
+    "derived_from": "sanlihe-slice-30s",
+    "removed_stale_clip_ids": [
+      "c0f1e08",
+      "c3e7628",
+      "c61ee32",
+      "c884a18",
+      "cc61634",
+      "cf3267c"
+    ],
+    "removed_stale_reason": "P0-2 fixture cleanup: 4 auto-test debris clips at [600,608.5] + 1 zero-duration artifact + 1 classified-stale 50s subtitle",
+    "editorial_track_ids": [
+      "v1"
+    ]
+  },
+  "sequence": {
+    "sequence_id": "a562ebe8266548b0a5fa0e5f23faf6bb",
+    "fps": {
+      "num": 30,
+      "den": 1
+    },
+    "width": 1920,
+    "height": 1080,
+    "timecode_format": "SMPTE",
+    "drop_frame": false
+  },
+  "fps_num": 30,
+  "fps_den": 1,
+  "width": 1920,
+  "height": 1080,
+  "assets": [
+    {
+      "asset_id": "aa080ae",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\0c34d48af0214df8994ac61b3b11e954.png",
+      "identity": {
+        "md5": "705a822f6fcd8d0b19ca2a9d960aea20",
+        "size_bytes": 1078884,
+        "duration_sec": null,
+        "width": 618,
+        "height": 904,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "afd8f49",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\0yyfzo1qqczimage.jpeg",
+      "identity": {
+        "md5": "962a3b3b3cfe60b0618a6d927e239a28",
+        "size_bytes": 77160,
+        "duration_sec": null,
+        "width": 882,
+        "height": 563,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a4608b0",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\101610316_1_x.webp",
+      "identity": {
+        "md5": "e09fabdcbd3c7652139c3004ecbc5fbd",
+        "size_bytes": 72044,
+        "duration_sec": null,
+        "width": 600,
+        "height": 600,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a6aebc7",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\1742652773k1vg0gry8rjimage.jpeg",
+      "identity": {
+        "md5": "cd2551d4930a0e0422a51ec92754a84d",
+        "size_bytes": 75215,
+        "duration_sec": null,
+        "width": 497,
+        "height": 1290,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "adf6755",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\1742652790yyfzo1qqczimage (2).jpeg",
+      "identity": {
+        "md5": "e28383ee777f7391aa4c8c9c8990bd40",
+        "size_bytes": 49506,
+        "duration_sec": null,
+        "width": 882,
+        "height": 542,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a2629cb",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\20231020161537493182_616f73a5b93cd0aa4a26a30c52f71568.jpg",
+      "identity": {
+        "md5": "325a671ac19a31e03621907346b255da",
+        "size_bytes": 30645,
+        "duration_sec": null,
+        "width": 450,
+        "height": 600,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "aaf4a3a",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\24780[1024].jpg",
+      "identity": {
+        "md5": "2739e468b2e46019f34c44ef9dcf1982",
+        "size_bytes": 48066,
+        "duration_sec": null,
+        "width": 1024,
+        "height": 768,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "abd4e81",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\319bf52db5d44cd0a50a2bfdb3e6c054.png",
+      "identity": {
+        "md5": "ff27a1a1c2958f4ecb5a4411238de107",
+        "size_bytes": 99760,
+        "duration_sec": null,
+        "width": 501,
+        "height": 517,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "af91f28",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\4FEEEC32C25CDEAA6C5B856BCF494B4C.png",
+      "identity": {
+        "md5": "4feeec32c25cdeaa6c5b856bcf494b4c",
+        "size_bytes": 1074468,
+        "duration_sec": null,
+        "width": 885,
+        "height": 948,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "afdc981",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\843B7B3CA9DF0BEBB3F23AFFE2BE8484.png",
+      "identity": {
+        "md5": "843b7b3ca9df0bebb3f23affe2be8484",
+        "size_bytes": 503769,
+        "duration_sec": null,
+        "width": 842,
+        "height": 1024,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "ac76ced",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\99cb4c29d098486891fe71f1bed78ed9.jpg",
+      "identity": {
+        "md5": "cb26ac2fdbedc18778fe1951863bcc2a",
+        "size_bytes": 16143,
+        "duration_sec": null,
+        "width": 517,
+        "height": 573,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "acd3ad9",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\afe2caa0c3bb48478cc21636805a1acd.png",
+      "identity": {
+        "md5": "9fc9b749e3beef94da20e8aaaf718db9",
+        "size_bytes": 712604,
+        "duration_sec": null,
+        "width": 616,
+        "height": 923,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a65a261",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\arch_book_cover.jpg",
+      "identity": {
+        "md5": "75225f73ad9bb80717c0d2d591f2b91a",
+        "size_bytes": 86308,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a18399a",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\art5156870796.jpg",
+      "identity": {
+        "md5": "8bea8884b07e67a9f0321e21cf34eb1a",
+        "size_bytes": 245133,
+        "duration_sec": null,
+        "width": 1918,
+        "height": 2000,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "af899f8",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\d70883732da848d09ea2ef40b78cee10.png",
+      "identity": {
+        "md5": "db2c557474a148159b44c8dc3a5697fc",
+        "size_bytes": 898217,
+        "duration_sec": null,
+        "width": 574,
+        "height": 871,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a95cba2",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\D7914173E854FDA33ADD092E5D1F3C12.png",
+      "identity": {
+        "md5": "d7914173e854fda33add092e5d1f3c12",
+        "size_bytes": 2211808,
+        "duration_sec": null,
+        "width": 2048,
+        "height": 2048,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a1ff130",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\DP-12552-002.jpg",
+      "identity": {
+        "md5": "223ec6ef2e6eb2c6d5bdd4cf555ffb6c",
+        "size_bytes": 1669411,
+        "duration_sec": null,
+        "width": 2696,
+        "height": 4000,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a5a60bf",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\evidence_bones_shells.jpg",
+      "identity": {
+        "md5": "12bcd486de8a1488303a91b45cfcbfb6",
+        "size_bytes": 126476,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a5be2a8",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\evidence_cave_section.jpg",
+      "identity": {
+        "md5": "c6126627dd1a97da4554292191136d0c",
+        "size_bytes": 134077,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a7633de",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\evidence_pig_burial.jpg",
+      "identity": {
+        "md5": "9cff2d68499e159c594654e1d9ede3f8",
+        "size_bytes": 167996,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "ac0d4b3",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\F07EA062764452BB592F5AFBF8A415C1.jpg",
+      "identity": {
+        "md5": "1ac660c02fe97229122d4162c2c44705",
+        "size_bytes": 336603,
+        "duration_sec": null,
+        "width": 1920,
+        "height": 1309,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a0ebd3b",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\OIP (1).webp",
+      "identity": {
+        "md5": "27a26cf72a0b7b3de0f7c15fd06ad426",
+        "size_bytes": 3982,
+        "duration_sec": null,
+        "width": 474,
+        "height": 315,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a115786",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\OIP.webp",
+      "identity": {
+        "md5": "3398cc5a293ca3ed662e0ad3d8c87e29",
+        "size_bytes": 21422,
+        "duration_sec": null,
+        "width": 474,
+        "height": 297,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "af965c3",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\oracle_feng_01.jpg",
+      "identity": {
+        "md5": "2503a495a7a210113d81e7f6b8dfa3ea",
+        "size_bytes": 45189,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a02bf66",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\oracle_feng_02.jpg",
+      "identity": {
+        "md5": "413fc6f50d0731b8ef4a09d91433ba51",
+        "size_bytes": 182490,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a91fbf0",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\page_14.jpg",
+      "identity": {
+        "md5": "b1deac6149d10824e26c55ae62c07ebd",
+        "size_bytes": 156276,
+        "duration_sec": null,
+        "width": 397,
+        "height": 584,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "ae2da17",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\painting_gaofenghan_hd.jpg",
+      "identity": {
+        "md5": "4f4c202ea282d49ea66a7b14c6dc8a04",
+        "size_bytes": 232877,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a444f54",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_birdshaped.jpg",
+      "identity": {
+        "md5": "6a0930b7034de8477be9f36c5391669c",
+        "size_bytes": 146230,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a37ea76",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_black_stemcup_alt.jpg",
+      "identity": {
+        "md5": "dbddb1ad2ea1d389498ede5c148b76ef",
+        "size_bytes": 129477,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a8553d8",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_black_stemcup_short.jpg",
+      "identity": {
+        "md5": "5b36a3ec5e6c85e992d2aebbb67b1b87",
+        "size_bytes": 117877,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "ab8f17b",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_dawenkou_brown.jpg",
+      "identity": {
+        "md5": "55385f63ea278d44ef0299dec47b3968",
+        "size_bytes": 115669,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1608,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a122604",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_dawenkou_grey.jpg",
+      "identity": {
+        "md5": "11e8d3747cf4acaacf63bd6eef3451f9",
+        "size_bytes": 82847,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a10ec6b",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_longshan_red.jpg",
+      "identity": {
+        "md5": "5a6678d2388a1a7e19081dcd78609596",
+        "size_bytes": 112548,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1612,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a55bc2b",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\pottery_white_3leg.jpg",
+      "identity": {
+        "md5": "6c968f0b853c6c17920bd0830c00e40e",
+        "size_bytes": 52371,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "abacbb5",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\QQ20260827-200332.jpg",
+      "identity": {
+        "md5": "f8211859417e56dec2175e848af91a61",
+        "size_bytes": 1745413,
+        "duration_sec": null,
+        "width": 984,
+        "height": 1311,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "ae661cc",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\R (1).jpg",
+      "identity": {
+        "md5": "5b98cf5fa4faf4170cc6e10df1dda6fa",
+        "size_bytes": 46248,
+        "duration_sec": null,
+        "width": 842,
+        "height": 1024,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a414317",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\R (2).jpg",
+      "identity": {
+        "md5": "404db4f799a7972bf048214b8890648b",
+        "size_bytes": 224018,
+        "duration_sec": null,
+        "width": 600,
+        "height": 800,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "afff67c",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\R.jpg",
+      "identity": {
+        "md5": "56c1602049fd665ce4aff580b8924457",
+        "size_bytes": 61090,
+        "duration_sec": null,
+        "width": 640,
+        "height": 1160,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a23219e",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\scholars_1959_color.jpg",
+      "identity": {
+        "md5": "c366f34bc8413c7ee6e14d166ae4e4bf",
+        "size_bytes": 139271,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "a826bb7",
+      "type": "image",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-story\\media\\scholars_1959_photo.jpg",
+      "identity": {
+        "md5": "5e1451f9ec88fad44055d8344e7e858a",
+        "size_bytes": 146595,
+        "duration_sec": null,
+        "width": 1080,
+        "height": 1920,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "stl_white_3leg",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\YROLL\\projects\\sanlihe-slice-30s\\media\\stl_white_3leg.png",
+      "identity": {
+        "md5": "stl_white_3leg000000000000000000",
+        "size_bytes": 0,
+        "duration_sec": null,
+        "width": null,
+        "height": null,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "stl_pottery_evolve",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\YROLL\\projects\\sanlihe-slice-30s\\media\\stl_pottery_evolve.png",
+      "identity": {
+        "md5": "stl_pottery_evolve00000000000000",
+        "size_bytes": 0,
+        "duration_sec": null,
+        "width": null,
+        "height": null,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "stl_oracle_feng",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\YROLL\\projects\\sanlihe-slice-30s\\media\\stl_oracle_feng.png",
+      "identity": {
+        "md5": "stl_oracle_feng00000000000000000",
+        "size_bytes": 0,
+        "duration_sec": null,
+        "width": null,
+        "height": null,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "stl_evidence",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\YROLL\\projects\\sanlihe-slice-30s\\media\\stl_evidence.png",
+      "identity": {
+        "md5": "stl_evidence00000000000000000000",
+        "size_bytes": 0,
+        "duration_sec": null,
+        "width": null,
+        "height": null,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "stl_product_R",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\YROLL\\projects\\sanlihe-slice-30s\\media\\stl_product_R.png",
+      "identity": {
+        "md5": "stl_product_R0000000000000000000",
+        "size_bytes": 0,
+        "duration_sec": null,
+        "width": null,
+        "height": null,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "stl_product_OIP",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\YROLL\\projects\\sanlihe-slice-30s\\media\\stl_product_OIP.png",
+      "identity": {
+        "md5": "stl_product_OIP00000000000000000",
+        "size_bytes": 0,
+        "duration_sec": null,
+        "width": null,
+        "height": null,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "stl_product_closeup",
+      "type": "image",
+      "origin": "unknown",
+      "path": "D:\\cc\\YROLL\\projects\\sanlihe-slice-30s\\media\\stl_product_closeup.png",
+      "identity": {
+        "md5": "stl_product_closeup0000000000000",
+        "size_bytes": 0,
+        "duration_sec": null,
+        "width": null,
+        "height": null,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    },
+    {
+      "asset_id": "ae45f65",
+      "type": "video",
+      "origin": "unknown",
+      "path": "projects\\sanlihe-slice-30s\\media\\C9717.MP4",
+      "identity": {
+        "md5": "49fde1e2a73deaf579d131e7bdb1fb18",
+        "size_bytes": 67250595,
+        "duration_sec": 8.5085,
+        "width": 3840,
+        "height": 2160,
+        "created_at": null
+      },
+      "caption": null,
+      "tags": [],
+      "gen": null,
+      "source_fps": null,
+      "source_is_cfr": null,
+      "source_frame_count": null
+    }
+  ],
+  "timelines": [
+    {
+      "timeline_id": "main",
+      "name": "main",
+      "derived_from": null,
+      "created_at": "2026-08-30T10:25:52.190323",
+      "tracks": [
+        {
+          "track_id": "v1",
+          "timeline_id": "main",
+          "kind": "video",
+          "clip_ids": [
+            "c0bb0eb",
+            "cd2a234",
+            "cb79850",
+            "c039a7b",
+            "cff462a",
+            "ca0eee0",
+            "c3ace4d",
+            "cbb3a6c",
+            "c4b3597",
+            "cb82e96",
+            "cbf21ed"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "t1",
+          "timeline_id": "main",
+          "kind": "text",
+          "clip_ids": [
+            "cbbe06c",
+            "c241bdc",
+            "cdf2107",
+            "c666e18",
+            "cbbc849"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "v2",
+          "timeline_id": "main",
+          "kind": "video",
+          "clip_ids": [
+            "cd14437",
+            "cfd64b3"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": true,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "v3",
+          "timeline_id": "main",
+          "kind": "video",
+          "clip_ids": [
+            "c4c290d"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "v5",
+          "timeline_id": "main",
+          "kind": "video",
+          "clip_ids": [
+            "cd21c90",
+            "c98b82a"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "v6",
+          "timeline_id": "main",
+          "kind": "video",
+          "clip_ids": [
+            "c2325dd"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": true,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "v7",
+          "timeline_id": "main",
+          "kind": "video",
+          "clip_ids": [
+            "c0a72e0"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "v8",
+          "timeline_id": "main",
+          "kind": "video",
+          "clip_ids": [
+            "c95adc1",
+            "c849a8c"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": true,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "v9",
+          "timeline_id": "main",
+          "kind": "video",
+          "clip_ids": [
+            "c0a6d68",
+            "c5f9a84",
+            "ce8fbe0"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "v10",
+          "timeline_id": "main",
+          "kind": "video",
+          "clip_ids": [
+            "c0f0223",
+            "c7ce802",
+            "cb05e07",
+            "cc5e66a",
+            "c1e1c19",
+            "c01cf1a",
+            "cade767",
+            "c845b5c",
+            "ca36daf",
+            "c68c3df",
+            "cb47f7c",
+            "ce7c64f",
+            "c1d71bd"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": true,
+          "role": null,
+          "label": null
+        }
+      ],
+      "markers": [],
+      "beats": []
+    },
+    {
+      "timeline_id": "tl8f8aac5c",
+      "name": "科普版",
+      "derived_from": "main",
+      "created_at": "2026-08-30T10:27:00.040535",
+      "tracks": [
+        {
+          "track_id": "te26e5021_video",
+          "timeline_id": "tl8f8aac5c",
+          "kind": "video",
+          "clip_ids": [
+            "cb37a8e99",
+            "cf4582707",
+            "c3650f65d",
+            "c6161f676",
+            "c90c8a69d",
+            "c9d8d5672",
+            "cd0ca87ae",
+            "cbe651465",
+            "c59392648",
+            "cea97f2b0"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "t273f7788_text",
+          "timeline_id": "tl8f8aac5c",
+          "kind": "text",
+          "clip_ids": [
+            "c08815b52",
+            "ce43079d2",
+            "c7e33ac49",
+            "c647bf5f0",
+            "cf6473154",
+            "c4733444d",
+            "cd89b5c",
+            "c140394",
+            "c378376",
+            "c3c7d7e"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "v4",
+          "timeline_id": "tl8f8aac5c",
+          "kind": "video",
+          "clip_ids": [
+            "ccc981c",
+            "c01a26f",
+            "ca80c44",
+            "c3fd98c"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        }
+      ],
+      "markers": [
+        {
+          "marker_id": "mk4a80f5",
+          "timeline_frame": 1080,
+          "label": "文化锚点：陶鬶演变",
+          "color": "#ffd400",
+          "note": "",
+          "created_at": "2026-08-30T10:27:00.054635",
+          "timeline_id": "tl8f8aac5c"
+        },
+        {
+          "marker_id": "mk32eef8",
+          "timeline_frame": 1410,
+          "label": "高凤翰插花典故",
+          "color": "#ffd400",
+          "note": "",
+          "created_at": "2026-08-30T10:27:00.054635",
+          "timeline_id": "tl8f8aac5c"
+        }
+      ],
+      "beats": []
+    },
+    {
+      "timeline_id": "tl10d1526f",
+      "name": "种草版",
+      "derived_from": "tl8f8aac5c",
+      "created_at": "2026-08-30T10:27:00.056147",
+      "tracks": [
+        {
+          "track_id": "ta18a7556_video",
+          "timeline_id": "tl10d1526f",
+          "kind": "video",
+          "clip_ids": [
+            "c5b28c8e9",
+            "ca3262295",
+            "ccd8668a7",
+            "cf5c3e0e8",
+            "c78ad2b14",
+            "c9512a9"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "ta118fb64_text",
+          "timeline_id": "tl10d1526f",
+          "kind": "text",
+          "clip_ids": [
+            "cb505c07b",
+            "c2231064d",
+            "c902ffa14",
+            "c257020c6",
+            "c53dfdb20",
+            "ce4d0675a",
+            "cb31db23e",
+            "c6add0511",
+            "c293aad74",
+            "c7e38a3fc"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "t3888326d_text",
+          "timeline_id": "tl10d1526f",
+          "kind": "text",
+          "clip_ids": [
+            "cdd92d0",
+            "c69d8d2"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "te31598d7_video",
+          "timeline_id": "tl10d1526f",
+          "kind": "video",
+          "clip_ids": [
+            "c140b1c9b",
+            "c0f9ef8a7",
+            "c761809a6",
+            "c34ee3e34"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        }
+      ],
+      "markers": [
+        {
+          "marker_id": "mkc36c01",
+          "timeline_frame": 1080,
+          "label": "文化锚点：陶鬶演变",
+          "color": "#ffd400",
+          "note": "",
+          "created_at": "2026-08-30T10:27:00.054635",
+          "timeline_id": "tl10d1526f"
+        },
+        {
+          "marker_id": "mkdae787",
+          "timeline_frame": 1410,
+          "label": "高凤翰插花典故",
+          "color": "#ffd400",
+          "note": "",
+          "created_at": "2026-08-30T10:27:00.054635",
+          "timeline_id": "tl10d1526f"
+        }
+      ],
+      "beats": []
+    },
+    {
+      "timeline_id": "tlb4fce3a5",
+      "name": "IP版",
+      "derived_from": "tl10d1526f",
+      "created_at": "2026-08-30T10:27:00.065156",
+      "tracks": [
+        {
+          "track_id": "tef60dfc4_video",
+          "timeline_id": "tlb4fce3a5",
+          "kind": "video",
+          "clip_ids": [
+            "c5343f681",
+            "cf148ae61",
+            "c901698cd",
+            "ce3500fc1",
+            "cb1d2aad8",
+            "c95f2d4ca"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "td5eb41d7_text",
+          "timeline_id": "tlb4fce3a5",
+          "kind": "text",
+          "clip_ids": [
+            "ceb80a259",
+            "c534c6900",
+            "c2cf0b004",
+            "cac056571",
+            "cd87b65fd",
+            "cc9f75d5d",
+            "cf52ebc90",
+            "c869ab87f",
+            "cff212972",
+            "c2e08b127",
+            "c85be8d"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "t45a54ee4_text",
+          "timeline_id": "tlb4fce3a5",
+          "kind": "text",
+          "clip_ids": [
+            "ca5d12ccf",
+            "c36c158bd"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "t5dcb34df_video",
+          "timeline_id": "tlb4fce3a5",
+          "kind": "video",
+          "clip_ids": [
+            "c2ac2c943",
+            "c12216cf1",
+            "c5499bd64",
+            "c779961ad"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "t3",
+          "timeline_id": "tlb4fce3a5",
+          "kind": "text",
+          "clip_ids": [
+            "c311fdc"
+          ],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        }
+      ],
+      "markers": [
+        {
+          "marker_id": "mk32177a",
+          "timeline_frame": 1080,
+          "label": "文化锚点：陶鬶演变",
+          "color": "#ffd400",
+          "note": "",
+          "created_at": "2026-08-30T10:27:00.054635",
+          "timeline_id": "tlb4fce3a5"
+        },
+        {
+          "marker_id": "mk75d95d",
+          "timeline_frame": 1410,
+          "label": "高凤翰插花典故",
+          "color": "#ffd400",
+          "note": "",
+          "created_at": "2026-08-30T10:27:00.054635",
+          "timeline_id": "tlb4fce3a5"
+        }
+      ],
+      "beats": [
+        {
+          "beat_id": "b3b41fa",
+          "label": "Setup",
+          "kind": "setup",
+          "start_frame": 0,
+          "end_frame": 240,
+          "intent": "",
+          "color": "#a78bfa",
+          "note": "",
+          "created_at": "2026-08-30T10:27:00.067694",
+          "timeline_id": "tlb4fce3a5"
+        },
+        {
+          "beat_id": "b961d8b",
+          "label": "钩子",
+          "kind": "hook",
+          "start_frame": 240,
+          "end_frame": 420,
+          "intent": "",
+          "color": "#a78bfa",
+          "note": "",
+          "created_at": "2026-08-30T10:27:00.067694",
+          "timeline_id": "tlb4fce3a5"
+        },
+        {
+          "beat_id": "b59c1a3",
+          "label": "Development",
+          "kind": "build",
+          "start_frame": 420,
+          "end_frame": 720,
+          "intent": "",
+          "color": "#a78bfa",
+          "note": "",
+          "created_at": "2026-08-30T10:27:00.067694",
+          "timeline_id": "tlb4fce3a5"
+        },
+        {
+          "beat_id": "bab061e",
+          "label": "Climax",
+          "kind": "climax",
+          "start_frame": 720,
+          "end_frame": 900,
+          "intent": "",
+          "color": "#a78bfa",
+          "note": "",
+          "created_at": "2026-08-30T10:27:00.067694",
+          "timeline_id": "tlb4fce3a5"
+        },
+        {
+          "beat_id": "b8bdf6d",
+          "label": "Resolution",
+          "kind": "resolve",
+          "start_frame": 900,
+          "end_frame": 1080,
+          "intent": "",
+          "color": "#a78bfa",
+          "note": "",
+          "created_at": "2026-08-30T10:27:00.067694",
+          "timeline_id": "tlb4fce3a5"
+        }
+      ]
+    }
+  ],
+  "active_timeline_id": "main",
+  "default_timeline_id": "main",
+  "clips": {
+    "c0bb0eb": {
+      "clip_id": "c0bb0eb",
+      "asset_id": "af965c3",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 44.5085,
+        "end": 49.5085
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "f8dd8286",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": 0.05,
+            "scale": 1.08,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "17aefc6e",
+          "kind": "fade",
+          "params": {
+            "in": 0.4,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cbbe06c": {
+      "clip_id": "cbbe06c",
+      "asset_id": "",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 15.9,
+        "end": 19.9
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "两百多年前，一个农人在地里干活。"
+      },
+      "version_ids": []
+    },
+    "cd2a234": {
+      "clip_id": "cd2a234",
+      "asset_id": "ae2da17",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 5.0,
+        "end": 10.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "b75db410",
+          "kind": "transform2d",
+          "params": {
+            "x": -0.05,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "9497a358",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c241bdc": {
+      "clip_id": "c241bdc",
+      "asset_id": "",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 16.5,
+        "end": 20.5
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "他不知道它有多古，只是觉得，拿来插莲花挺好。"
+      },
+      "version_ids": []
+    },
+    "cb79850": {
+      "clip_id": "cb79850",
+      "asset_id": "a23219e",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 10.0,
+        "end": 12.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "43a78589",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.05,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "dfe59eab",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.2
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c039a7b": {
+      "clip_id": "c039a7b",
+      "asset_id": "a826bb7",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 13.733333333333333,
+        "end": 16.733333333333334
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "c9f87b8a",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.05,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "480f0226",
+          "kind": "fade",
+          "params": {
+            "in": 0.2,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cdf2107": {
+      "clip_id": "cdf2107",
+      "asset_id": "",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 27.5,
+        "end": 31.5
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "200多年后，有人看到了这段题记。"
+      },
+      "version_ids": []
+    },
+    "cff462a": {
+      "clip_id": "cff462a",
+      "asset_id": "afff67c",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 2.666666666666666
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "6d63deae",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.0,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "70599b02",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "ca0eee0": {
+      "clip_id": "ca0eee0",
+      "asset_id": "ae661cc",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 18.0,
+        "end": 22.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "c5fe8162",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.1,
+            "scale": 1.15,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "3cd39065",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c666e18": {
+      "clip_id": "c666e18",
+      "asset_id": "",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 2.5
+      },
+      "timeline_range": {
+        "start": 0.8333333333333428,
+        "end": 3.333333333333343
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "他们真的去找了。"
+      },
+      "version_ids": []
+    },
+    "c3ace4d": {
+      "clip_id": "c3ace4d",
+      "asset_id": "a7633de",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 22.0,
+        "end": 25.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "d955790b",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "733fb5f9",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cbb3a6c": {
+      "clip_id": "cbb3a6c",
+      "asset_id": "a91fbf0",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 25.0,
+        "end": 28.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "b6625255",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.08,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "13247591",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cbbc849": {
+      "clip_id": "cbbc849",
+      "asset_id": "",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 22.5,
+        "end": 27.5
+      },
+      "track_id": "t1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "这一次，他们找到了。三里河遗址。"
+      },
+      "version_ids": []
+    },
+    "c4b3597": {
+      "clip_id": "c4b3597",
+      "asset_id": "a55bc2b",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 28.0,
+        "end": 32.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "93acedba",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.15,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "cefed8ba",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cb82e96": {
+      "clip_id": "cb82e96",
+      "asset_id": "a10ec6b",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 32.0,
+        "end": 36.0
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "f75413f1",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "0e2606b4",
+          "kind": "fade",
+          "params": {
+            "in": 0.5,
+            "out": 0.0
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cb37a8e99": {
+      "clip_id": "cb37a8e99",
+      "asset_id": "af965c3",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 4.5
+      },
+      "track_id": "te26e5021_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "f8dd8286",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": 0.05,
+            "scale": 1.08,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "17aefc6e",
+          "kind": "fade",
+          "params": {
+            "in": 0.4,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c08815b52": {
+      "clip_id": "c08815b52",
+      "asset_id": "",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "track_id": "t273f7788_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "两百多年前，一个农人在地里干活。"
+      },
+      "version_ids": []
+    },
+    "cf4582707": {
+      "clip_id": "cf4582707",
+      "asset_id": "ae2da17",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 5.0,
+        "end": 10.0
+      },
+      "track_id": "te26e5021_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "b75db410",
+          "kind": "transform2d",
+          "params": {
+            "x": -0.05,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "9497a358",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "ce43079d2": {
+      "clip_id": "ce43079d2",
+      "asset_id": "",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 5.5,
+        "end": 9.5
+      },
+      "track_id": "t273f7788_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "他不知道它有多古，只是觉得，拿来插莲花挺好。"
+      },
+      "version_ids": []
+    },
+    "c3650f65d": {
+      "clip_id": "c3650f65d",
+      "asset_id": "a23219e",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 10.0,
+        "end": 12.0
+      },
+      "track_id": "te26e5021_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "43a78589",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.05,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "dfe59eab",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.2
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c6161f676": {
+      "clip_id": "c6161f676",
+      "asset_id": "a826bb7",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 12.0,
+        "end": 15.0
+      },
+      "track_id": "te26e5021_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "c9f87b8a",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.05,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "480f0226",
+          "kind": "fade",
+          "params": {
+            "in": 0.2,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c7e33ac49": {
+      "clip_id": "c7e33ac49",
+      "asset_id": "",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 10.5,
+        "end": 14.5
+      },
+      "track_id": "t273f7788_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "200多年后，有人看到了这段题记。"
+      },
+      "version_ids": []
+    },
+    "c90c8a69d": {
+      "clip_id": "c90c8a69d",
+      "asset_id": "afff67c",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 15.0,
+        "end": 18.0
+      },
+      "track_id": "te26e5021_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "6d63deae",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.0,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "70599b02",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c9d8d5672": {
+      "clip_id": "c9d8d5672",
+      "asset_id": "ae661cc",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 18.0,
+        "end": 22.0
+      },
+      "track_id": "te26e5021_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "c5fe8162",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.1,
+            "scale": 1.15,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "3cd39065",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c647bf5f0": {
+      "clip_id": "c647bf5f0",
+      "asset_id": "",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 15.5,
+        "end": 19.5
+      },
+      "track_id": "t273f7788_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "余家介子城下。"
+      },
+      "version_ids": []
+    },
+    "cf6473154": {
+      "clip_id": "cf6473154",
+      "asset_id": "",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 2.5
+      },
+      "timeline_range": {
+        "start": 19.5,
+        "end": 22.0
+      },
+      "track_id": "t273f7788_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "他们真的去找了。"
+      },
+      "version_ids": []
+    },
+    "cd0ca87ae": {
+      "clip_id": "cd0ca87ae",
+      "asset_id": "a7633de",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 22.0,
+        "end": 25.0
+      },
+      "track_id": "te26e5021_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "d955790b",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "733fb5f9",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cbe651465": {
+      "clip_id": "cbe651465",
+      "asset_id": "a91fbf0",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 25.0,
+        "end": 28.0
+      },
+      "track_id": "te26e5021_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "b6625255",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.08,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "13247591",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c4733444d": {
+      "clip_id": "c4733444d",
+      "asset_id": "",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 22.5,
+        "end": 27.5
+      },
+      "track_id": "t273f7788_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "这一次，他们找到了。三里河遗址。"
+      },
+      "version_ids": []
+    },
+    "c59392648": {
+      "clip_id": "c59392648",
+      "asset_id": "a55bc2b",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 28.0,
+        "end": 32.0
+      },
+      "track_id": "te26e5021_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "93acedba",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.15,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "cefed8ba",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.5
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cea97f2b0": {
+      "clip_id": "cea97f2b0",
+      "asset_id": "a10ec6b",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 32.0,
+        "end": 36.0
+      },
+      "track_id": "te26e5021_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "f75413f1",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "0e2606b4",
+          "kind": "fade",
+          "params": {
+            "in": 0.5,
+            "out": 0.0
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "ccc981c": {
+      "clip_id": "ccc981c",
+      "asset_id": "stl_white_3leg",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.0
+      },
+      "timeline_range": {
+        "start": 36.0,
+        "end": 42.0
+      },
+      "track_id": "v4",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c01a26f": {
+      "clip_id": "c01a26f",
+      "asset_id": "stl_pottery_evolve",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 42.0,
+        "end": 47.0
+      },
+      "track_id": "v4",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "ca80c44": {
+      "clip_id": "ca80c44",
+      "asset_id": "stl_oracle_feng",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 47.0,
+        "end": 52.0
+      },
+      "track_id": "v4",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c3fd98c": {
+      "clip_id": "c3fd98c",
+      "asset_id": "stl_evidence",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.0
+      },
+      "timeline_range": {
+        "start": 52.0,
+        "end": 58.0
+      },
+      "track_id": "v4",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cd89b5c": {
+      "clip_id": "cd89b5c",
+      "asset_id": "",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.0
+      },
+      "timeline_range": {
+        "start": 36.0,
+        "end": 42.0
+      },
+      "track_id": "t273f7788_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "在世界几大古文明中，三足器之丰富，是中华文明独有的。"
+      },
+      "version_ids": []
+    },
+    "c140394": {
+      "clip_id": "c140394",
+      "asset_id": "",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 42.0,
+        "end": 47.0
+      },
+      "track_id": "t273f7788_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "袋形足是为了在火上直接加热；后来演变为礼器兽形足。"
+      },
+      "version_ids": []
+    },
+    "c378376": {
+      "clip_id": "c378376",
+      "asset_id": "",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.0
+      },
+      "timeline_range": {
+        "start": 47.0,
+        "end": 53.0
+      },
+      "track_id": "t273f7788_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "高凤翰拿陶鬶插花：'有古意'——5000 年前的器物穿越到清代。"
+      },
+      "version_ids": []
+    },
+    "c3c7d7e": {
+      "clip_id": "c3c7d7e",
+      "asset_id": "",
+      "timeline_id": "tl8f8aac5c",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 53.0,
+        "end": 58.0
+      },
+      "track_id": "t273f7788_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "陶鬶最显眼的特征是三个大小均匀的袋形足。"
+      },
+      "version_ids": []
+    },
+    "c5b28c8e9": {
+      "clip_id": "c5b28c8e9",
+      "asset_id": "af965c3",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 0.3,
+        "end": 5.3
+      },
+      "track_id": "ta18a7556_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "f8dd8286",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": 0.05,
+            "scale": 1.08,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "17aefc6e",
+          "kind": "fade",
+          "params": {
+            "in": 0.4,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cb505c07b": {
+      "clip_id": "cb505c07b",
+      "asset_id": "",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 0.16666666666666669,
+        "end": 4.166666666666667
+      },
+      "track_id": "ta118fb64_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "两百多年前，一个农人在地里干活。"
+      },
+      "version_ids": []
+    },
+    "ca3262295": {
+      "clip_id": "ca3262295",
+      "asset_id": "ae2da17",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 5.0,
+        "end": 10.0
+      },
+      "track_id": "ta18a7556_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "b75db410",
+          "kind": "transform2d",
+          "params": {
+            "x": -0.05,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "9497a358",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c2231064d": {
+      "clip_id": "c2231064d",
+      "asset_id": "",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 5.5,
+        "end": 9.5
+      },
+      "track_id": "ta118fb64_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "他不知道它有多古，只是觉得，拿来插莲花挺好。"
+      },
+      "version_ids": []
+    },
+    "ccd8668a7": {
+      "clip_id": "ccd8668a7",
+      "asset_id": "a23219e",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 10.0,
+        "end": 12.0
+      },
+      "track_id": "ta18a7556_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "43a78589",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.05,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "dfe59eab",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.2
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cf5c3e0e8": {
+      "clip_id": "cf5c3e0e8",
+      "asset_id": "stl_product_OIP",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 12.0,
+        "end": 15.0
+      },
+      "track_id": "ta18a7556_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "c9f87b8a",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.05,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "480f0226",
+          "kind": "fade",
+          "params": {
+            "in": 0.2,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c902ffa14": {
+      "clip_id": "c902ffa14",
+      "asset_id": "",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 10.5,
+        "end": 14.5
+      },
+      "track_id": "ta118fb64_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "200多年后，有人看到了这段题记。"
+      },
+      "version_ids": []
+    },
+    "c78ad2b14": {
+      "clip_id": "c78ad2b14",
+      "asset_id": "stl_product_R",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 15.0,
+        "end": 18.0
+      },
+      "track_id": "ta18a7556_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "6d63deae",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.0,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "70599b02",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c257020c6": {
+      "clip_id": "c257020c6",
+      "asset_id": "",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 15.5,
+        "end": 19.5
+      },
+      "track_id": "ta118fb64_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "余家介子城下。"
+      },
+      "version_ids": []
+    },
+    "c53dfdb20": {
+      "clip_id": "c53dfdb20",
+      "asset_id": "",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 2.5
+      },
+      "timeline_range": {
+        "start": 19.5,
+        "end": 22.0
+      },
+      "track_id": "ta118fb64_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "他们真的去找了。"
+      },
+      "version_ids": []
+    },
+    "ce4d0675a": {
+      "clip_id": "ce4d0675a",
+      "asset_id": "",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 22.5,
+        "end": 27.5
+      },
+      "track_id": "ta118fb64_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "这一次，他们找到了。三里河遗址。"
+      },
+      "version_ids": []
+    },
+    "c140b1c9b": {
+      "clip_id": "c140b1c9b",
+      "asset_id": "stl_white_3leg",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.0
+      },
+      "timeline_range": {
+        "start": 36.0,
+        "end": 42.0
+      },
+      "track_id": "te31598d7_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c0f9ef8a7": {
+      "clip_id": "c0f9ef8a7",
+      "asset_id": "stl_pottery_evolve",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 42.0,
+        "end": 47.0
+      },
+      "track_id": "te31598d7_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c761809a6": {
+      "clip_id": "c761809a6",
+      "asset_id": "stl_oracle_feng",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 47.0,
+        "end": 52.0
+      },
+      "track_id": "te31598d7_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c34ee3e34": {
+      "clip_id": "c34ee3e34",
+      "asset_id": "stl_evidence",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.0
+      },
+      "timeline_range": {
+        "start": 52.0,
+        "end": 58.0
+      },
+      "track_id": "te31598d7_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cb31db23e": {
+      "clip_id": "cb31db23e",
+      "asset_id": "",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.0
+      },
+      "timeline_range": {
+        "start": 36.0,
+        "end": 42.0
+      },
+      "track_id": "ta118fb64_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "在世界几大古文明中，三足器之丰富，是中华文明独有的。"
+      },
+      "version_ids": []
+    },
+    "c6add0511": {
+      "clip_id": "c6add0511",
+      "asset_id": "",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 42.0,
+        "end": 47.0
+      },
+      "track_id": "ta118fb64_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "袋形足是为了在火上直接加热；后来演变为礼器兽形足。"
+      },
+      "version_ids": []
+    },
+    "c293aad74": {
+      "clip_id": "c293aad74",
+      "asset_id": "",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.0
+      },
+      "timeline_range": {
+        "start": 47.0,
+        "end": 53.0
+      },
+      "track_id": "ta118fb64_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "高凤翰拿陶鬶插花：'有古意'——5000 年前的器物穿越到清代。"
+      },
+      "version_ids": []
+    },
+    "c7e38a3fc": {
+      "clip_id": "c7e38a3fc",
+      "asset_id": "",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 53.0,
+        "end": 58.0
+      },
+      "track_id": "ta118fb64_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "陶鬶最显眼的特征是三个大小均匀的袋形足。"
+      },
+      "version_ids": []
+    },
+    "c9512a9": {
+      "clip_id": "c9512a9",
+      "asset_id": "stl_product_closeup",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 18.0,
+        "end": 23.0
+      },
+      "track_id": "ta18a7556_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cdd92d0": {
+      "clip_id": "cdd92d0",
+      "asset_id": "",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.0
+      },
+      "timeline_range": {
+        "start": 0.3,
+        "end": 3.3
+      },
+      "track_id": "t3888326d_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "有点拙，有点雅。"
+      },
+      "version_ids": []
+    },
+    "c69d8d2": {
+      "clip_id": "c69d8d2",
+      "asset_id": "",
+      "timeline_id": "tl10d1526f",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 13.0,
+        "end": 18.0
+      },
+      "track_id": "t3888326d_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "三足撑的不是壶，是 6000 年的中华器物。"
+      },
+      "version_ids": []
+    },
+    "c5343f681": {
+      "clip_id": "c5343f681",
+      "asset_id": "af965c3",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "track_id": "tef60dfc4_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "f8dd8286",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.0,
+            "y": 0.05,
+            "scale": 1.08,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "17aefc6e",
+          "kind": "fade",
+          "params": {
+            "in": 0.4,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "ceb80a259": {
+      "clip_id": "ceb80a259",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 0.5,
+        "end": 4.5
+      },
+      "track_id": "td5eb41d7_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "两百多年前，一个农人在地里干活。"
+      },
+      "version_ids": []
+    },
+    "cf148ae61": {
+      "clip_id": "cf148ae61",
+      "asset_id": "ae2da17",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 5.0,
+        "end": 10.0
+      },
+      "track_id": "tef60dfc4_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "b75db410",
+          "kind": "transform2d",
+          "params": {
+            "x": -0.05,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "9497a358",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c534c6900": {
+      "clip_id": "c534c6900",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 5.5,
+        "end": 9.5
+      },
+      "track_id": "td5eb41d7_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "他不知道它有多古，只是觉得，拿来插莲花挺好。"
+      },
+      "version_ids": []
+    },
+    "c901698cd": {
+      "clip_id": "c901698cd",
+      "asset_id": "a23219e",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 10.0,
+        "end": 12.0
+      },
+      "track_id": "tef60dfc4_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "43a78589",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.05,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "dfe59eab",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.2
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "ce3500fc1": {
+      "clip_id": "ce3500fc1",
+      "asset_id": "stl_product_OIP",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 12.0,
+        "end": 15.0
+      },
+      "track_id": "tef60dfc4_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "c9f87b8a",
+          "kind": "transform2d",
+          "params": {
+            "x": 0.05,
+            "scale": 1.1,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "480f0226",
+          "kind": "fade",
+          "params": {
+            "in": 0.2,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "c2cf0b004": {
+      "clip_id": "c2cf0b004",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 10.5,
+        "end": 14.5
+      },
+      "track_id": "td5eb41d7_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "200多年后，有人看到了这段题记。"
+      },
+      "version_ids": []
+    },
+    "cb1d2aad8": {
+      "clip_id": "cb1d2aad8",
+      "asset_id": "stl_product_R",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 15.0,
+        "end": 18.0
+      },
+      "track_id": "tef60dfc4_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [
+        {
+          "id": "6d63deae",
+          "kind": "transform2d",
+          "params": {
+            "scale": 1.0,
+            "bg_blur": true
+          },
+          "time_range": null,
+          "region": null
+        },
+        {
+          "id": "70599b02",
+          "kind": "fade",
+          "params": {
+            "in": 0.3,
+            "out": 0.3
+          },
+          "time_range": null,
+          "region": null
+        }
+      ],
+      "context": {},
+      "version_ids": []
+    },
+    "cac056571": {
+      "clip_id": "cac056571",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 15.5,
+        "end": 19.5
+      },
+      "track_id": "td5eb41d7_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "余家介子城下。"
+      },
+      "version_ids": []
+    },
+    "cd87b65fd": {
+      "clip_id": "cd87b65fd",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 2.5
+      },
+      "timeline_range": {
+        "start": 19.5,
+        "end": 22.0
+      },
+      "track_id": "td5eb41d7_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "他们真的去找了。"
+      },
+      "version_ids": []
+    },
+    "cc9f75d5d": {
+      "clip_id": "cc9f75d5d",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 22.5,
+        "end": 27.5
+      },
+      "track_id": "td5eb41d7_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "这一次，他们找到了。三里河遗址。"
+      },
+      "version_ids": []
+    },
+    "c2ac2c943": {
+      "clip_id": "c2ac2c943",
+      "asset_id": "stl_white_3leg",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.0
+      },
+      "timeline_range": {
+        "start": 36.0,
+        "end": 42.0
+      },
+      "track_id": "t5dcb34df_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c12216cf1": {
+      "clip_id": "c12216cf1",
+      "asset_id": "stl_pottery_evolve",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 42.0,
+        "end": 47.0
+      },
+      "track_id": "t5dcb34df_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c5499bd64": {
+      "clip_id": "c5499bd64",
+      "asset_id": "stl_oracle_feng",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 47.0,
+        "end": 52.0
+      },
+      "track_id": "t5dcb34df_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c779961ad": {
+      "clip_id": "c779961ad",
+      "asset_id": "stl_evidence",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.0
+      },
+      "timeline_range": {
+        "start": 52.0,
+        "end": 58.0
+      },
+      "track_id": "t5dcb34df_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cf52ebc90": {
+      "clip_id": "cf52ebc90",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.0
+      },
+      "timeline_range": {
+        "start": 36.0,
+        "end": 42.0
+      },
+      "track_id": "td5eb41d7_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "在世界几大古文明中，三足器之丰富，是中华文明独有的。"
+      },
+      "version_ids": []
+    },
+    "c869ab87f": {
+      "clip_id": "c869ab87f",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 42.0,
+        "end": 47.0
+      },
+      "track_id": "td5eb41d7_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "袋形足是为了在火上直接加热；后来演变为礼器兽形足。"
+      },
+      "version_ids": []
+    },
+    "cff212972": {
+      "clip_id": "cff212972",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 6.0
+      },
+      "timeline_range": {
+        "start": 47.0,
+        "end": 53.0
+      },
+      "track_id": "td5eb41d7_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "高凤翰拿陶鬶插花：'有古意'——5000 年前的器物穿越到清代。"
+      },
+      "version_ids": []
+    },
+    "c2e08b127": {
+      "clip_id": "c2e08b127",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 53.0,
+        "end": 58.0
+      },
+      "track_id": "td5eb41d7_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "陶鬶最显眼的特征是三个大小均匀的袋形足。"
+      },
+      "version_ids": []
+    },
+    "c95f2d4ca": {
+      "clip_id": "c95f2d4ca",
+      "asset_id": "stl_product_closeup",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 18.0,
+        "end": 23.0
+      },
+      "track_id": "tef60dfc4_video",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "ca5d12ccf": {
+      "clip_id": "ca5d12ccf",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 3.0
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 3.0
+      },
+      "track_id": "t45a54ee4_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "有点拙，有点雅。"
+      },
+      "version_ids": []
+    },
+    "c36c158bd": {
+      "clip_id": "c36c158bd",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "timeline_range": {
+        "start": 13.0,
+        "end": 18.0
+      },
+      "track_id": "t45a54ee4_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "三足撑的不是壶，是 6000 年的中华器物。"
+      },
+      "version_ids": []
+    },
+    "c311fdc": {
+      "clip_id": "c311fdc",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "track_id": "t3",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "一只三足陶鬶，穿越五千年。"
+      },
+      "version_ids": []
+    },
+    "c85be8d": {
+      "clip_id": "c85be8d",
+      "asset_id": "",
+      "timeline_id": "tlb4fce3a5",
+      "source_range": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "timeline_range": {
+        "start": 32.0,
+        "end": 36.0
+      },
+      "track_id": "td5eb41d7_text",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {
+        "text": "今天，我们把古器型重新放回生活。"
+      },
+      "version_ids": []
+    },
+    "cd14437": {
+      "clip_id": "cd14437",
+      "asset_id": "adf6755",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 5.933333333333334,
+        "end": 10.933333333333334
+      },
+      "track_id": "v2",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c4c290d": {
+      "clip_id": "c4c290d",
+      "asset_id": "a2629cb",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "track_id": "v3",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cd21c90": {
+      "clip_id": "cd21c90",
+      "asset_id": "a6aebc7",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 1.7666666666666666,
+        "end": 6.766666666666667
+      },
+      "track_id": "v5",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c98b82a": {
+      "clip_id": "c98b82a",
+      "asset_id": "a4608b0",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 4.666666666666666
+      },
+      "track_id": "v5",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cbf21ed": {
+      "clip_id": "cbf21ed",
+      "asset_id": "ae45f65",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 8.5085
+      },
+      "timeline_range": {
+        "start": 36.0,
+        "end": 44.5085
+      },
+      "track_id": "v1",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c2325dd": {
+      "clip_id": "c2325dd",
+      "asset_id": "ae45f65",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 8.5085
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 4.175166666666664
+      },
+      "track_id": "v6",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cfd64b3": {
+      "clip_id": "cfd64b3",
+      "asset_id": "stl_product_closeup",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 0.3333333333333333,
+        "end": 5.333333333333333
+      },
+      "track_id": "v2",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c0a72e0": {
+      "clip_id": "c0a72e0",
+      "asset_id": "aaf4a3a",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "track_id": "v7",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c95adc1": {
+      "clip_id": "c95adc1",
+      "asset_id": "aaf4a3a",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "track_id": "v8",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c0a6d68": {
+      "clip_id": "c0a6d68",
+      "asset_id": "aaf4a3a",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 0.0,
+        "end": 5.0
+      },
+      "track_id": "v9",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c0f0223": {
+      "clip_id": "c0f0223",
+      "asset_id": "aaf4a3a",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 0.03333333333333333,
+        "end": 5.033333333333333
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c7ce802": {
+      "clip_id": "c7ce802",
+      "asset_id": "aa080ae",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 13.333333333333334,
+        "end": 18.333333333333336
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cb05e07": {
+      "clip_id": "cb05e07",
+      "asset_id": "aa080ae",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 150.0,
+        "end": 155.0
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cc5e66a": {
+      "clip_id": "cc5e66a",
+      "asset_id": "ae45f65",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 8.5085
+      },
+      "timeline_range": {
+        "start": 500.0,
+        "end": 508.5085
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c1d71bd": {
+      "clip_id": "c1d71bd",
+      "asset_id": "ae45f65",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 8.5085
+      },
+      "timeline_range": {
+        "start": 80.0,
+        "end": 88.50850000000003
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c1e1c19": {
+      "clip_id": "c1e1c19",
+      "asset_id": "aa080ae",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 18.666666666666668,
+        "end": 23.666666666666668
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c5f9a84": {
+      "clip_id": "c5f9a84",
+      "asset_id": "ae45f65",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 8.5085
+      },
+      "timeline_range": {
+        "start": 5.000000000000003,
+        "end": 13.5085
+      },
+      "track_id": "v9",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c01cf1a": {
+      "clip_id": "c01cf1a",
+      "asset_id": "aa080ae",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 24.0,
+        "end": 29.0
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cade767": {
+      "clip_id": "cade767",
+      "asset_id": "aa080ae",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 29.333333333333332,
+        "end": 34.33333333333333
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c845b5c": {
+      "clip_id": "c845b5c",
+      "asset_id": "ae45f65",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 8.5085
+      },
+      "timeline_range": {
+        "start": 1040.0,
+        "end": 1048.5085
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "ca36daf": {
+      "clip_id": "ca36daf",
+      "asset_id": "aa080ae",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 34.666666666666664,
+        "end": 39.666666666666664
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c68c3df": {
+      "clip_id": "c68c3df",
+      "asset_id": "ae45f65",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 8.5085
+      },
+      "timeline_range": {
+        "start": 1200.0,
+        "end": 1208.5085
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "cb47f7c": {
+      "clip_id": "cb47f7c",
+      "asset_id": "aa080ae",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 40.0,
+        "end": 45.0
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "ce7c64f": {
+      "clip_id": "ce7c64f",
+      "asset_id": "ae45f65",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 8.5085
+      },
+      "timeline_range": {
+        "start": 1360.0,
+        "end": 1368.5085
+      },
+      "track_id": "v10",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "ce8fbe0": {
+      "clip_id": "ce8fbe0",
+      "asset_id": "aa080ae",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 0.03333333333333333
+      },
+      "timeline_range": {
+        "start": 13.508499999999993,
+        "end": 18.508499999999994
+      },
+      "track_id": "v9",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    },
+    "c849a8c": {
+      "clip_id": "c849a8c",
+      "asset_id": "ae45f65",
+      "timeline_id": "main",
+      "source_range": {
+        "start": 0.0,
+        "end": 8.5085
+      },
+      "timeline_range": {
+        "start": 280.0,
+        "end": 288.5085
+      },
+      "track_id": "v8",
+      "speed": 1.0,
+      "volume": 1.0,
+      "transform": {},
+      "adjustments": [],
+      "context": {},
+      "version_ids": []
+    }
+  },
+  "relationships": [
+    {
+      "relation_id": "r2bad62",
+      "source": "cbbe06c",
+      "target": "ce8fbe0",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.99,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r35cdb3",
+      "source": "cbbe06c",
+      "target": "c7ce802",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.61,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r506285",
+      "source": "c241bdc",
+      "target": "ca0eee0",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.62,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "red4f1c",
+      "source": "c241bdc",
+      "target": "ce8fbe0",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.84,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "rfb78af",
+      "source": "c666e18",
+      "target": "cff462a",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.73,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "red67f0",
+      "source": "c666e18",
+      "target": "cfd64b3",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 1.0,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "ra9bb02",
+      "source": "c666e18",
+      "target": "c4c290d",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 1.0,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r941405",
+      "source": "c666e18",
+      "target": "cd21c90",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.63,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r42e860",
+      "source": "c666e18",
+      "target": "c98b82a",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 1.0,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r7056ed",
+      "source": "c666e18",
+      "target": "c2325dd",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 1.0,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r8a76ef",
+      "source": "c666e18",
+      "target": "c0a72e0",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 1.0,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r029a96",
+      "source": "c666e18",
+      "target": "c95adc1",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 1.0,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r40f240",
+      "source": "c666e18",
+      "target": "c0a6d68",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.8,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r158120",
+      "source": "c666e18",
+      "target": "c0f0223",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 1.0,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r277437",
+      "source": "cbbc849",
+      "target": "c3ace4d",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.5,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "r10f150",
+      "source": "cbbc849",
+      "target": "cbb3a6c",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.5,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    },
+    {
+      "relation_id": "re2fa51",
+      "source": "cbbc849",
+      "target": "c01cf1a",
+      "relation": "strong",
+      "kind": "caption_of",
+      "confidence": 0.7,
+      "scope": null,
+      "reason": "字幕与该视频时间段重叠（自动推断）"
+    }
+  ],
+  "problems": [],
+  "solutions": [],
+  "generations": [],
+  "publishing": {
+    "video_versions": [],
+    "cover": {},
+    "title": "",
+    "description": "",
+    "tags": [],
+    "platform_copy": {},
+    "cost_report": {}
+  },
+  "extensions": {}
+}

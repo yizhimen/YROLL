@@ -745,6 +745,19 @@ class ProjectCore:
         elif op_type in ("move_selection", "delete_selection") and before:
             # P0-04B: atomic composite Selection op. Restore every touched clip.
             from yroll.core.manifest import TimeRange
+            # GUI-03R4.1 P0-4: when a Selection-delete folds an
+            # auto-track-cleanup into itself, the removed track ids
+            # land in after.removed_tracks. The undo MUST recreate
+            # those tracks before re-attaching their clips, else the
+            # restored clip lands in p.clips but no track contains
+            # it (a "ghost clip" — visible in /project but invisible
+            # to the timeline renderer).
+            from yroll.core.manifest import Track
+            after = op.after or {}
+            removed_tracks_data = after.get("removed_tracks_data") or {}
+            for tid, tdump in removed_tracks_data.items():
+                if not any(t.track_id == tid for t in p.timeline.tracks):
+                    p.timeline.tracks.append(Track.model_validate(tdump))
             for cid, pre in before.items():
                 c = p.clips.get(cid)
                 if c is None:
@@ -752,7 +765,7 @@ class ProjectCore:
                     if "timeline_range" in pre and "source_range" in pre:
                         from yroll.core.manifest import Clip
                         p.clips[cid] = Clip.model_validate(pre)
-                        # Re-attach to original track
+                        # Re-attach to original track (now restored above)
                         orig_tid = pre.get("track_id", "v1")
                         track = next((t for t in p.timeline.tracks
                                       if t.track_id == orig_tid), None)

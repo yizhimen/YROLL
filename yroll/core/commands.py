@@ -350,7 +350,7 @@ class CommandLayer:
 
     def _cleanup_empty_tracks(self, tl: "Timeline",
                                 except_track_ids: tuple[str, ...] = ()
-                                ) -> list[str]:
+                                ) -> dict[str, dict]:
         """Remove tracks whose `clip_ids` is empty.
 
         Internal helper, called at the end of every mutation that
@@ -361,18 +361,23 @@ class CommandLayer:
         bucket via `_next_track_id_for_kind`, which is a NEW track
         creation, not a rename.
 
-        Returns the list of removed track ids.
+        Returns a dict {track_id: track_dump} for the removed tracks.
+        Callers store it in `after.removed_tracks_data` so the undo
+        path (project._apply_inverse) can recreate the tracks with
+        their full state — the GUI-03R4.1 P0-4 selection-complete-chain
+        invariant requires the chain's undo to restore both clips AND
+        tracks.
         """
-        removed: list[str] = []
+        removed_data: dict[str, dict] = {}
         kept: list[Track] = []
         for t in tl.tracks:
             if not t.clip_ids and t.track_id not in except_track_ids:
-                removed.append(t.track_id)
+                removed_data[t.track_id] = t.model_dump()
             else:
                 kept.append(t)
-        if removed:
+        if removed_data:
             tl.tracks = kept
-        return removed
+        return removed_data
 
     def delete_track(self, track_id: str, why: str = "",
                       timeline_id: str | None = None) -> Operation:
@@ -894,15 +899,16 @@ class CommandLayer:
         # W-B.2: auto-delete the track if it became empty. Atomic
         # with this mutation. The remaining tracks keep their ids
         # (no renumber).
-        removed_tracks = self._cleanup_empty_tracks(tl)
+        removed_tracks_data = self._cleanup_empty_tracks(tl)
         after: dict = {}
-        if removed_tracks:
-            after["removed_tracks"] = removed_tracks
+        if removed_tracks_data:
+            after["removed_tracks"] = list(removed_tracks_data.keys())
+            after["removed_tracks_data"] = removed_tracks_data
             # Capture the original track's state in `before` so
             # revert can recreate it. The cleanup helper already
             # captured it inside tl.tracks removal, so we read it
             # back from before this point in time.
-            if track is not None and track.track_id in removed_tracks:
+            if track is not None and track.track_id in removed_tracks_data:
                 # Stash the original track dump under a reserved
                 # key. _apply_inverse reads it back.
                 before = dict(before)
@@ -1111,9 +1117,10 @@ class CommandLayer:
         # W-B.2: cross-track shifts may have emptied the related tracks.
         # Auto-clean. Source track may also be empty if it had only
         # this clip; cleanup handles both atomically.
-        removed_tracks = self._cleanup_empty_tracks(tl)
-        if removed_tracks:
-            after["removed_tracks"] = removed_tracks
+        removed_tracks_data = self._cleanup_empty_tracks(tl)
+        if removed_tracks_data:
+            after["removed_tracks"] = list(removed_tracks_data.keys())
+            after["removed_tracks_data"] = removed_tracks_data
         return self._record("ripple_delete", clip_id, before, after,
                             why=why or f"Ripple 删除（收拢 {dur:.1f}s，"
                                        f"联动 {len(cross_shifted)} 个关联轨）",
@@ -1549,9 +1556,10 @@ class CommandLayer:
         # Auto-clean runs once over all tracks (atomic with the
         # delete_selection Operation). Remaining tracks keep their
         # ids — no renumber.
-        removed_tracks = self._cleanup_empty_tracks(tl)
-        if removed_tracks:
-            after["removed_tracks"] = removed_tracks
+        removed_tracks_data = self._cleanup_empty_tracks(tl)
+        if removed_tracks_data:
+            after["removed_tracks"] = list(removed_tracks_data.keys())
+            after["removed_tracks_data"] = removed_tracks_data
         return self._apply_record(
             "delete_selection", ids[0], before, after,
             why=why or f"Selection 删除 {len(ids)} clip(s){' (ripple)' if ripple else ''}",
@@ -1636,9 +1644,10 @@ class CommandLayer:
         # Auto-clean. The destination track is non-empty (it now
         # contains this clip plus any pre-existing clips) so it
         # survives the cleanup. The remaining tracks keep their ids.
-        removed_tracks = self._cleanup_empty_tracks(tl)
-        if removed_tracks:
-            after["removed_tracks"] = removed_tracks
+        removed_tracks_data = self._cleanup_empty_tracks(tl)
+        if removed_tracks_data:
+            after["removed_tracks"] = list(removed_tracks_data.keys())
+            after["removed_tracks_data"] = removed_tracks_data
         return self._record("move", clip_id, before, after, why=why,
                             time_range=clip.timeline_range)
 

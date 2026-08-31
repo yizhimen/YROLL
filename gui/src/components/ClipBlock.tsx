@@ -35,6 +35,7 @@ import {
   pixelDeltaToFrameDelta,
   roundHalfAwayFromZero,
 } from "../frames";
+import { DragAutoScroll } from "../drag-autoscroll";
 
 
 /** Local helper: convert a pixel delta to a frame delta given the
@@ -231,6 +232,18 @@ export default function ClipBlock({
     const origStartFrame = tlStartFrame;
     const lenFrames = tlEndFrame - tlStartFrame;
 
+    // GUI-03R4.1 P0-1: drag-time edge auto-scroll. Capture the
+    // ContentViewport element + the scrollLeft at drag start so
+    // the move() handler can fold content-scroll changes into the
+    // total pixel delta (the clip's frame must follow the auto-
+    // scrolled content, not stay glued to the original screen
+    // position). The DragAutoScroll helper owns the rAF loop.
+    const dragContentEl = document.querySelector(
+      ".timeline-content",
+    ) as HTMLElement | null;
+    const startScrollLeft = dragContentEl?.scrollLeft ?? 0;
+    const autoScroll = new DragAutoScroll(dragContentEl);
+
     // Other-clip boundaries (TimelineFrames). Convert from the
     // legacy seconds at the boundary using seqFps — this is
     // sequence-fps math, not TimeMap business math.
@@ -332,8 +345,20 @@ export default function ClipBlock({
     let lastPixelDelta = 0;
     let lastGhostSnapFrame: number | null = null;
     const move = (ev: PointerEvent) => {
+      // GUI-03R4.1 P0-1: feed the auto-scroll loop the latest
+      // pointer X so it can decide whether to scroll the
+      // ContentViewport.
+      autoScroll.updatePointer(ev.clientX);
       const pixelDelta = ev.clientX - startX;
-      const deltaFrame = pxPerFrameToFrameDelta(pixelDelta, pxPerFrame);
+      // Total visual delta = pointer movement + content scroll
+      // change. Without this, auto-scroll moves the content under
+      // the dragged clip and the clip appears to stay glued to the
+      // screen (the clip's frame never advances). Adding the
+      // scroll delta keeps the clip anchored to the pointer.
+      const currentScrollLeft = dragContentEl?.scrollLeft ?? 0;
+      const scrollDelta = currentScrollLeft - startScrollLeft;
+      const totalPixelDelta = pixelDelta + scrollDelta;
+      const deltaFrame = pxPerFrameToFrameDelta(totalPixelDelta, pxPerFrame);
       const candidate = origStartFrame + deltaFrame;
       // Collision clamp ALWAYS runs (drag must never preview overlap).
       const clamped = clamp(candidate);
@@ -345,7 +370,7 @@ export default function ClipBlock({
       lastCandidateFrame = candidate;
       lastPreviewFrame = clamped;
       lastDeltaFrame = deltaFrame;
-      lastPixelDelta = pixelDelta;
+      lastPixelDelta = totalPixelDelta;
       lastGhostSnapFrame = ghost;
       onDragMove(clip.clip_id, clamped, ghost);
     };
@@ -372,8 +397,20 @@ export default function ClipBlock({
     const up = async (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      // GUI-03R4.1 P0-1: stop the auto-scroll loop. MUST happen
+      // before we read contentEl.scrollLeft below — otherwise the
+      // loop could mutate scrollLeft between the read and the
+      // commit, producing a 1-frame mismatch.
+      autoScroll.dispose();
       const pixelDelta = ev.clientX - startX;
-      const deltaFrame = pxPerFrameToFrameDelta(pixelDelta, pxPerFrame);
+      // GUI-03R4.1 P0-1: include final content-scroll delta so the
+      // committed frame matches what the user saw on screen (the
+      // last pointermove already folded it in via totalPixelDelta;
+      // lastPreviewFrame is authoritative for the commit).
+      const finalScrollDelta =
+        (dragContentEl?.scrollLeft ?? 0) - startScrollLeft;
+      const totalPixelDelta = pixelDelta + finalScrollDelta;
+      const deltaFrame = pxPerFrameToFrameDelta(totalPixelDelta, pxPerFrame);
       // preSnapFrame = the SAME collision-clampedFrame from the
       // LAST pointermove (no recomputation, no second candidate).
       // The dragged clip's preview frame equals this on every move,
