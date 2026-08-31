@@ -13,6 +13,11 @@ interface Props {
   onChanged: () => Promise<void>;
   onStatus: (ok: boolean, text: string) => void;
   onPreview: (assetId: string) => void;
+  /** GUI-03R3-W-C: notify the App when an asset drag starts/ends.
+   *  App uses this to drive the Timeline's "below-tracks" drop-zone
+   *  label ("新建视频轨" / "新建音频轨" / "新建字幕轨"). */
+  onAssetDragStart?: (assetId: string, kind: string) => void;
+  onAssetDragEnd?: () => void;
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -23,7 +28,7 @@ function baseName(p: string) {
   return p.split(/[\\/]/).pop() || p;
 }
 
-export default function AssetPanel({ project, activeTimelineId, playheadFrame, onChanged, onStatus, onPreview }: Props) {
+export default function AssetPanel({ project, activeTimelineId, playheadFrame, onChanged, onStatus, onPreview, onAssetDragStart, onAssetDragEnd }: Props) {
   const [filter, setFilter] = useState("");
   const importFiles = async (files: FileList) => {
     try {
@@ -141,6 +146,10 @@ export default function AssetPanel({ project, activeTimelineId, playheadFrame, o
                onDragStart={(e) => {
                  e.dataTransfer.setData("text/yroll-asset", a.asset_id);
                  e.dataTransfer.effectAllowed = "copy";
+                 onAssetDragStart?.(a.asset_id, a.type);
+               }}
+               onDragEnd={() => {
+                 onAssetDragEnd?.();
                }}>
             <span className="asset-icon">{TYPE_ICON[a.type] || "📦"}</span>
             <span className="asset-name" style={{ cursor: "pointer" }}

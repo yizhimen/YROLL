@@ -290,6 +290,32 @@ export const api = {
       ripple,
       why,
     }),
+  // GUI-03R3-W-C: resolve or create a track for a drop. Takes
+  // STRUCTURAL INTENT ONLY — no pixel coordinates. The GUI has
+  // resolved pointer geometry into this intent before calling.
+  //   - assetType: 'video' | 'image' | 'audio' | 'subtitle' | 'text'
+  //   - preferKind: optional kind hint (one of "video" | "audio" |
+  //                  "subtitle" | "text"). When omitted, the asset
+  //                  type's primary kind drives.
+  //   - insertAfterTrackId: if provided, create a NEW track of the
+  //                        right kind (existing tracks keep their
+  //                        ids; Core never renumbers).
+  ensureTrackForDrop: (
+    assetType: string,
+    preferKind?: string,
+    insertAfterTrackId?: string,
+  ) =>
+    mutate<{
+      track_id: string;
+      kind: string;
+      clip_ids: string[];
+      // and other Track fields, returned as JSON
+    }>("POST", "/tracks/ensure_for_drop", {
+      asset_type: assetType,
+      prefer_kind: preferKind ?? null,
+      insert_after_track_id: insertAfterTrackId ?? null,
+      why: "GUI drop zone",
+    }),
   commit: (note: string) => mutate("POST", `/versions?note=${encodeURIComponent(note)}`),
   // GUI-03D: L1 Timeline Composite Preview. Returns z-ordered
   // visual + audio + subtitle layers at the given timeline frame.

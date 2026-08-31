@@ -65,6 +65,23 @@ interface Props {
   onTrackLock?: (trackId: string, locked: boolean) => void;
   onTrackHide?: (trackId: string, hidden: boolean) => void;
   onAssetDrop?: (assetId: string, trackId: string, timelineStartFrame: number) => void;
+  /** GUI-03R3-W-C: drop onto the "新建轨道" zone below all visible
+   *  tracks. The GUI resolves pointer geometry to a structural
+   *  intent: `insertAfterTrackId` is the last visible track (Core
+   *  decides the new track's id; existing tracks never rename).
+   *  `kindHint` is the visual track kind to show in the drop zone
+   *  label (V/A/T). */
+  onAssetDropNewTrack?: (
+    assetId: string,
+    insertAfterTrackId: string,
+    timelineStartFrame: number,
+  ) => void;
+  /** GUI-03R3-W-C: the kind of asset currently being dragged (or
+   *  null when no drag is in flight). Drives the drop zone label
+   *  ("新建视频轨" / "新建音频轨" / "新建字幕轨"). The Timeline
+   *  never reads from a global drag state — App.tsx sets this
+   *  prop explicitly on dragstart/dragend. */
+  draggingAssetKind?: "video" | "image" | "audio" | "subtitle" | "text" | null;
   /** GUI-03C: when true, the Timeline renders tracks with no clips
    *  (default false — empty tracks are hidden). */
   showEmptyTracks?: boolean;
@@ -88,8 +105,9 @@ export default function Timeline({
   height = 240,
   snapMode = "always",
   highlightRel = false,
-  onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onTrackMute, onTrackLock, onTrackHide, onAssetDrop,
+  onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onTrackMute, onTrackLock, onTrackHide, onAssetDrop, onAssetDropNewTrack,
   dragGhost,
+  draggingAssetKind = null,
   showEmptyTracks = false,
 }: Props) {
   // GUI-03R: resolve the active Timeline once. All render-time track
@@ -402,16 +420,27 @@ export default function Timeline({
             >
               <div
                 className="track-content"
+                // GUI-03R3-W-C: drag-over highlight. The user sees
+                // WHERE the clip will land before they release.
+                // On drop, the GUI emits explicit "use existing
+                // track" intent to App.tsx (which calls add_clip
+                // with track_id = this row's id). Core preserves
+                // the track id and rejects overlap.
                 onDragOver={(e) => {
                   if (e.dataTransfer.types.includes("text/yroll-asset")) {
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "copy";
+                    (e.currentTarget as HTMLElement).classList.add("drag-over");
                   }
+                }}
+                onDragLeave={(e) => {
+                  (e.currentTarget as HTMLElement).classList.remove("drag-over");
                 }}
                 onDrop={(e) => {
                   const assetId = e.dataTransfer.getData("text/yroll-asset");
                   if (!assetId) return;
                   e.preventDefault();
+                  (e.currentTarget as HTMLElement).classList.remove("drag-over");
                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                   // track-content rect.left is the ContentViewport's x=0 edge.
                   const frame = Math.max(0, pixelToPlayheadFrame(
@@ -480,6 +509,52 @@ export default function Timeline({
               </div>
             </div>
           ))}
+          {/* GUI-03R3-W-C: drop zone BELOW all visible tracks.
+              When the user drags an asset below the last track-row,
+              the GUI emits "create new track" intent: it sends
+              `insertAfterTrackId = lastVisibleTrackId` to App.tsx
+              which calls `api.ensureTrackForDrop` and then places
+              the clip on the new track. Core decides the new track's
+              id; existing tracks never rename. */}
+          {visibleTracks.length > 0 && onAssetDropNewTrack && (
+            <div
+              className="drop-zone-new-track"
+              data-drop-zone="below-tracks"
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes("text/yroll-asset")) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "copy";
+                  (e.currentTarget as HTMLElement).classList.add("drag-over");
+                }
+              }}
+              onDragLeave={(e) => {
+                (e.currentTarget as HTMLElement).classList.remove("drag-over");
+              }}
+              onDrop={(e) => {
+                const assetId = e.dataTransfer.getData("text/yroll-asset");
+                if (!assetId) return;
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).classList.remove("drag-over");
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                // Drop x in ContentViewport coords → frame.
+                const frame = Math.max(0, pixelToPlayheadFrame(
+                  e.clientX - rect.left, pxPerSec, seq.fps, 0));
+                // Last visible track id becomes the `insert_after` anchor.
+                const lastTrack = visibleTracks[visibleTracks.length - 1];
+                if (lastTrack) {
+                  onAssetDropNewTrack(assetId, lastTrack.track_id, frame);
+                }
+              }}
+            >
+              <span className="drop-zone-label">
+                {draggingAssetKind === "audio"
+                  ? "新建音频轨 ▾"
+                  : draggingAssetKind === "subtitle" || draggingAssetKind === "text"
+                    ? "新建字幕轨 ▾"
+                    : "新建视频轨 ▾"}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* ONE absolute PlayheadOverlay — spans ruler + all tracks.

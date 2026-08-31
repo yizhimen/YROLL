@@ -108,6 +108,11 @@ export default function App() {
   } | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [presets, setPresets] = useState<Awaited<ReturnType<typeof api.presets>> | null>(null);
+  // GUI-03R3-W-C: track the asset currently being dragged. The
+  // Timeline reads this to label the "below-tracks" drop zone
+  // (V/A/T). Set by AssetPanel's onDragStart; cleared on dragend.
+  const [draggingAssetKind, setDraggingAssetKind] = useState<
+    "video" | "image" | "audio" | "subtitle" | "text" | null>(null);
   // 面板宽度（可拖动分界线）
   const [assetW, setAssetW] = useState(260);
   const [snapMode, setSnapMode] = useState<"always" | "alt" | "off">("always");
@@ -879,6 +884,17 @@ export default function App() {
           <AssetPanel project={project} activeTimelineId={activeTimelineId}
             playheadFrame={playheadFrame} onChanged={refresh}
             onStatus={(ok, text) => setStatus({ ok, text })}
+            onAssetDragStart={(_assetId, kind) => {
+              // Timeline's drop-zone label needs the asset kind.
+              // The Timeline never reads from a global drag state
+              // directly — App passes the kind explicitly here.
+              setDraggingAssetKind(
+                kind === "video" || kind === "image" || kind === "audio"
+                || kind === "subtitle" || kind === "text"
+                  ? kind : null,
+              );
+            }}
+            onAssetDragEnd={() => setDraggingAssetKind(null)}
             onPreview={(assetId) => {
               const a = project.assets.find((x) => x.asset_id === assetId);
               if (!a) return;
@@ -1410,6 +1426,10 @@ export default function App() {
         selRange={selRange}
         inPoint={inPoint}
         outPoint={outPoint}
+        // GUI-03R3-W-C: pass the dragging asset kind so the
+        // Timeline can label the "below-tracks" drop zone correctly
+        // (V/A/T). The Timeline never reads from a global drag state.
+        draggingAssetKind={draggingAssetKind}
         onSeek={seek}
         onSelect={(id, viaAi, ctrl) => {
           if (viaAi) {
@@ -1495,6 +1515,56 @@ export default function App() {
           run(() => api.addClip(assetId, 0, dur, t, trackId,
               "GUI 拖入时间轴"),
             `${a.path.split(/[\/]/).pop()} 已放到 ${t.toFixed(1)}s（${dur.toFixed(1)}s）`);
+        }}
+        // GUI-03R3-W-C: drop onto the "新建轨道" zone below all
+        // visible tracks. The Timeline resolved pointer geometry
+        // into a structural intent: `insertAfterTrackId` is the
+        // last visible track. We call ensure_track_for_drop (Core
+        // decides the new track's id; existing tracks never rename)
+        // and then place the clip on the returned track. The asset
+        // type drives the new track's kind; the CLI responds with
+        // the resolved Track object.
+        onAssetDropNewTrack={async (assetId, insertAfterTrackId, t) => {
+          const a = project.assets.find((x) => x.asset_id === assetId);
+          if (!a) return;
+          try {
+            const created = await api.ensureTrackForDrop(
+              a.type, undefined, insertAfterTrackId,
+            );
+            const newTrackId = created.track_id;
+            // Now place the clip on the new track.
+            if (a.type === "image") {
+              const fps = seq.fps;
+              const DEFAULT_IMG_DUR_SEC = 5;
+              const durFrames = Math.round(
+                DEFAULT_IMG_DUR_SEC * fps.num / fps.den);
+              await api.addImageClip(assetId, t, durFrames, newTrackId,
+                "GUI 新建轨道+拖入");
+            } else if (a.type === "audio" || a.type === "video") {
+              const dur = a.identity.duration_sec;
+              if (!dur) {
+                setStatus({ ok: false, text: "该素材无时长，不能上时间轴" });
+                return;
+              }
+              await api.addClip(assetId, 0, dur, t, newTrackId,
+                "GUI 新建轨道+拖入");
+            } else {
+              // subtitle / text drop-below-tracks is out of v0.1 scope.
+              // The AssetPanel's "+" button handles subtitle insertion
+              // via addSubtitle (the Core allocator picks the track).
+              // Drag-drop a subtitle below tracks would need an
+              // ensure_track_for_drop + add_subtitle-with-track-id
+              // pair; deferring to a follow-up.
+              setStatus({ ok: false,
+                text: "字幕请用素材库的 + 按钮（v0.1 拖拽字幕仅支持现有轨）" });
+              return;
+            }
+            await refresh();
+            setStatus({ ok: true,
+              text: `${a.path.split(/[\/]/).pop()} 已放到新建轨道 ${newTrackId}` });
+          } catch (e) {
+            setStatus({ ok: false, text: `新建轨道失败：${e}` });
+          }
         }}
         onTrackLock={(trackId, locked) =>
           run(() => api.setTrackLocked(trackId, locked, "GUI 轨道锁"),
