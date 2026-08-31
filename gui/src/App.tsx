@@ -245,7 +245,14 @@ export default function App() {
   // no clips. Toggle to inspect / debug the allocation policy.
   const [showEmptyTracks, setShowEmptyTracks] = useState(false);
   const [inspectorW, setInspectorW] = useState(260);
-  const [timelineH, setTimelineH] = useState(280);  // 时间线高度
+  // GUI-03R5-B2 (Decision 3): Timeline height with viewport-aware
+  // bounds. Defaults to 240px (was 280), clamp to [160, 60% of
+  // viewport height] (was [150, 700]). The 60% cap ensures the
+  // Viewer always has at least 40% of the screen on small monitors.
+  const [timelineH, setTimelineH] = useState(240);  // 时间线高度
+  const TIMELINE_H_DEFAULT = 240;
+  const TIMELINE_H_MIN = 160;
+  const TIMELINE_H_MAX_PCT = 0.6;  // ≤60% of viewport height
   // 台词搜索定位
   const [searchQ, setSearchQ] = useState("");
   const [searchHits, setSearchHits] = useState<Array<{ clip_id: string; timeline: number; text: string }>>([]);
@@ -1608,7 +1615,12 @@ export default function App() {
       )}
 
       <ResizeHandle direction="horizontal"
-        onDelta={(d) => setTimelineH((h) => Math.max(150, Math.min(700, h - d)))} />
+        onDelta={(d) => setTimelineH((h) => {
+          // GUI-03R5-B2 (Decision 3): 60% viewport cap + 160px floor.
+          const maxH = Math.max(TIMELINE_H_MIN,
+            Math.floor(window.innerHeight * TIMELINE_H_MAX_PCT));
+          return Math.max(TIMELINE_H_MIN, Math.min(maxH, h - d));
+        })} />
       <Timeline
         project={displayProject}
         height={timelineH}

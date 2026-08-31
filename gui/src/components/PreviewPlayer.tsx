@@ -496,8 +496,14 @@ export default function PreviewPlayer({
   }
 
   return (
-    <div className="preview-player">
-      <div className="preview-toolbar">
+    <div className="preview-player" data-layer="viewer-container">
+      {/* GUI-03R5-B2 (Decision 3): the 4 layers are explicit siblings:
+       *   .preview-toolbar   → "viewer-toolbar" (transport mode + aspect)
+       *   .preview-stage     → "output-canvas"   (the rendered frames)
+       *   .preview-progress  → "transport"      (progress bar overlay)
+       *   Timeline is OUTSIDE this component (sibling of .preview-pane).
+       * The data-layer attribute is the audit/test contract. */}
+      <div className="preview-toolbar" data-layer="viewer-toolbar">
         <button
           className="play-btn"
           onClick={togglePlay}
@@ -522,13 +528,14 @@ export default function PreviewPlayer({
             title={`${a.tooltip} — ${a.w}:${a.h}`}>{a.label}</button>
         ))}
       </div>
-      <div className="preview-stage" ref={stageRef}>
+      <div className="preview-stage" data-layer="output-canvas" ref={stageRef}>
         {/* GUI-03R2 P0-F: visible TimelineFrame progress indicator.
             TimelineFrame is authoritative; HTMLMediaElement.currentTime
             is NEVER read for state (per closure invariant §02-5).
             The bar visualizes playheadFrame / max(1, endFrame). */}
         <div
           className="preview-progress"
+          data-layer="transport"
           aria-label="Preview progress"
         >
           <div
