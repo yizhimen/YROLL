@@ -1,6 +1,49 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + GUI-03R3-W-B ✅ + **GUI-03R3-W-C Drop-Zone Wiring ✅**；Sanlihe browser smoke 待补）
+## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + GUI-03R3-W-B ✅ + GUI-03R3-W-C ✅ + **GUI-03R3-W-C Runtime Verification ✅**；W-D paused；Stale Help UI reported as follow-up）
+
+### W-C Runtime Verification v0.1 (✅ 14/15 DOM PASS, commit b566e79, push origin ✅)
+Baseline: `59829c1` (W-C). Doc: `docs/GUI-03R3-W-C-RUNTIME-VERIFY.md`.
+
+User reported the live GUI appeared "essentially unchanged" after W-C landed. Performed end-to-end runtime verification against a real browser (Playwright + the live `yroll serve projects/sanlihe-slice-30s`):
+
+- **Build artifact matches W-C**: `vite build` from 59829c1 produces `dist/assets/index-CCqfc7tY.css` (NEW hash) + `index-BRoe4kw_.js`. CSS contains `.drop-zone-new-track` + `.track-content.drag-over`; JS contains all three Chinese labels ("新建视频轨 / 音频轨 / 字幕轨"). **Not a stale bundle.**
+- **Live DOM (14/15 PASS)**: `.drop-zone-new-track` rendered with `data-drop-zone="below-tracks"`; default label "新建视频轨 ▾"; drag-over class lands on both drop-zone AND track-content on synthetic dragover; all 3 CSS rules present in `document.styleSheets`; no empty track rows in the timeline header column.
+- **Core state**: `/project` from live server returned 4 timelines, 42 tracks, 117 clips (Sanlihe after W-B migration). The 10 tracks visible on main have no empty rows.
+- **Single FAIL**: console.error spam for `/assets/{id}/file` and `/assets/{id}/waveform` 404s — pre-existing missing media previews on the Sanlihe fixture (categorized by `check-404s.mjs`). Not W-C.
+
+**Conclusion**: W-C is shipped and working in the live browser. The user's "GUI appears unchanged" report likely reflects (a) the drop-zone being below the clip focus area, or (b) a stale browser tab. All W-C artifacts verified in the live DOM.
+
+**Browser-side mutation smoke blocked** by a stale 5-min lease on `127.0.0.1:8765` (a previous run's `human` session still held the project in `edit` mode). The end-to-end paths are pinned at the API layer by `tests/test_ensure_track_for_drop.py` + `tests/test_track_auto_delete.py` (both W-B, all PASS).
+
+### Stale Help / Shortcut UI — concrete follow-up (NOT implemented)
+
+`App.tsx:1653-1660` Help dialog is stale relative to `yroll/core/keyboard.py`:
+
+| Dialog says | Core keymap actually does |
+|---|---|
+| "J/L ±5s" | J/L ±1 frame (Shift ±10 frames) |
+| "←/→ ±0.1s（Shift ±1s）" | ArrowLeft/Right ±1 frame (Shift ±10 frames) |
+| `M 静音` | M not in keymap — remove |
+| `Shift+Z 缩放到适配` | Shift+Z not in keymap — remove or rebind |
+| `Esc 清除标记/选区` | Esc not globally wired — remove or wire |
+| (missing) Home | Center-on-playhead (in keymap since W-A.2; GUI not wired) |
+
+The dialog describes **seconds** but the GUI is fully frame-native (GUI-02). Recommended fix is a single-file string update in `App.tsx:1653-1660`. Reported per user's instruction; not implemented in this turn.
+
+### Smoke scripts written (untracked → now committed in `b566e79`)
+
+- `gui/smoke/03r3-w-c-runtime-verify.mjs` — DOM + CSS + Core state (14/15 PASS)
+- `gui/smoke/03r3-w-c-end-to-end.mjs` — Core-API mutation smoke (blocked by stale lease; API level pinned by W-B tests)
+- `gui/smoke/check-404s.mjs` — categorized 404s as pre-existing asset previews
+- `gui/smoke/serve-with-proxy.mjs` — static dist server with `/api/*` proxy to FastAPI
+
+### Paused / held per user instruction
+
+- **W-D (Track header semantic icons + resizable column)**: paused. Resume on user go-ahead.
+- **Stale Help dialog fix**: not implemented. Pure string change in App.tsx. Ship as a 1-line PR between any future batches.
+
+### GUI-03R3-W-C Drop-Zone Wiring v0.1 (✅ pytest 648+2, vitest 203+2, tsc 0 NEW errors, commit d4c057e, push origin ✅)
 
 ### GUI-03R2 Timeline Interaction Reliability v0.1 (commit c36764d, push origin ✅)
 Driven by real Sanlihe browser usage. Baseline = main@e601608. Audit-first (no code changes until measured), then fix in spec order, then verify.
