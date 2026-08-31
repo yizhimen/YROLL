@@ -357,7 +357,15 @@ class Project(BaseModel):
     project_id: str
     name: str
     created_at: datetime = Field(default_factory=datetime.now)
-    intent: dict[str, str] = Field(default_factory=dict)  # goal/audience/style
+    # GUI-03R4.1 P1-5: intent is now `dict[str, Any]` (was
+    # `dict[str, str]`) so the clean Sanlihe fixture can declare
+    # structured metadata:
+    #   - `editorial_track_ids: list[str]`  (used by gui/src/fit-content.ts)
+    #   - `removed_stale_clip_ids: list[str]`  (audit log of cleanup)
+    #   - `fixture_kind: str`, `derived_from: str`, etc.  (strings)
+    # Existing string-only consumers (App.tsx reads `intent.goal`)
+    # are unaffected — the strings still flow through.
+    intent: dict[str, Any] = Field(default_factory=dict)  # goal / audience / style / fixture metadata
     # GUI-02: Sequence is the canonical accessor; the flat fields
     # below are denormalized storage kept in sync with Sequence.
     sequence: Sequence = Field(default_factory=Sequence)

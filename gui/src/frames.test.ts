@@ -9,7 +9,7 @@
 // Closure note: F=30 -> "00:00:01;00" (the standard bijective map),
 // F=1798 -> "00:01:00;00" (a DROPPED label — from_timecode MUST raise).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
 
 import {
   framesToTimecode,
@@ -301,7 +301,30 @@ import {
   frameRulerLabel,
   frameToRulerSeconds,
 } from "./frames";
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
+
 import { api } from "./api";
+import { sessionStore } from "./session";
+
+// GUI-03R5-B1: every API test that exercises a mutation must put
+// the SessionStore into EDIT first — otherwise the new ensureReady()
+// gate in api.gated() correctly rejects the call with
+// "session not in EDIT state". The setup resets the singleton
+// between tests so state doesn't leak.
+beforeEach(() => {
+  sessionStore._reset();
+  sessionStore.set({
+    sessionId: "test-session",
+    loaded: true,
+    mine: true,
+    alive: true,
+    owner: "human",
+    mode: "edit",
+  });
+});
+afterEach(() => {
+  sessionStore._reset();
+});
 
 // -------- 8. ruler exposes seconds + frame (millisecond trailing field) ----
 describe("GUI-03R: ruler format", () => {

@@ -1167,6 +1167,50 @@
           "hidden": true,
           "role": null,
           "label": null
+        },
+        {
+          "track_id": "a1",
+          "timeline_id": "main",
+          "kind": "audio",
+          "clip_ids": [],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "a2",
+          "timeline_id": "main",
+          "kind": "audio",
+          "clip_ids": [],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "a3",
+          "timeline_id": "main",
+          "kind": "audio",
+          "clip_ids": [],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
+        },
+        {
+          "track_id": "t2",
+          "timeline_id": "main",
+          "kind": "text",
+          "clip_ids": [],
+          "muted": false,
+          "locked": false,
+          "hidden": false,
+          "role": null,
+          "label": null
         }
       ],
       "markers": [],

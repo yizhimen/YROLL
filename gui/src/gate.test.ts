@@ -59,6 +59,19 @@ beforeEach(() => {
   calls = [];
   localStorage.clear();
   sessionStore._reset();
+  // GUI-03R5-B1: pre-set EDIT-mode so api.gated()'s ensureReady()
+  // gate lets the mutation reach the stubbed fetch. Tests that
+  // want a different state override loaded/mine manually.
+  // We do NOT set sessionId here — the test "restores from
+  // localStorage" expects initLocal() to populate it.
+  sessionStore.set({
+    loaded: true,
+    mine: true,
+    alive: true,
+    owner: "human",
+    mode: "edit",
+    revision: 7,
+  });
 });
 
 afterEach(() => {
@@ -90,14 +103,25 @@ describe("mutation gate envelope", () => {
     expect(sessionStore.get().revision).toBe(9);
   });
 
-  it("classifies 403 sessionId-required as no_session", async () => {
+  it("blocks 403 sessionId-required BEFORE the request reaches the server", async () => {
+    // GUI-03R5-B1: ensureReady() now blocks mutations when
+    // sessionId is null. The server's 403 "sessionId required"
+    // branch is defense-in-depth — the GUI never trips it. The
+    // client-side GateRejection("no_session", 0, ...) fires
+    // synchronously, before any HTTP call.
     stubFetch([
       { match: "/clips/clip-1/move", status: 403,
         text: '{"detail":"sessionId required for mutations (call /lease/acquire first)"}' },
     ]);
 
-    await expect(api.move("clip-1", 3)).rejects.toBeInstanceOf(GateRejection);
+    const r = await api.move("clip-1", 3).catch((e) => e);
+    expect(r).toBeInstanceOf(GateRejection);
+    expect((r as GateRejection).kind).toBe("no_session");
     expect(sessionStore.get().gateError).toBe("no_session");
+    // The fetch stub MUST NOT have been called — we blocked at the
+    // gate before the HTTP roundtrip.
+    const calls403 = calls.filter((c) => c.url.includes("/clips/clip-1/move"));
+    expect(calls403).toEqual([]);
   });
 
   it("classifies 400 baseRevision-required as no_revision", async () => {

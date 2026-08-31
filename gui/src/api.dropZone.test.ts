@@ -6,14 +6,30 @@
 // Here we only verify the GUI client surface.
 
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { sessionStore } from "./session";
+
+// GUI-03R5-B1: every API test must put the SessionStore into EDIT
+// first so api.gated()'s new ensureReady() gate doesn't reject the
+// call with "session not in EDIT state".
+function enterEditMode() {
+  sessionStore._reset();
+  sessionStore.set({
+    sessionId: "test-session",
+    loaded: true,
+    mine: true,
+    alive: true,
+    owner: "human",
+    mode: "edit",
+  });
+}
 
 beforeEach(() => {
-  vi.resetModules();
   vi.unstubAllGlobals();
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  sessionStore._reset();
 });
 
 async function importApiWithStub(stub: ReturnType<typeof vi.fn>) {
@@ -55,6 +71,7 @@ describe("api.ensureTrackForDrop — W-C wiring", () => {
   it("POSTs to /tracks/ensure_for_drop with asset_type and insert_after_track_id", async () => {
     const { stub, calls } = makeStub({ track_id: "v2", kind: "video", clip_ids: [] });
     vi.stubGlobal("fetch", stub);
+    enterEditMode();
     const mod = await import("./api");
     const api = mod.api;
 
@@ -81,6 +98,7 @@ describe("api.ensureTrackForDrop — W-C wiring", () => {
   it("forwards prefer_kind when provided", async () => {
     const { stub, calls } = makeStub({ track_id: "a2", kind: "audio", clip_ids: [] });
     vi.stubGlobal("fetch", stub);
+    enterEditMode();
     const mod = await import("./api");
     const api = mod.api;
 
@@ -96,6 +114,7 @@ describe("api.ensureTrackForDrop — W-C wiring", () => {
   it("omits insert_after when not provided (delegates to allocator)", async () => {
     const { stub, calls } = makeStub({ track_id: "v1", kind: "video", clip_ids: [] });
     vi.stubGlobal("fetch", stub);
+    enterEditMode();
     const mod = await import("./api");
     const api = mod.api;
 

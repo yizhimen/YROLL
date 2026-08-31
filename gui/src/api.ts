@@ -1,6 +1,8 @@
 // YROLL Manifest v0.1 对应的 TS 类型（与 yroll/core/manifest.py 对齐）
 
-import { sessionStore, currentGate, GateError } from "./session";
+import {
+  sessionStore, currentGate, ensureReady, canMutate, GateError,
+} from "./session";
 
 export interface TimeRange { start: number; end: number }
 
@@ -198,6 +200,28 @@ async function syncRevision(): Promise<void> {
 
 /** Shared core: gate params in, gate errors out, revision resynced. */
 async function gated<R>(path: string, init: RequestInit): Promise<R> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const isMutation = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+
+  // GUI-03R5-B1: every mutation AWAITS ensureReady() before issuing
+  // the request. This closes the "sessionId required for mutations"
+  // race that R5-A1 audit found (the window between App mount and
+  // the first acquire() resolving).
+  if (isMutation) {
+    try {
+      await ensureReady();
+    } catch (e: any) {
+      const msg = e?.message ?? "session not ready";
+      sessionStore.noteGateError("no_session", msg);
+      throw new GateRejection("no_session", 0, msg);
+    }
+    if (!canMutate(sessionStore.get())) {
+      const msg = "session not in EDIT state";
+      sessionStore.noteGateError("no_session", msg);
+      throw new GateRejection("no_session", 0, msg);
+    }
+  }
+
   const { sessionId, baseRevision } = currentGate();
   const url = new URL(path, window.location.origin);
   if (sessionId) url.searchParams.set("sessionId", sessionId);
@@ -219,7 +243,6 @@ async function gated<R>(path: string, init: RequestInit): Promise<R> {
     }
     // GUI-03R: same shape as the read path — METHOD + path → status
     // + server detail.
-    const method = (init.method ?? "GET").toUpperCase();
     throw new Error(`${method} ${path} → ${r.status} ${r.statusText} | ${detail}`);
   }
 

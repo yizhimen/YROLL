@@ -19,3 +19,14 @@ if (typeof document.elementsFromPoint !== "function") {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (document as any).elementsFromPoint = () => [];
 }
+
+// GUI-03R4.1: jsdom doesn't implement requestAnimationFrame —
+// DragAutoScroll's rAF loop would throw on construction. Stub to
+// a no-op + clear-handle pair so DragAutoScroll.dispose() works
+// in tests without burning real frames.
+if (typeof globalThis.requestAnimationFrame === "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).requestAnimationFrame = (_cb: FrameRequestCallback): number => 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).cancelAnimationFrame = (_id: number): void => {};
+}

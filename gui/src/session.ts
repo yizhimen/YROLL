@@ -58,6 +58,121 @@ export interface ProjectSession {
   gateMessage: string;
   /** Populated once the first poll lands; until then the top bar is "连接中". */
   loaded: boolean;
+  /** GUI-03R5-B1: derived editor state. The single source of truth for
+   *  "is the GUI allowed to mutate?". Components consult this — never
+   *  the raw fields — when deciding whether a write can fire. */
+  editorState: EditorState;
+}
+
+/** GUI-03R5-B1: Editor state machine. Three legal states; no other.
+ *
+ *   CONNECTING — initial; sessionId unknown; reads allowed; writes
+ *               blocked. Resolves to EDIT (lease free → acquire)
+ *               or OBSERVE (someone else holds).
+ *   OBSERVE    — somebody else (human or agent) holds the lease;
+ *               reads + scrub + play allowed; writes blocked.
+ *   EDIT       — we hold the lease; reads + writes + transport all
+ *               enabled. The Mutation Gate is then the only
+ *               guard against stale revision / dropped lease.
+ *
+ *  Transitions:
+ *    CONNECTING → EDIT       when acquire() succeeds
+ *    CONNECTING → OBSERVE    when first refresh sees alive=mine=false
+ *    OBSERVE    → EDIT       when acquire() / handoffToAgent() wins
+ *    EDIT       → OBSERVE    when release() / handoffToAgent() / TTL
+ *    *          → CONNECTING when the poll loses contact (offline) */
+export type EditorState = "CONNECTING" | "OBSERVE" | "EDIT";
+
+/** GUI-03R5-B1: a write is permitted iff state === "EDIT" AND
+ *  the sessionId is non-null. Components MUST consult this — never
+ *  roll their own check against the raw `mine` / `loaded` flags. */
+export function canMutate(s: ProjectSession): boolean {
+  return s.editorState === "EDIT" && s.sessionId !== null;
+}
+
+/** GUI-03R5-B1: reads + transport (play/scrub/seek) are permitted in
+ *  every state — including CONNECTING. The Viewer must work even
+ *  before the first /ui/status lands. */
+export function canRead(s: ProjectSession): boolean {
+  return s.loaded || s.editorState !== "OBSERVE" || s.editorState !== "CONNECTING";
+}
+
+/** GUI-03R5-B1: one-shot promise that resolves once the editor is
+ *  ready for the FIRST mutation in this tab. Two paths:
+ *
+ *   a) We already hold the lease (reloaded tab). Resolves on the
+ *      next refresh() that confirms `alive && mine`.
+ *
+ *   b) Nobody holds the lease. Resolves once acquire() succeeds.
+ *
+ *  Used by api.gated() / api.mutate() to gate the very first write
+ *  after mount. After the first resolution, calls are sync (the
+ *  cached state machine answer). The promise rejects ONLY on:
+ *    - a hard timeout (default 8s) — surfaced as a session-not-ready
+ *    - an explicit release / handoff by the user mid-wait — surfaced
+ *      so the caller can present an OBSERVE-mode status.
+ *
+ *  Concurrent calls share a single in-flight promise so we don't
+ *  fire N acquire() roundtrips for N concurrent mutations. */
+export function ensureReady(timeoutMs: number = 8000): Promise<void> {
+  const s0 = sessionStore.get();
+  if (canMutate(s0)) return Promise.resolve();
+  // GUI-03R5-B1: degenerate states that will never resolve via
+  // subscription — surface immediately so the caller's await
+  // doesn't hang for the full timeout.
+  if (s0.editorState === "EDIT" && s0.sessionId === null) {
+    return Promise.reject(
+      new Error("session in EDIT but no sessionId; mutations blocked"));
+  }
+  if (s0.editorState === "OBSERVE") {
+    return Promise.reject(
+      new Error("session in OBSERVE mode; mutations blocked"));
+  }
+  if (sessionStore._readyPromise) return sessionStore._readyPromise;
+  const ready = new Promise<void>((resolve, reject) => {
+    const unsub = sessionStore.subscribe(() => {
+      const cur = sessionStore.get();
+      if (canMutate(cur)) { unsub(); clearTimeout(timer); resolve(); return; }
+      // GUI-03R5-B1: if EDIT mode but no sessionId, we're in a
+      // degenerate state — no subscription will ever fire to fix
+      // it (the state won't change on its own). Surface the
+      // no_session error immediately so callers don't hang.
+      if (cur.editorState === "EDIT" && cur.sessionId === null) {
+        unsub(); clearTimeout(timer);
+        reject(new Error("session in EDIT but no sessionId; mutations blocked"));
+        return;
+      }
+      if (cur.editorState === "OBSERVE") {
+        unsub(); clearTimeout(timer);
+        reject(new Error("session in OBSERVE mode; mutations blocked"));
+        return;
+      }
+    });
+    const timer = setTimeout(() => {
+      unsub();
+      reject(new Error("session ready timeout"));
+    }, timeoutMs);
+    // Only kick the connection when we're actually in CONNECTING.
+    // A test that pre-seeds editorState === EDIT via set({loaded:true,
+    // mine:true, alive:true}) should NOT have us re-refresh and clobber
+    // that state with whatever /ui/status returns (which won't know
+    // about the test's mock session id). The subscribe above already
+    // saw canMutate(s0) === true at the very first state check below.
+    if (s0.editorState === "CONNECTING") {
+      if (!sessionStore._pollTimerActive()) sessionStore.startPolling();
+      void sessionStore.refresh().catch(() => { /* ignore */ });
+  }
+  });
+  // After subscribing, check the current state again — the caller may
+  // have transitioned to EDIT between the pre-check and the subscribe
+  // (e.g., via a synchronous set() in a test setup).
+  if (canMutate(sessionStore.get())) {
+    unsub(); clearTimeout(timer);
+    return Promise.resolve();
+  }
+  sessionStore._readyPromise = ready;
+  ready.finally(() => { sessionStore._readyPromise = null; });
+  return ready;
 }
 
 const EMPTY: ProjectSession = {
@@ -73,6 +188,7 @@ const EMPTY: ProjectSession = {
   gateError: null,
   gateMessage: "",
   loaded: false,
+  editorState: "CONNECTING",
 };
 
 // Singleton — exactly one project session per app load.
@@ -81,6 +197,11 @@ class SessionStore {
   private listeners = new Set<() => void>();
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private ticking = false;
+  // GUI-03R5-B1: a single in-flight ensureReady() promise. Subsequent
+  // callers piggyback on it; cleared on settle.
+  _readyPromise: Promise<void> | null = null;
+  // Internal accessor used by ensureReady() above.
+  _pollTimerActive(): boolean { return this.pollTimer !== null; }
 
   get(): ProjectSession {
     return this.state;
@@ -94,8 +215,24 @@ class SessionStore {
   }
 
   private set(patch: Partial<ProjectSession>): void {
-    this.state = { ...this.state, ...patch };
+    // GUI-03R5-B1: every state patch re-derives editorState from the
+    // raw fields. Components MUST consult editorState (via
+    // canMutate(s)) rather than reasoning about mine/alive/loaded
+    // themselves — that way the state machine is centralized and
+    // cannot drift. If a patch tries to set editorState explicitly,
+    // it is IGNORED (the derivation wins).
+    const merged = { ...this.state, ...patch };
+    merged.editorState = this._deriveEditorState(merged);
+    this.state = merged;
     for (const fn of this.listeners) fn();
+  }
+
+  /** GUI-03R5-B1: pure derivation from raw fields. */
+  private _deriveEditorState(s: ProjectSession): EditorState {
+    if (!s.loaded) return "CONNECTING";
+    if (s.conflict) return "OBSERVE";  // we are stale; can't trust writes
+    if (s.mine && s.alive) return "EDIT";
+    return "OBSERVE";
   }
 
   /** Restore sessionId from localStorage. Called once from App on mount.

@@ -232,16 +232,17 @@ export default function ClipBlock({
     const origStartFrame = tlStartFrame;
     const lenFrames = tlEndFrame - tlStartFrame;
 
-    // GUI-03R4.1 P0-1: drag-time edge auto-scroll. Capture the
-    // ContentViewport element + the scrollLeft at drag start so
-    // the move() handler can fold content-scroll changes into the
-    // total pixel delta (the clip's frame must follow the auto-
-    // scrolled content, not stay glued to the original screen
-    // position). The DragAutoScroll helper owns the rAF loop.
+    // GUI-03R5-B1 (Decision 1): drag-time edge auto-scroll. The
+    // ContentViewport scrolls when the pointer is in the edge zone;
+    // the auto-scroll rAF loop owns that viewport state. Critically,
+    // scrollLeft does NOT participate in the frame delta — only the
+    // pointer's displacement from startX does. This keeps the
+    // pointer-only invariant the audit locked: scroll can move the
+    // viewport (and thus where the clip is rendered on screen), but
+    // cannot amplify the clip's frame jump.
     const dragContentEl = document.querySelector(
       ".timeline-content",
     ) as HTMLElement | null;
-    const startScrollLeft = dragContentEl?.scrollLeft ?? 0;
     const autoScroll = new DragAutoScroll(dragContentEl);
 
     // Other-clip boundaries (TimelineFrames). Convert from the
@@ -345,20 +346,18 @@ export default function ClipBlock({
     let lastPixelDelta = 0;
     let lastGhostSnapFrame: number | null = null;
     const move = (ev: PointerEvent) => {
-      // GUI-03R4.1 P0-1: feed the auto-scroll loop the latest
-      // pointer X so it can decide whether to scroll the
-      // ContentViewport.
+      // GUI-03R5-B1 (Decision 1): feed the auto-scroll loop the
+      // latest pointer X so it can decide whether to scroll the
+      // ContentViewport. Viewport scrolling is independent state;
+      // it does NOT enter the frame math.
       autoScroll.updatePointer(ev.clientX);
+      // Pointer-only delta: how far the pointer has moved from
+      // where it landed at pointerdown. Viewport scroll changes
+      // are deliberately excluded — the clip's frame tracks the
+      // user's intent (pointer displacement), not the auto-scroll's
+      // velocity.
       const pixelDelta = ev.clientX - startX;
-      // Total visual delta = pointer movement + content scroll
-      // change. Without this, auto-scroll moves the content under
-      // the dragged clip and the clip appears to stay glued to the
-      // screen (the clip's frame never advances). Adding the
-      // scroll delta keeps the clip anchored to the pointer.
-      const currentScrollLeft = dragContentEl?.scrollLeft ?? 0;
-      const scrollDelta = currentScrollLeft - startScrollLeft;
-      const totalPixelDelta = pixelDelta + scrollDelta;
-      const deltaFrame = pxPerFrameToFrameDelta(totalPixelDelta, pxPerFrame);
+      const deltaFrame = pxPerFrameToFrameDelta(pixelDelta, pxPerFrame);
       const candidate = origStartFrame + deltaFrame;
       // Collision clamp ALWAYS runs (drag must never preview overlap).
       const clamped = clamp(candidate);
@@ -370,7 +369,7 @@ export default function ClipBlock({
       lastCandidateFrame = candidate;
       lastPreviewFrame = clamped;
       lastDeltaFrame = deltaFrame;
-      lastPixelDelta = totalPixelDelta;
+      lastPixelDelta = pixelDelta;
       lastGhostSnapFrame = ghost;
       onDragMove(clip.clip_id, clamped, ghost);
     };
@@ -397,20 +396,14 @@ export default function ClipBlock({
     const up = async (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      // GUI-03R4.1 P0-1: stop the auto-scroll loop. MUST happen
-      // before we read contentEl.scrollLeft below — otherwise the
-      // loop could mutate scrollLeft between the read and the
-      // commit, producing a 1-frame mismatch.
+      // GUI-03R5-B1 (Decision 1): stop the auto-scroll loop. We do
+      // NOT fold the final scrollLeft into the frame delta — the
+      // pointer-only invariant holds on commit. The committed
+      // frame is the LAST preview frame, which itself was computed
+      // pointer-only on every move().
       autoScroll.dispose();
       const pixelDelta = ev.clientX - startX;
-      // GUI-03R4.1 P0-1: include final content-scroll delta so the
-      // committed frame matches what the user saw on screen (the
-      // last pointermove already folded it in via totalPixelDelta;
-      // lastPreviewFrame is authoritative for the commit).
-      const finalScrollDelta =
-        (dragContentEl?.scrollLeft ?? 0) - startScrollLeft;
-      const totalPixelDelta = pixelDelta + finalScrollDelta;
-      const deltaFrame = pxPerFrameToFrameDelta(totalPixelDelta, pxPerFrame);
+      const deltaFrame = pxPerFrameToFrameDelta(pixelDelta, pxPerFrame);
       // preSnapFrame = the SAME collision-clampedFrame from the
       // LAST pointermove (no recomputation, no second candidate).
       // The dragged clip's preview frame equals this on every move,
