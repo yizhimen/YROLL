@@ -496,7 +496,56 @@ export default function App() {
             }
           } else if (binding.name === "split_clip_at_frame") {
             if (clip) splitAtPlayhead();
-          } else if (binding.name === "delete_selection" || binding.name === "_nudge_playhead_boundary") {
+          } else if (binding.name === "delete_selection") {
+            // GUI-03R3-W-A.2: Delete / Shift+Delete keyboard path.
+            // Dispatch rules (locked in plan §2.1.1):
+            //   selectedSet.size === 0 + no `clip` → no-op
+            //   selectedSet.size === 1 (or single `selected`) →
+            //     ripple=false → existing pendingDelete impact-preview flow (one Core op)
+            //     ripple=true  → api.deleteSelection([id], true)
+            //   selectedSet.size > 1 →
+            //     window.confirm then api.deleteSelection(set, ripple)
+            //
+            // We use the selection-level path (deleteSelection) so the
+            // Multi-Ripple case emits ONE Core Operation, not N.
+            // Note: the keydown handler is synchronous (not async);
+            // we use .then() chains so the handler stays sync.
+            const ripple = Boolean(
+              (binding.params as { ripple?: boolean })?.ripple ?? false,
+            );
+            const ids = Array.from(selectedSet);
+            if (ids.length === 0 && !clip) return;
+            if (ids.length <= 1 && clip && !ripple) {
+              // Single-clip Delete → existing impact-preview UX.
+              const target = clip.clip_id;
+              void api.impact(target, "remove").then((imp) => {
+                if (imp.will_sync.length === 0 && imp.will_prompt.length === 0) {
+                  run(() => api.removeClip(target, "GUI Delete").then(() => setSelected(null)),
+                    "已删除");
+                } else {
+                  setPendingDelete({ clipId: target, impact: imp });
+                }
+              });
+              return;
+            }
+            if (ids.length <= 1 && clip && ripple) {
+              // Single-clip Shift+Delete → direct ripple via
+              // selection path (one Core op).
+              run(() => api.deleteSelection([clip.clip_id], true, "GUI Shift+Delete")
+                        .then(() => setSelected(null)),
+                "已删除并收拢");
+              return;
+            }
+            // Multi-clip: confirm then one Core op.
+            const n = ids.length;
+            const msg = ripple
+              ? `Ripple-delete ${n} clip${n === 1 ? "" : "s"}?`
+              : `Delete ${n} clip${n === 1 ? "" : "s"}?`;
+            if (!window.confirm(msg)) return;
+            run(() => api.deleteSelection(ids, ripple, "GUI multi-delete")
+                  .then(() => { setSelectedSet(new Set()); setSelected(null); }),
+              ripple ? `已 ripple 删除 ${n} 个 clip` : `已删除 ${n} 个 clip`);
+          } else if (binding.name === "_nudge_playhead_boundary") {
             // ArrowUp / ArrowDown: jump to clip boundary.
             // The Core keymap signals this via the binding name; the
             // magnitude/direction is in binding.params.
@@ -856,6 +905,13 @@ export default function App() {
             aspect={aspect}
             onAspect={setAspect}
             timelineId={activeTimelineId}
+            // GUI-03R3-W-A.4: Space/K (keymap's local-action
+            // `_toggle_play` binding) calls into the PreviewPlayer's
+            // FrameClock toggle through this ref. FrameClock stays
+            // internal to PreviewPlayer; the parent never sees it
+            // directly. No `/keyboard/execute` endpoint — this is
+            // purely a GUI-local transport action.
+            onTransportReady={(api) => { transportRef.current = api; }}
           />
           {previewVersion > 0 && clip && activeTimelineTracks
             .filter((t) => t.kind === "video").slice(1)
@@ -1035,18 +1091,31 @@ export default function App() {
               <div className="row">
                 <button
                   className="danger"
+                  // GUI-03R3-W-A.3: multi-clip delete uses
+                  // api.deleteSelection so the GUI does NOT loop
+                  // removeClip. ONE Core Operation per user intent.
                   onClick={() => {
-                    if (!window.confirm(`删除选中的 ${selectedSet.size} 个 clip？（可逐条撤销）`)) return;
-                    run(async () => {
-                      for (const id of selectedSet) {
-                        await api.removeClip(id, "GUI 批量删除");
-                      }
-                      setSelectedSet(new Set());
-                      setSelected(null);
-                    }, `已删除 ${selectedSet.size} 个 clip`);
+                    const ids = Array.from(selectedSet);
+                    if (!window.confirm(`删除选中的 ${ids.length} 个 clip？`)) return;
+                    run(() => api.deleteSelection(ids, false, "GUI 批量删除")
+                          .then(() => { setSelectedSet(new Set()); setSelected(null); }),
+                      `已删除 ${ids.length} 个 clip`);
                   }}
                 >
                   全部删除
+                </button>
+                <button
+                  // GUI-03R3-W-A.3: ripple-delete is also one Core
+                  // Operation via the selection path (NOT a loop).
+                  onClick={() => {
+                    const ids = Array.from(selectedSet);
+                    if (!window.confirm(`Ripple 删除选中的 ${ids.length} 个 clip？`)) return;
+                    run(() => api.deleteSelection(ids, true, "GUI 批量 Ripple")
+                          .then(() => { setSelectedSet(new Set()); setSelected(null); }),
+                      `已 ripple 删除 ${ids.length} 个 clip`);
+                  }}
+                >
+                  Ripple
                 </button>
                 <button onClick={() => setSelectedSet(selected ? new Set([selected]) : new Set())}>
                   取消多选

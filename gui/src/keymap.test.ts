@@ -164,3 +164,86 @@ describe("KeymapAction.params is the raw Core params (no transformation)", () =>
     expect(x?.params).toEqual({ foo: "bar", baz: 42, nested: { a: 1 } });
   });
 });
+
+// ---------------------------------------------------------------------------
+// GUI-03R3-W-A: pinned contract for Delete / Shift+Delete / Space / K / ↑↓.
+// These tests pin the on-the-wire keymap shape so the App.tsx dispatch
+// (in App.keyboard.test.tsx) can rely on these names + params.
+// ---------------------------------------------------------------------------
+
+describe("W-A.2 keymap contract for Delete / Shift+Delete / Space / ↑↓", () => {
+  const keymap = () => ({
+    bindings: [
+      { key: "Delete",       description: "remove selected clip",
+        mutation_op: "delete_selection",           params: { ripple: false } },
+      { key: "Shift+Delete", description: "ripple-remove selected clip",
+        mutation_op: "delete_selection",           params: { ripple: true } },
+      { key: "Space",        description: "toggle play/pause",
+        mutation_op: "_toggle_play",               params: {} },
+      { key: "K",            description: "toggle play/pause",
+        mutation_op: "_toggle_play",               params: {} },
+      { key: "ArrowUp",      description: "jump to previous boundary",
+        mutation_op: "_nudge_playhead_boundary",   params: { direction: -1 } },
+      { key: "ArrowDown",    description: "jump to next boundary",
+        mutation_op: "_nudge_playhead_boundary",   params: { direction: 1 } },
+    ],
+  });
+
+  it("Delete → mutation_op=delete_selection, params.ripple=false", async () => {
+    vi.mocked(api.getKeymap).mockResolvedValueOnce(keymap());
+    const { result } = renderHook(() => useCoreKeymap());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const del = result.current.find((a) => a.key === "Delete");
+    expect(del).toBeTruthy();
+    expect(del?.name).toBe("delete_selection");
+    expect((del?.params as { ripple?: boolean })?.ripple).toBe(false);
+  });
+
+  it("Shift+Delete → params.ripple=true", async () => {
+    vi.mocked(api.getKeymap).mockResolvedValueOnce(keymap());
+    const { result } = renderHook(() => useCoreKeymap());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const del = result.current.find((a) => a.key === "Shift+Delete");
+    expect(del).toBeTruthy();
+    expect(del?.name).toBe("delete_selection");
+    expect((del?.params as { ripple?: boolean })?.ripple).toBe(true);
+  });
+
+  it("Space + K → _toggle_play local action (no fake Core mutation)", async () => {
+    vi.mocked(api.getKeymap).mockResolvedValueOnce(keymap());
+    const { result } = renderHook(() => useCoreKeymap());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const space = result.current.find((a) => a.key === "Space");
+    const k = result.current.find((a) => a.key === "K");
+    expect(space?.name).toBe("_toggle_play");
+    expect(k?.name).toBe("_toggle_play");
+    // Local action: deltaFrames=0 (no seek). GUI must NOT interpret
+    // this as a Core mutation — it's a transport toggle.
+    expect(space?.deltaFrames).toBe(0);
+    expect(k?.deltaFrames).toBe(0);
+  });
+
+  it("ArrowUp/Down → _nudge_playhead_boundary with direction ±1", async () => {
+    vi.mocked(api.getKeymap).mockResolvedValueOnce(keymap());
+    const { result } = renderHook(() => useCoreKeymap());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const up = result.current.find((a) => a.key === "ArrowUp");
+    const down = result.current.find((a) => a.key === "ArrowDown");
+    expect(up?.name).toBe("_nudge_playhead_boundary");
+    expect(down?.name).toBe("_nudge_playhead_boundary");
+    expect((up?.params as { direction?: number })?.direction).toBe(-1);
+    expect((down?.params as { direction?: number })?.direction).toBe(1);
+  });
+});

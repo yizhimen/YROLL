@@ -17,6 +17,7 @@ Bindings:
   Shift+Delete   ripple-remove selected clip
   ← / →          nudge playhead by 1 frame
   Shift+← / →    nudge playhead by 10 frames
+  ↑ / ↓          jump to next/prev clip boundary
 
 Inputs are always (selection, project_state, playhead_frame) — a pure
 function so the GUI can preview the action before commit.
@@ -89,6 +90,17 @@ KEY_TABLE: dict[str, KeyboardAction] = {
     "Shift+ArrowRight": KeyboardAction(
         "Shift+ArrowRight", "nudge playhead +10 frames",
         "_nudge_playhead", {"delta_frames": DEFAULT_STEP_LARGE}),
+    # GUI-03R3-W-A.2: ↑ / ↓ jump to the next/prev clip boundary.
+    # The GUI's `jumpBoundary` honors the binding's `direction`
+    # param (-1 = previous, +1 = next). This binding used to be
+    # synthesized in the GUI handler; it is now in Core's keymap
+    # so the keymap is the single source of truth.
+    "ArrowUp": KeyboardAction(
+        "ArrowUp", "jump to previous clip boundary",
+        "_nudge_playhead_boundary", {"direction": -1}),
+    "ArrowDown": KeyboardAction(
+        "ArrowDown", "jump to next clip boundary",
+        "_nudge_playhead_boundary", {"direction": +1}),
 }
 
 

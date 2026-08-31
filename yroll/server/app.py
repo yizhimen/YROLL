@@ -85,6 +85,23 @@ class MoveReq(BaseModel):
     why: str = ""
 
 
+class SelectionDeleteReq(BaseModel):
+    """GUI-03R3-W-A: selection-level delete. ONE Core Operation per
+    user intent (preserves "one user intent = one Operation" rule
+    even for multi-clip actions).
+
+    Body: {clip_ids: list[str], ripple: bool, why?: str}. The Core
+    command `cmd.delete_selection(Selection.many(clip_ids), ripple,
+    why)` removes every clip in `clip_ids` atomically — with the
+    same-track shift semantics as `ripple_delete_clip` when ripple
+    is true. The GUI MUST use this path instead of looping
+    `removeClip` for multi-selection delete.
+    """
+    clip_ids: list[str]
+    ripple: bool = False
+    why: str = ""
+
+
 class SpeedReq(BaseModel):
     speed: float
     why: str = ""
@@ -583,6 +600,36 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
                 clip_id, why=why, timeline_id=(timeline_id or None)))
         return guard(lambda: st.cmd.remove_clip(
             clip_id, why=why, timeline_id=(timeline_id or None)))
+
+    @app.post("/selection/delete")
+    def selection_delete(req: SelectionDeleteReq, timeline_id: str = "",
+                          sessionId: str = "", baseRevision: int = None):
+        """GUI-03R3-W-A: delete a multi-clip selection atomically.
+
+        Wraps `cmd.delete_selection(Selection.many(req.clip_ids),
+        req.ripple, req.why, timeline_id)`. The Core command emits
+        ONE composite Operation regardless of selection size. The GUI
+        MUST use this path for multi-select delete instead of looping
+        `removeClip`.
+
+        Returns: {"deleted": [clip_ids...], "ripple": bool}.
+        """
+        from yroll.core.selection import Selection as _Selection
+        def _do():
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            op = st.cmd.delete_selection(
+                _Selection.many(req.clip_ids),
+                ripple=req.ripple,
+                why=req.why,
+                timeline_id=(timeline_id or None),
+            )
+            return {
+                "deleted": list(req.clip_ids),
+                "ripple": req.ripple,
+                "operation_id": op.operation_id,
+            }
+        return guard(_check_rev(baseRevision, _do))
 
     @app.post("/clips/{clip_id}/trim")
     def trim(clip_id: str, req: TrimReq, timeline_id: str = "",

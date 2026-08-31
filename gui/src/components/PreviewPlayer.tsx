@@ -60,6 +60,14 @@ interface Props {
   // Preview cannot leak content between Timelines. Falls back to
   // "main" if unset (legacy single-Timeline projects still work).
   timelineId?: string;
+  // GUI-03R3-W-A.4: expose the playback transport so the parent
+  // (App.tsx) can wire Spacebar / K (the keymap's local-action
+  // `_toggle_play` binding) to the PreviewPlayer's FrameClock
+  // toggle. The FrameClock is internal to PreviewPlayer; the
+  // parent never sees it directly. `onTransportReady` is called
+  // once per (clockRef, mount) pair. The toggle function is
+  // stable for the lifetime of this PreviewPlayer instance.
+  onTransportReady?: (api: { toggle: () => void }) => void;
 }
 
 const ASPECTS: { id: AspectRatio; label: string; w: number; h: number }[] = [
@@ -76,6 +84,7 @@ export default function PreviewPlayer({
   aspect = "16:9", onAspect,
   durationHint = 120,
   timelineId,
+  onTransportReady,
 }: Props) {
   const [mode, setMode] = useState<"instant" | "rendered">("instant");
 
@@ -107,6 +116,30 @@ export default function PreviewPlayer({
   // a useEffect-free read (the render reads clockRef.current.playing).
   const [_, forceRender] = useState(0);
   const playing = clockRef.current.playing;
+
+  // GUI-03R3-W-A.4: stable playback toggle. Both the toolbar
+  // button and the parent's Spacebar/K keydown handler invoke
+  // this same closure so the FrameClock is the single source of
+  // truth — neither path bypasses the other.
+  const togglePlay = () => {
+    const c = clockRef.current;
+    if (!c) return;
+    frameClockTogglePlay(c);
+    forceRender((n) => n + 1);
+  };
+
+  // Publish the transport handle to the parent (App.tsx) so the
+  // keydown handler can reach it. Called once per clockRef lifetime
+  // (the FrameClock is recreated when durationHint changes, so we
+  // re-publish on every clock creation).
+  useEffect(() => {
+    if (!onTransportReady) return;
+    onTransportReady({ toggle: togglePlay });
+    // Intentionally only on clockRef mount / durationHint change.
+    // The togglePlay closure captures the current clockRef (which
+    // is stable across renders until durationHint changes).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clockRef.current, onTransportReady]);
 
   // RAF render loop. Computes the integer TimelineFrame from the
   // FrameClock (pure function of performance.now()), pushes it via
@@ -428,12 +461,7 @@ export default function PreviewPlayer({
       <div className="preview-toolbar">
         <button
           className="play-btn"
-          onClick={() => {
-            const c = clockRef.current;
-            if (!c) return;
-            frameClockTogglePlay(c);
-            forceRender((n) => n + 1);
-          }}
+          onClick={togglePlay}
           title="播放/暂停（空格键）"
         >
           {playing ? "⏸" : "▶"}

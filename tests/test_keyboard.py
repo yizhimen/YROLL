@@ -61,13 +61,33 @@ def test_arrows_nudge_playhead():
     assert lookup_key("Shift+ArrowRight").params["delta_frames"] == 10
 
 
+# ---------------------------------------------------------------------------
+# GUI-03R3-W-A.2: ArrowUp/ArrowDown jump to clip boundaries. The GUI
+# keydown dispatch (App.tsx) reads `binding.params.direction` and calls
+# jumpBoundary(dir). The binding used to be missing from the Core keymap
+# (and was therefore a silent no-op on App's side); W-A.2 adds it so the
+# keymap is the single source of truth for these keys.
+# ---------------------------------------------------------------------------
+
+def test_arrow_up_down_jump_to_boundary():
+    up = lookup_key("ArrowUp")
+    down = lookup_key("ArrowDown")
+    assert up is not None, "ArrowUp binding missing from keymap"
+    assert down is not None, "ArrowDown binding missing from keymap"
+    assert up.mutation_op == "_nudge_playhead_boundary"
+    assert down.mutation_op == "_nudge_playhead_boundary"
+    assert up.params["direction"] == -1, "ArrowUp should mean 'previous boundary'"
+    assert down.params["direction"] == 1, "ArrowDown should mean 'next boundary'"
+
+
 def test_describe_keymap_includes_all_keys():
     km = describe_keymap()
     keys = {entry["key"] for entry in km}
     # Every key in §34 is present
     for k in ["J", "K", "L", "Shift+J", "Shift+L", "I", "O",
               "S", "Delete", "Shift+Delete", "ArrowLeft", "ArrowRight",
-              "Shift+ArrowLeft", "Shift+ArrowRight", "Space"]:
+              "Shift+ArrowLeft", "Shift+ArrowRight", "Space",
+              "ArrowUp", "ArrowDown"]:  # GUI-03R3-W-A.2: added
         assert k in keys, f"missing key in keymap: {k}"
 
 

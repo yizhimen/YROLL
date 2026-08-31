@@ -267,6 +267,29 @@ export const api = {
   removeClip: (clipId: string, why = "", ripple = false) =>
     mutate("DELETE",
       `/clips/${clipId}?why=${encodeURIComponent(why)}${ripple ? "&ripple=true" : ""}`),
+  // GUI-03R3-W-A: selection-level delete. ONE Core Operation per
+  // user intent (preserves "one user intent = one Operation" rule
+  // even for multi-clip actions). The GUI MUST use this path
+  // instead of looping removeClip for multi-selection delete.
+  //   - ripple=false (default): Delete — remove the clips, preserve gap.
+  //   - ripple=true:  Shift+Delete / "Ripple 删除" — remove the
+  //                  clips and shift same-track neighbors left.
+  // timeline_id is not passed here; the server resolves to the
+  // active Timeline (matching the existing removeClip behavior).
+  deleteSelection: (
+    clipIds: string[],
+    ripple: boolean,
+    why = "GUI selection delete",
+  ) =>
+    mutate<{
+      deleted: string[];
+      ripple: boolean;
+      operation_id?: string;
+    }>("POST", "/selection/delete", {
+      clip_ids: clipIds,
+      ripple,
+      why,
+    }),
   commit: (note: string) => mutate("POST", `/versions?note=${encodeURIComponent(note)}`),
   // GUI-03D: L1 Timeline Composite Preview. Returns z-ordered
   // visual + audio + subtitle layers at the given timeline frame.
