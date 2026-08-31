@@ -290,6 +290,27 @@ export const api = {
       ripple,
       why,
     }),
+  // GUI-03R4-R5: Close Gap + Batch Close Gaps.
+  closeGap: (trackId: string, startFrame: number, endFrame: number,
+              why = "GUI close gap") =>
+    mutate<{
+      operation_id: string;
+      shifted_clips: number;
+      track_id: string;
+    }>("POST", "/tracks/close_gap", {
+      track_id: trackId,
+      start_frame: startFrame,
+      end_frame: endFrame,
+      why,
+    }),
+  closeGapsBatch: (trackIds: string[], why = "GUI batch close gaps") =>
+    mutate<{
+      operation_ids: string[];
+      track_count: number;
+    }>("POST", "/tracks/close_gaps_batch", {
+      track_ids: trackIds,
+      why,
+    }),
   // GUI-03R3-W-C: resolve or create a track for a drop. Takes
   // STRUCTURAL INTENT ONLY — no pixel coordinates. The GUI has
   // resolved pointer geometry into this intent before calling.

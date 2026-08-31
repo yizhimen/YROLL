@@ -69,6 +69,13 @@ interface Props {
   ) => void;
   /** GUI-03R4-R4: cancel any in-flight marquee (Esc key). */
   onMarqueeCancel?: () => void;
+  /** GUI-03R4-R5: right-click on a gap → "Close Gap here".
+   *  The GUI provides the timeline frame (in seconds) of the empty
+   *  range that contains the click point; the Core closes it.
+   *  Track_id is the row the user right-clicked on. */
+  onCloseGap?: (trackId: string, startFrame: number, endFrame: number) => void;
+  /** GUI-03R4-R5: Batch Close Gaps over the visible tracks. */
+  onCloseGapsBatch?: (trackIds: string[]) => void;
   /** Pointermove preview. `newStartFrame` is an INTEGER TimelineFrame. */
   onDragMove: (clipId: string, newStartFrame: number, ghostSnapFrame?: number | null) => void;
   /** GUI-03R3-1E: ghost-snap frame per active drag, keyed by clipId.
@@ -256,6 +263,8 @@ export default function Timeline({
   onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onTrackMute, onTrackLock, onTrackHide, onAssetDrop, onAssetDropNewTrack,
   onMarqueeSelect,
   onMarqueeCancel,
+  onCloseGap,
+  onCloseGapsBatch,
   dragGhost,
   draggingAssetKind = null,
   showEmptyTracks = false,
@@ -696,6 +705,11 @@ export default function Timeline({
                 // starts a marquee selection. The marquee is
                 // tracked at the window level (pointermove/pointerup)
                 // so it survives the pointer leaving the row.
+                //
+                // GUI-03R4-R5: right-click on EMPTY track area
+                // launches "Close Gap here". The GUI computes the
+                // empty range containing the click and calls
+                // onCloseGap(trackId, startFrame, endFrame).
                 onPointerDown={(e) => {
                   // Only left button, and only when the pointerdown
                   // actually landed on the empty .track-content
@@ -737,6 +751,68 @@ export default function Timeline({
                   };
                   window.addEventListener("pointermove", move);
                   window.addEventListener("pointerup", up);
+                }}
+                // GUI-03R4-R5: right-click on empty area → Close Gap.
+                // The handler finds the empty range that contains the
+                // click point on this track and reports it via
+                // onCloseGap. The Core collapses the gap; the
+                // local refresh picks up the new state.
+                onContextMenu={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  e.preventDefault();
+                  const content = contentRef.current;
+                  if (!content) return;
+                  const rect = content.getBoundingClientRect();
+                  const x = e.clientX - rect.left + content.scrollLeft;
+                  const fps = seq.fps;
+                  const xFrame = pixelToPlayheadFrame(x, pxPerSec, fps, 0);
+                  // Find the gap on this track containing xFrame.
+                  const clipsHere = (track.clip_ids
+                    .map((id) => project.clips[id])
+                    .filter(Boolean) as Array<{ timeline_range: { start: number; end: number } }>)
+                    .sort((a, b) => a.timeline_range.start - b.timeline_range.start);
+                  // Convert track's seconds → frames.
+                  const clickSec = xFrame / (fps.num / fps.den);
+                  const candidates: Array<[number, number]> = [];
+                  // Pre-gap (between 0 and clipsHere[0].start).
+                  if (clipsHere.length > 0) {
+                    const firstStart = clipsHere[0].timeline_range.start;
+                    if (clickSec < firstStart) {
+                      candidates.push([0, firstStart]);
+                    }
+                  }
+                  for (let i = 0; i < clipsHere.length - 1; i++) {
+                    const gStart = clipsHere[i].timeline_range.end;
+                    const gEnd = clipsHere[i + 1].timeline_range.start;
+                    if (clickSec >= gStart && clickSec < gEnd) {
+                      candidates.push([gStart, gEnd]);
+                      break;
+                    }
+                  }
+                  // Post-last (after the last clip's end).
+                  if (clipsHere.length > 0) {
+                    const lastEnd = clipsHere[clipsHere.length - 1].timeline_range.end;
+                    if (clickSec >= lastEnd) {
+                      candidates.push([lastEnd, Infinity]);
+                    }
+                  }
+                  if (candidates.length === 0) return;
+                  // Pick the gap whose midpoint is closest to the click.
+                  let bestGap = candidates[0];
+                  let bestDist = Math.abs(clickSec - (bestGap[0] + bestGap[1]) / 2);
+                  for (const g of candidates.slice(1)) {
+                    const mid = g[1] === Infinity
+                      ? g[0] + 30  // arbitrary midpoint for post-gap
+                      : (g[0] + g[1]) / 2;
+                    const d = Math.abs(clickSec - mid);
+                    if (d < bestDist) { bestGap = g; bestDist = d; }
+                  }
+                  let gStart = bestGap[0];
+                  let gEnd = bestGap[1] === Infinity
+                    ? Math.max(0.0, clickSec + 5)  // arbitrary finite end
+                    : bestGap[1];
+                  if (gEnd - gStart <= 1e-6) return;
+                  onCloseGap?.(track.track_id, gStart, gEnd);
                 }}
                 onDragOver={(e) => {
                   if (e.dataTransfer.types.includes("text/yroll-asset")) {

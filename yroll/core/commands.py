@@ -910,11 +910,146 @@ class CommandLayer:
         return self._record("remove_clip", clip_id, before, after, why=why,
                             tool="timeline.remove_clip")
 
-    def ripple_delete_clip(self, clip_id: str, why: str = "",
-                          timeline_id: str | None = None) -> Operation:
+    def close_gap(self, timeline_id: str | None, track_id: str,
+                  start_frame: float, end_frame: float,
+                  why: str = "") -> Operation:
+        """GUI-03R4-R5: Close Gap.
+
+        Shifts every clip on `track_id` whose timeline_range.start
+        is >= `end_frame` LEFT by `(end_frame - start_frame)`. The
+        gap between `[start_frame, end_frame]` collapses. Atomic;
+        one Operation. Empty ranges that exist after this call (e.g.
+        a clip moved past a sibling) are NOT further collapsed — the
+        caller decides whether to invoke close_gap again or use
+        close_gaps_batch.
+
+        Args:
+          timeline_id: stable Timeline id (legacy None → active).
+          track_id: which track to close the gap on.
+          start_frame: gap start (TimelineSeconds or frames — same units
+            as the project's clip.timeline_range).
+          end_frame: gap end.
+          why: operation reason for the audit log.
+
+        Refuses with CommandError if the gap is non-positive
+        (end_frame <= start_frame) or if the track is unknown.
+
+        GUI-03R4-R2: persisted clip timeline frames cannot have
+        start < 0, so we also clamp the shift delta so the result
+        stays in-bounds even if the caller passes tiny numbers.
+        """
+        tl = self._timeline(timeline_id)
+        track = next((t for t in tl.tracks if t.track_id == track_id), None)
+        if track is None:
+            raise CommandError(f"close_gap: track not found: {track_id!r}")
+        if end_frame <= start_frame:
+            raise CommandError(
+                f"close_gap: empty range ({start_frame=}, {end_frame=}); "
+                f"refusing zero/negative gap"
+            )
+        delta = end_frame - start_frame  # positive seconds to shift LEFT
+        before: dict = {}
+        after: dict = {}
+        for cid in list(track.clip_ids):
+            c = self.core.project.clips.get(cid)
+            if c is None:
+                continue
+            cs = c.timeline_range.start
+            ce = c.timeline_range.end
+            # Three cases (mutually exclusive):
+            #   (a) clip ends <= start_frame: entirely before the gap,
+            #       leave alone.
+            #   (b) clip start in [start_frame, end_frame): inside
+            #       the gap — pull start to start_frame, keep duration.
+            #   (c) clip start >= end_frame: after the gap — shift
+            #       left by delta.
+            # R2 invariant: new_start cannot go below 0.
+            if ce <= start_frame:
+                # (a) entirely before — no change
+                continue
+            if cs >= start_frame and cs < end_frame:
+                # (b) inside the gap — pull start to start_frame
+                old_start = cs
+                new_start = max(0.0, start_frame)
+                new_end = new_start + (ce - old_start)
+                if new_start == old_start:
+                    continue
+                before[cid] = {"timeline_range": c.timeline_range.model_dump(),
+                               "track_id": c.track_id}
+                c.timeline_range = TimeRange(start=new_start, end=new_end)
+                after[cid] = {"timeline_range": c.timeline_range.model_dump(),
+                              "track_id": c.track_id}
+            elif cs >= end_frame:
+                # (c) past the gap — shift left by delta
+                old_start = cs
+                new_start = max(0.0, cs - delta)
+                new_end = max(new_start, ce - delta)
+                if new_start == old_start:
+                    continue
+                before[cid] = {"timeline_range": c.timeline_range.model_dump(),
+                               "track_id": c.track_id}
+                c.timeline_range = TimeRange(start=new_start, end=new_end)
+                after[cid] = {"timeline_range": c.timeline_range.model_dump(),
+                              "track_id": c.track_id}
+        if not before:
+            # Nothing to do — the gap didn't catch any clips. Return
+            # a no-op Operation so the caller gets an audit record.
+            return self._apply_record(
+                "close_gap", track_id, {}, {},
+                why=why or f"Close Gap on {track_id}: nothing to shift",
+                tool="timeline.close_gap")
+        return self._apply_record(
+            "close_gap", track_id, before, after,
+            why=why or f"Close Gap on {track_id} ({start_frame:.2f}s..{end_frame:.2f}s, "
+                       f"shift={delta:.2f}s, {len(before)} clip(s))",
+            tool="timeline.close_gap")
+
+    def close_gaps_batch(self, timeline_id: str | None, track_ids: list[str],
+                          why: str = "") -> list[Operation]:
+        """GUI-03R4-R5: Close Gaps Batch.
+
+        For each named track, find every empty range between
+        consecutive clips (clips sorted by timeline_range.start) and
+        collapse it via `close_gap`. Returns one Operation per
+        track that actually had a gap (no-op tracks are skipped to
+        keep the log clean). Each track emits its own atomic
+        Operation; one user intent = N Operations where N is the
+        number of tracks the user selected.
+
+        Never loops Core mutations at the GUI level — the GUI calls
+        this single method and reports the result.
+        """
+        ops: list[Operation] = []
+        for tid in track_ids:
+            tl = self._timeline(timeline_id)
+            track = next((t for t in tl.tracks if t.track_id == tid), None)
+            if track is None:
+                raise CommandError(
+                    f"close_gaps_batch: track not found: {tid!r}")
+            clips = sorted(
+                [self.core.project.clips[cid]
+                 for cid in track.clip_ids
+                 if cid in self.core.project.clips],
+                key=lambda c: c.timeline_range.start,
+            )
+            # Walk pairs of consecutive clips; each gap = (clip.end, next.start).
+            # Iterate right-to-left so collapsing later gaps doesn't shift
+            # earlier gap boundaries.
+            i = len(clips) - 1
+            while i >= 1:
+                gap_end = clips[i].timeline_range.start
+                gap_start = clips[i - 1].timeline_range.end
+                if gap_end - gap_start > 1e-6:
+                    op = self.close_gap(timeline_id, tid, gap_start, gap_end,
+                                         why=why or f"Batch close gap {tid}")
+                    ops.append(op)
+                i -= 1
+        return ops
         """Ripple delete：删除 clip 并把同轨后面的 clip 全部前移收拢（不留黑洞）。
         同时按 Semantic Link (STRONG) 联动字幕/音频轨。
         """
+    def ripple_delete_clip(self, clip_id: str, why: str = "",
+                          timeline_id: str | None = None) -> Operation:
         from yroll.core.links import infer_relationships
 
         tl = self._timeline(timeline_id)

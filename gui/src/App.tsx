@@ -509,6 +509,26 @@ export default function App() {
     // Hook reserved for future "press Esc to clear selection" UX.
   };
 
+  // GUI-03R4-R5: Close Gap (single track) + Batch Close Gaps (visible
+  // tracks). Both go through Core commands so each user intent =
+  // one Core Operation. The GUI never loops Core mutations for
+  // multi-track actions.
+  const onCloseGap = async (trackId: string, startFrame: number,
+                              endFrame: number) => {
+    await run(() => api.closeGap(trackId, startFrame, endFrame,
+                                  "GUI 右键关闭间隙"),
+      `已关闭 ${trackId} 上的间隙 (${(endFrame - startFrame).toFixed(2)}s)`);
+  };
+  const onCloseGapsBatch = async (trackIds: string[]) => {
+    if (trackIds.length === 0) return;
+    if (!window.confirm(
+      `Batch close gaps on ${trackIds.length} tracks? Each gap becomes ONE Operation per track.`)) {
+      return;
+    }
+    await run(() => api.closeGapsBatch(trackIds, "GUI 批量关闭间隙"),
+      `已批量关闭 ${trackIds.length} 个轨道的间隙`);
+  };
+
   // GUI-03R3-1A: drag payload log sink. The smoke script reads it
   // back via page.evaluate(...). Reset on each mount so tests
   // start with an empty log.
@@ -856,6 +876,17 @@ export default function App() {
           onChange={(e) => setPxPerSec(Number(e.target.value))}
           style={{ width: 100 }}
         />
+        <button
+          title="批量关闭当前可见轨道的所有间隙（每条轨道一个 Operation）"
+          onClick={() => {
+            const activeTl = project?.timelines?.find(
+              (tl) => tl.timeline_id === activeTimelineId) ?? project?.timelines?.[0];
+            const ids = (activeTl?.tracks ?? []).filter((t) => !t.hidden).map((t) => t.track_id);
+            onCloseGapsBatch(ids);
+          }}
+        >
+          批量关闭间隙
+        </button>
         <button
           title="缩放到全部内容可见"
           onClick={() => {
@@ -1619,6 +1650,9 @@ export default function App() {
         // GUI-03R4-R4: marquee selection callbacks.
         onMarqueeSelect={onMarqueeSelect}
         onMarqueeCancel={onMarqueeCancel}
+        // GUI-03R4-R5: gap operations callbacks.
+        onCloseGap={onCloseGap}
+        onCloseGapsBatch={onCloseGapsBatch}
         onSeek={seek}
         onSelect={(id, viaAi, ctrl) => {
           if (viaAi) {

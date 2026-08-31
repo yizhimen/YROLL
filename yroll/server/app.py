@@ -202,6 +202,33 @@ class ChatReq(BaseModel):
     baseRevision: int | None = None
 
 
+# GUI-03R4-R5: Close Gap + Batch Close Gaps request models.
+class CloseGapReq(BaseModel):
+    """Close a single empty range on one track.
+
+    `start_frame` and `end_frame` are in seconds (legacy model
+    storage; the GUI converts from frames via the project's
+    sequence fps before calling). The Core command shifts every
+    clip with timeline_range.start >= end_frame LEFT by
+    (end_frame - start_frame) and pulls any clip starting inside
+    the gap to start_frame. One atomic Operation per call.
+    """
+    track_id: str
+    start_frame: float
+    end_frame: float
+    why: str = ""
+
+
+class CloseGapsBatchReq(BaseModel):
+    """Close every empty range on the given tracks.
+
+    Returns one Operation per track that actually had a gap.
+    Tracks with no gaps are skipped (no-op, no Operation).
+    """
+    track_ids: list[str]
+    why: str = ""
+
+
 # GUI-01.5: request schemas for /session/ensure and /lease/request.
 # Module-level so Pydantic can resolve the ForwardRef. create_app()
 # uses these via Body(...) below.
@@ -559,6 +586,46 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
 
         return guard(lambda: st.cmd.add_track(TrackKind(kind), track_id,
                                               timeline_id=(timeline_id or None)))
+
+    # GUI-03R4-R5: Close Gap + Batch Close Gaps endpoints.
+    @app.post("/tracks/close_gap")
+    def close_gap(req: CloseGapReq, timeline_id: str = "",
+                   sessionId: str = "", baseRevision: int = None):
+        """Close a single empty range on one track."""
+        def _do():
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            op = st.cmd.close_gap(
+                timeline_id=(timeline_id or None),
+                track_id=req.track_id,
+                start_frame=req.start_frame,
+                end_frame=req.end_frame,
+                why=req.why,
+            )
+            return {
+                "operation_id": op.operation_id,
+                "shifted_clips": len(op.before),
+                "track_id": req.track_id,
+            }
+        return guard(_check_rev(baseRevision, _do))
+
+    @app.post("/tracks/close_gaps_batch")
+    def close_gaps_batch(req: CloseGapsBatchReq, timeline_id: str = "",
+                          sessionId: str = "", baseRevision: int = None):
+        """Close every empty range on the named tracks."""
+        def _do():
+            if sessionId:
+                require_edit_right(st.core, sessionId)
+            ops = st.cmd.close_gaps_batch(
+                timeline_id=(timeline_id or None),
+                track_ids=req.track_ids,
+                why=req.why,
+            )
+            return {
+                "operation_ids": [o.operation_id for o in ops],
+                "track_count": len(ops),
+            }
+        return guard(_check_rev(baseRevision, _do))
 
     @app.post("/tracks/delete")
     def delete_track(req: DeleteTrackReq, timeline_id: str = "",
