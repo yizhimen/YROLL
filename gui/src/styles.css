@@ -79,7 +79,18 @@ body {
   min-height: 0;
 }
 .timeline-headers-spacer { height: 18px; flex-shrink: 0; border-bottom: 1px solid #2a2a2a; }
+/* GUI-03R4-R3: shared row geometry. The vertical dimensions of
+ * spacer, ruler spacer, track row, and tail live in JS
+ * (timeline-geometry.ts) so the same track_id maps to the same
+ * vertical position in BOTH the headers column and the content
+ * column. CSS provides fallback values; the inline `style` props
+ * win at runtime. */
+.timeline-headers-ruler-spacer { height: 26px; flex-shrink: 0; border-bottom: 1px solid #2a2a2a; }
+.timeline-headers-tail { flex-shrink: 0; }
 .track-label-row {
+  /* GUI-03R4-R3: track row height is controlled by
+   * timeline-geometry.ts (TRACK_ROW_HEIGHT = 56). The inline style
+   * wins; this CSS is a fallback for the pre-hydrate frame. */
   height: 56px; flex-shrink: 0;
   display: flex; flex-direction: column; gap: 2px;
   padding: 4px 6px; border-bottom: 1px solid #2a2a2a;

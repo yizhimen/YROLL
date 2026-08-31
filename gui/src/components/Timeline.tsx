@@ -24,6 +24,12 @@ import {
   playheadFrameToPixel,
   pxPerFrame,
 } from "../frames";
+import {
+  HEADERS_RULER_SPACER_HEIGHT,
+  HEADERS_SPACER_HEIGHT,
+  HEADERS_TAIL_HEIGHT,
+  TRACK_ROW_HEIGHT,
+} from "../timeline-geometry";
 import ClipBlock from "./ClipBlock";
 
 interface Props {
@@ -349,14 +355,29 @@ export default function Timeline({
       {/* GUI-03R3-W-D: width is now controlled by the `headerWidth`
           prop (App owns it + persists it in localStorage). The
           header column lives OUTSIDE the ContentViewport coord
-          space — resizing it does not shift frame 0. */}
+          space — resizing it does not shift frame 0.
+          GUI-03R4-R3: header column vertical structure mirrors the
+          content column via SHARED geometry constants
+          (timeline-geometry.ts) so the same track_id produces the
+          same vertical row in both columns. */}
       <div
         className="timeline-headers"
         ref={headersRef}
         style={{ width: headerWidth }}
       >
-        {/* Spacer above the tracks, matching the minimap height */}
-        <div className="timeline-headers-spacer" />
+        {/* Top spacer matches the minimap height (18px). */}
+        <div
+          className="timeline-headers-spacer"
+          style={{ height: HEADERS_SPACER_HEIGHT }}
+        />
+        {/* Ruler spacer (26px) — the content column has a sticky
+        // ruler between the minimap and the first track row; the
+        // header column needs an equivalent blank row so the first
+        // track label aligns with its content row. */}
+        <div
+          className="timeline-headers-ruler-spacer"
+          style={{ height: HEADERS_RULER_SPACER_HEIGHT }}
+        />
         {visibleTracks.map((track) => (
           <div
             key={track.track_id}
@@ -431,6 +452,15 @@ export default function Timeline({
             </div>
           </div>
         ))}
+        {/* Bottom tail (36px = 28 drop-zone + 4+4 margin) — the
+            content column has a `.drop-zone-new-track` AFTER the
+            last track row; the header column needs an equivalent
+            blank space so the last track label aligns with its
+            content row when fully scrolled. */}
+        <div
+          className="timeline-headers-tail"
+          style={{ height: HEADERS_TAIL_HEIGHT }}
+        />
       </div>
 
       {/* ── GUI-03R3-W-D: drag handle between header and content.
