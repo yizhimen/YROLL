@@ -287,6 +287,39 @@ Acceptance summary: `docs/GUI-03R5-NLE-Interaction-Viewer-Acceptance-v0.1.md`.
 
 **Manual pass status** ⏳ — Human verification pending on http://127.0.0.1:5180/ with backend on 8770. Canonical clean fixture PROTECTED via working-copy helper. Bundle hash: `gui/dist/assets/index-CFooX-sC.js` (built from HEAD = 0292801).
 
+### R5 Runtime Consistency Audit v0.2 ✅ (READ-ONLY; no code changes; docs/GUI-03R5-Runtime-Consistency-Audit-v0.2.md)
+
+Audit baseline = HEAD 1651e23. Mandate: stop feature work, produce runtime evidence before any code change.
+
+**Verdict**: runtime stack is internally consistent (backend code = HEAD, import path = repo, all 106 routes present, frontend bundle hash matches HEAD, built bundle sends correct field names). The user-reported "GET /timelines 404" and "asset add fails" complaints **could not be reproduced** against this stack — they were either transient or from a stale browser tab.
+
+**Two real bugs reproduced, both with concrete remediation:**
+
+1. **GUI: Track.hidden row-collapse bug** (`gui/src/components/Timeline.tsx:576, 811`)
+   - `display: track.hidden ? "none" : "flex"` collapses the entire row + header, contradicting R5 Decision 1 ("row stays visible; only preview participation suppressed").
+   - Fix outline (not applied): drop the `display` inline-style; add `.track-hidden` CSS opacity/italic rule; add regression vitest.
+
+2. **Core: `build_preview_plan` always reports `project_revision=0`** (`yroll/core/plan.py:143-146`)
+   - Reads `project.ui_status.base_revision`, but `project.ui_status` is **never assigned** anywhere in `yroll/`. Grep confirms no setter.
+   - Effect: plan response always `revision: 0`; `/sequence` and `/ui/status` say `1`. GUI's `usePreviewPlan` may treat the plan as stale and discard it → no layers render → black Preview.
+   - Fix outline (not applied): read `project.sequence.project_revision` (or have the server pass it in directly); add pytest pinning parity across `/sequence`, `/ui/status`, `/preview/plan`.
+
+**Two correct:**
+- `/clips/add_image` chain works end-to-end with valid sessionId (returns clip with allocator-chosen track_id). Without sessionId → 403 (correct).
+- Decision 5 gap toolbar: topbar 批量关闭间隙 button REMOVED (comment-only block at App.tsx:878). `onCloseGapsBatch` callback remains as dead code at App.tsx:521, no user-facing surface.
+
+**Informational (not blocking):**
+- Orphaned vite PID 23508 (started 2026-08-30) alongside PID 9000 (started 2026-08-31). Both bind 5173. Should be killed; not a code defect.
+- Subtitle text bytes are valid UTF-8 (shell GBK rendering looks like mojibake in this terminal — not a real bug).
+- API asymmetry: `/preview/at_frame` falls back to `active_timeline_id` when `timeline_id=""`; `/preview/plan` does NOT (returns empty plan). Intentional but worth documenting.
+
+**Recommended remediation order (pending user go-ahead):**
+1. GUI: Timeline.tsx `display:none` removal + CSS + vitest.
+2. Core: `build_preview_plan` revision source fix + pytest.
+3. GUI: vitest + Playwright for black-Playhead case.
+4. Cleanup: kill orphaned vite PID 23508; fold the two serve helpers into one canonical script.
+5. After 1-4 land + user manual-pass passes (6 checks), declare R5 closed. **No Publish Metadata / Timeline-local Revision / Keyframes / opacity work until then.**
+
 ### GUI-03R4.1 Human Editing Reliability ✅ (P0-1..P0-4 + P1-5..P1-7; vitest 248+2, pytest +23 new)
 
 ### GUI-03R2 Timeline Interaction Reliability v0.1 (commit c36764d, push origin ✅)
