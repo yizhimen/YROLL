@@ -1,6 +1,6 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + GUI-03R3-W-B ✅ + GUI-03R3-W-C ✅ + GUI-03R3-W-C Runtime Verification ✅ + GUI-03R3-W-D ✅ + GUI-03R4 NLE Editing Surface (R4-1..R4-7; 7 commits) + **GUI-03R4 HUV (Human Usability Validation)** ✅ + **GUI-03R4.1 Human Editing Reliability** ✅ — P0-1..P0-4 + P1-5..P1-7 all green；Stale Help UI fixed in W-D；404 follow-up recorded separately；Sanlihe fixture v10 hidden extent fixed via R4-2 + clean fixture v1 at 49.51s）
+## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + GUI-03R3-W-B ✅ + GUI-03R3-W-C ✅ + GUI-03R3-W-C Runtime Verification ✅ + GUI-03R3-W-D ✅ + GUI-03R4 NLE Editing Surface (R4-1..R4-7; 7 commits) + **GUI-03R4 HUV** ✅ + **GUI-03R4.1 Human Editing Reliability** ✅ + **GUI-03R5 NLE Interaction & Viewer Stabilization** ✅ (B1–B5 all green; 297 vitest + 695 pytest pass; 0 NEW tsc errors) + **R5 manual pass IN PROGRESS** ⏳ on http://127.0.0.1:5180/ (canonical clean fixture PROTECTED via working copy）
 
 ### GUI-03R4 HUV (Human Usability Validation) — ✅ PASSED via R4.1
 
@@ -261,8 +261,33 @@ The dialog describes **seconds** but the GUI is fully frame-native (GUI-02). Rec
 
 - **W-D (Track header semantic icons + resizable column)**: paused. Resume on user go-ahead.
 - **Stale Help dialog fix**: not implemented. Pure string change in App.tsx. Ship as a 1-line PR between any future batches.
+- **GUI-03R5 manual acceptance pass**: in progress on http://127.0.0.1:5180/. User is performing the 6-area human pass on clean Sanlihe. R5 is NOT yet declared closed. **Resume: confirm human pass complete, OR list defects that block closure.**
 
-### GUI-03R3-W-C Drop-Zone Wiring v0.1 (✅ pytest 648+2, vitest 203+2, tsc 0 NEW errors, commit d4c057e, push origin ✅)
+### GUI-03R5 NLE Interaction & Viewer Stabilization ✅ (B1–B5; vitest 297+2, pytest 695+0, tsc 0 NEW errors; commits 6215dda / 44ab79d / 2fc9c24 / df0b6f7 / 0292801)
+
+5 audit-locked decisions, 5 implementation batches. Per user
+instruction every batch reports separately: Automated / Browser /
+Human. Audit doc: `docs/GUI-03R5-NLE-Interaction-Viewer-Audit-v0.1.md`.
+Acceptance summary: `docs/GUI-03R5-NLE-Interaction-Viewer-Acceptance-v0.1.md`.
+
+**Decision 1 — Drag coordinate model**: pointer-only delta. `deltaFrame = roundHalfAwayFromZero((clientX - startX) / pxPerFrame)`. scrollLeft NEVER enters frame math. Auto-scroll is viewport state only.
+
+**Decision 2 — Session readiness**: CONNECTING / OBSERVE / EDIT state machine. `editorState` derived in `set()`; `ensureReady()` gate in `api.gated()`. Server's 403 "sessionId required" is now defense-in-depth — GUI never trips it.
+
+**Decision 3 — Viewer layout**: explicit 4 cells via `data-layer` markers (`viewer-container` / `viewer-toolbar` / `output-canvas` / `transport`). Timeline default 240, floor 160, ceiling 60% viewport.
+
+**Decision 4 — Multi-layer PiP**: bottom layer fills canvas; V2 = 30% PiP bottom-right; V3 = 20% PiP stacked above. Track-id badges on every layer. PRESENTATION-ONLY — never persisted to clip.transform.
+
+**Decision 5 — Contextual menus**: topbar `批量关闭间隙` button REMOVED. Right-click menus on gaps (close this / track-scope / all-visible) and track headers (close all + mute/lock/hide).
+
+**Files (R5)**:
+- New: `gui/src/session.ts` (EditorState), `gui/src/components/ContextMenu.tsx`, `gui/src/composite-multilayer.ts`, `gui/src/drag-autoscroll.ts` (R4.1, used), `docs/GUI-03R5-*.md`, `tests/test_multilayer_visual_proof.py` (R5 multi-layer proof), `gui/smoke/03r5-b1-session-drag.mjs`, `gui/smoke/serve-r5-manual.mjs`, `gui/smoke/static-with-proxy.mjs`
+- Modified: `gui/src/App.tsx`, `gui/src/components/ClipBlock.tsx`, `gui/src/components/PreviewPlayer.tsx`, `gui/src/components/Timeline.tsx`, `gui/src/api.ts`, `gui/src/session.ts`, `gui/src/test-setup.ts`, `yroll/core/manifest.py` (intent dict[str,Any])
+- Tests: `gui/src/session.state.test.ts` (16), `gui/src/drag-invariant.test.ts` (4), `gui/src/viewer-layout.test.ts` (5), `gui/src/composite-multilayer.test.ts` (12), `gui/src/context-menu.test.tsx` (12) — **+49 vitest**, all 695 pytest unchanged.
+
+**Manual pass status** ⏳ — Human verification pending on http://127.0.0.1:5180/ with backend on 8770. Canonical clean fixture PROTECTED via working-copy helper. Bundle hash: `gui/dist/assets/index-CFooX-sC.js` (built from HEAD = 0292801).
+
+### GUI-03R4.1 Human Editing Reliability ✅ (P0-1..P0-4 + P1-5..P1-7; vitest 248+2, pytest +23 new)
 
 ### GUI-03R2 Timeline Interaction Reliability v0.1 (commit c36764d, push origin ✅)
 Driven by real Sanlihe browser usage. Baseline = main@e601608. Audit-first (no code changes until measured), then fix in spec order, then verify.
