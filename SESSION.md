@@ -320,6 +320,51 @@ Audit baseline = HEAD 1651e23. Mandate: stop feature work, produce runtime evide
 4. Cleanup: kill orphaned vite PID 23508; fold the two serve helpers into one canonical script.
 5. After 1-4 land + user manual-pass passes (6 checks), declare R5 closed. **No Publish Metadata / Timeline-local Revision / Keyframes / opacity work until then.**
 
+### R5 Remediation #1 — Track.hidden row-collapse + preview plan revision parity ✅ (commit 2cf5116)
+
+Per user go-ahead, applied remediation #1 only. NO new features. NO `/timelines`/asset-drag/publish/timeline-local/keyframes/opacity/AI work.
+
+**Bug #1 — GUI** (`gui/src/components/Timeline.tsx:574, 814`):
+- Removed `display: track.hidden ? "none" : "flex"` from both rows.
+- Added `.track-row.track-hidden` (opacity 0.45 + diagonal hatch) and `.track-label-row.track-hidden` (opacity 0.55 + italic + strike label) in `gui/src/styles.css`.
+- New vitest `gui/src/components/Timeline.hidden.test.tsx` (5 tests): row + header exist with `.track-hidden`, no display:none, clip block rendered, restore tooltip, non-hidden tracks unaffected.
+
+**Bug #2 — Core** (`yroll/core/plan.py:126-150`, `yroll/server/app.py:1919-1927`):
+- `build_preview_plan` no longer reads `project.ui_status.base_revision` (was always None). Accepts optional `project_revision` parameter.
+- `/preview/plan` handler injects canonical `get_current_revision(st.core)` (same source as `/sequence` and mutation gate). No new revision source.
+- New pytest `tests/test_preview_plan_revision_parity.py` (6 tests): /sequence, /ui/status, /preview/plan all return same revision before AND after mutation; build_preview_plan honors the parameter; mutation→N+1→new plan→GUI-accepts (no silent discard).
+- New pytest `tests/test_hidden_track_preview_exclusion.py` (4 tests): hidden tracks' clips excluded from `composite_preview_at_frame`, `build_preview_plan`, `/preview/plan`, `/preview/at_frame` (Core-side invariant pin).
+
+**Live verification (after backend restart with new code, project `_sanlihe-r5-manual`)**:
+```
+GET /sequence → project_revision=2
+GET /preview/plan?timeline_id=main → project_revision=2  (was 0 before fix)
+GET /preview/at_frame?timeline_id=main&frame=500 → is_black=false, 2 visual layers, 1 subtitle
+```
+
+**New browser smoke** (`gui/smoke/03r5-runtime-consistency-fixes.mjs`):
+- 39/39 PASS against http://127.0.0.1:5180/ on `_sanlihe-r5-manual` (Chromium CDP :9222)
+- Section A: 4 hidden tracks (v2/v6/v8/v10) — header + content + `.track-hidden` + no display:none + clip rendered
+- Section B: seq.project_revision (2) == plan.project_revision (2); plan has 10 tracks + 5 subtitle ranges
+- Section C: `/preview/at_frame` at frame 500 returns is_black=false, 2 visual layers, 1 subtitle
+
+**Gates (automated)**:
+- pytest: **715 passed + 1 skipped** (+ 1 pre-existing failure `test_no_orphan_empty_tracks_in_projects_dir` confirmed via `git stash` to fail before my changes too; on-disk `_sanlihe-r5-manual` has empty a1/a2/a3/t2). My +10 new tests all pass.
+- vitest: **302 passed + 2 skipped** (was 297+2; +5 from new `Timeline.hidden.test.tsx`)
+- tsc: 0 NEW errors (2 pre-existing `Timeline.drag.test.ts` errors remain)
+
+**Files changed (8 files, +880 / −10)**:
+- `gui/src/components/Timeline.tsx` (display:none removal)
+- `gui/src/styles.css` (track-hidden rules)
+- `gui/src/components/Timeline.hidden.test.tsx` (NEW, 5 vitest)
+- `yroll/core/plan.py` (revision source)
+- `yroll/server/app.py` (handler injects canonical revision)
+- `tests/test_preview_plan_revision_parity.py` (NEW, 6 pytest)
+- `tests/test_hidden_track_preview_exclusion.py` (NEW, 4 pytest)
+- `gui/smoke/03r5-runtime-consistency-fixes.mjs` (NEW, browser smoke)
+
+**R5 still NOT declared closed** — human manual pass (6 checks: drag / session / multi-layer / play-scrub / contextual-menu / basic-editing-feel) on clean Sanlihe remains pending. No new feature batch starts until user confirms.
+
 ### GUI-03R4.1 Human Editing Reliability ✅ (P0-1..P0-4 + P1-5..P1-7; vitest 248+2, pytest +23 new)
 
 ### GUI-03R2 Timeline Interaction Reliability v0.1 (commit c36764d, push origin ✅)
