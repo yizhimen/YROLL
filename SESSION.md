@@ -1,6 +1,71 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + GUI-03R3-W-B ✅ + GUI-03R3-W-C ✅ + GUI-03R3-W-C Runtime Verification ✅ + **GUI-03R3-W-D ✅**；Stale Help UI fixed in W-D；404 follow-up recorded separately）
+## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + GUI-03R3-W-B ✅ + GUI-03R3-W-C ✅ + GUI-03R3-W-C Runtime Verification ✅ + GUI-03R3-W-D ✅ + **GUI-03R4 NLE Editing Surface ✅ (audit + R1..R7; 7 commits; pytest 683+1; vitest 217+2; 8/8 browser PASS)**；Stale Help UI fixed in W-D；404 follow-up recorded separately；Sanlihe fixture v10 hidden extent fixed via R4-2 + fit-content zoom 1→3 px/sec）
+
+### GUI-03R4 NLE Editing Surface ✅ (audit + R1..R7; 7 commits; pytest 683+1; vitest 217+2)
+
+| Batch | Title | Layer | Commit |
+|---|---|---|---|
+| R4 audit | Multi-layer Preview correctness + Geometry + Marquee + Gap + Viewer | — | (pre-existing doc) |
+| **R4-1** | **Multi-layer Preview correctness (P0)** | Core + GUI | `b3b2a89` |
+| **R4-2** | **Timeline extent + frame invariant (P0)** | Core + GUI | `04334ad` |
+| R4-3 | Unified Track Row Geometry (P1) | GUI | `d0abc9f` |
+| R4-4 | Marquee Selection (P1) | GUI | `2fffd20` |
+| R4-5 | Gap / Ripple editing (P1) | Core + GUI | `5bc5753` |
+| R4-6 | Output Viewer explicit dimensions + playhead marker | GUI | `8d7ddb9` |
+| R4-7 | Real Sanlihe browser acceptance (E2E smoke; 8/8 PASS) | Test | `a7ca5fb` |
+
+**R4-1 Multi-layer Preview correctness**:
+- `yroll/core/plan.py:build_preview_plan`: `layer_index` is now GLOBAL across all visual tracks (KIND_RANK + numeric-suffix order). Hidden tracks are SKIPPED (R4-1 + R4-2 invariant). Text/SUBTITLE tracks contribute only to `subtitle_texts_by_range`. Audio tracks keep per-track `layer_index`.
+- `yroll/core/frame_preview.py:composite_preview_at_frame`: same — hidden tracks excluded; visual_index assignment iterates tracks in stack order.
+- 11 new pytest cover V1-only / V2-only / V1+V2 / V1+V2+V3 / V2 hidden → V1 / upper-ending → lower-visible.
+
+**R4-2 Timeline extent + frame invariant**:
+- `Project.max_timeline_frame()` excludes hidden tracks (the Sanlihe audit's complaint that v10's 1368s tail dragged the Fit Content zoom out).
+- `ProjectCore.open()` runs `_apply_negative_start_repair()` on load: any persisted clip with `timeline_range.start < 0` is clamped to 0 (end preserved, auditable via one Operation per clamped clip). Idempotent — re-opening a project with no negative starts is a no-op.
+- `cmd.move_clip` at the Core layer rejects `new_timeline_start < 0` (R2 invariant).
+- App.tsx Fit Content (both initial load + manual button) uses the VISIBLE extent (max of clip.end across non-hidden tracks). Sanlihe Fit Content zoom: 1 → 3 px/sec.
+- 10 new pytest cover hidden-track extent, 4 historical negative-start clips, save+reload round-trip, clean projects produce no repair ops, Core-level guard rejects negative move.
+
+**R4-3 Unified Track Row Geometry**:
+- New `gui/src/timeline-geometry.ts`: single source of truth for TRACK_ROW_HEIGHT=56, MINIMAP_HEIGHT=18, RULER_HEIGHT=26, DROP_ZONE_HEIGHT=28, DROP_ZONE_VERTICAL_MARGIN=4. Derived: HEADERS_SPACER_HEIGHT (18), HEADERS_RULER_SPACER_HEIGHT (26), HEADERS_TAIL_HEIGHT (36).
+- Timeline.tsx: header column now renders `.timeline-headers-spacer` (18) + `.timeline-headers-ruler-spacer` (26, NEW) + [N × .track-label-row (56)] + `.timeline-headers-tail` (36, NEW). The same `track_id` maps to the same vertical row position in BOTH columns.
+- 5 new vitest pin the constants.
+
+**R4-4 Marquee Selection**:
+- Timeline.tsx: pointerdown on EMPTY `.track-content` (NOT on `.clip`; hit-test priority: Clip > Playhead/Ruler > Empty Track → marquee) starts a marquee. Window-level pointermove updates the rect; pointerup computes clip-bbox intersection and calls `onMarqueeSelect`. Esc cancels.
+- `computeMarqueeSelection()` is a pure helper: y-extent per track row (44 = 18 minimap + 26 ruler) + idx × 56; x-extent per clip's timeline_range × pxPerF.
+- App.tsx: `onMarqueeSelect` replaces or extends `selectedSet` based on additive flag (Ctrl/Cmd held during drag).
+
+**R4-5 Gap / Ripple editing**:
+- `cmd.close_gap(timeline_id, track_id, start_frame, end_frame)`: atomic Operation. Three cases for each clip on the track: (a) entirely before the gap → leave alone; (b) starts inside the gap → pull start to start_frame, keep duration; (c) starts at or after end_frame → shift left by (end - start). R2 invariant: new_start cannot go below 0. Refuses empty/negative gaps and unknown tracks.
+- `cmd.close_gaps_batch(timeline_id, track_ids)`: for each named track, find every empty range between consecutive clips and call `close_gap`. Returns one Operation per TRACK that had a gap.
+- Server: POST /tracks/close_gap, POST /tracks/close_gaps_batch.
+- GUI: right-click on empty `.track-content` finds the gap containing the click point and calls `onCloseGap`. Topbar "批量关闭间隙" button calls `onCloseGapsBatch` over visible tracks (with confirm).
+- Visual gap indicator: CSS diagonal hatch on `.track-content` (5% opacity, 1px stripe every 8px) — distinguishes real gaps from clips without making gaps look like clips.
+- 12 new pytest cover all the Core primitives + invariants.
+
+**R4-6 Output Viewer**:
+- PreviewPlayer.tsx: ResizeObserver-driven explicit dimensions replace CSS `aspectRatio` magic. Inner-dimension rule: longest side = min(stageWidth, stageHeight × aspect); other side = longest / aspect. A 16px inset on each side.
+- Aspect dropdown tooltips: "横屏 (YouTube / B站)" / "竖屏 (抖音 / 快手)" / "方形 (小红书 / 朋友圈)" / "传统电视" / "竖版传统".
+- Playhead-in-canvas marker: 1px vertical line at (playheadFrame / endFrame) × canvasWidth, color #ff5050. zIndex 9998. TimelineFrame remains the time authority.
+
+**R4-7 Real Sanlihe browser acceptance**:
+- gui/smoke/03r4-acceptance.mjs: end-to-end smoke with real Chromium CDP. Mixed backend-direct + browser-direct checks (the W-D proxy doesn't forward /preview, so /preview/plan + /preview/at_frame are verified directly).
+- **8/8 scenarios PASS**:
+  - A. /preview/plan layer_index globally unique across visual tracks (16 layers, 16 unique indices)
+  - B. /preview/plan excludes hidden tracks (Sanlihe v2/v6/v8/v10 hidden=True → not in plan)
+  - C. upper clip ending → lower visible at frame 250 (only V1 in /preview/at_frame; other tracks' short clips ended)
+  - D. /preview/at_frame at frame 250 → only V1 (combined upper-lower + hidden exclusion)
+  - E. visible extent ignores hidden tracks (608.5s vs hidden v10 at 1368.5s)
+  - F. project loads in browser (48 assets, 10 tracks)
+  - G. Spacebar toggles play state
+  - H. Fit Content computes sensible zoom (~3 px/sec on Sanlihe; visible extent, not the hidden v10 tail)
+
+**Regression**:
+- pytest: 683 passed + 1 skipped (was 650+1; +33 from R4: +11 R4-1, +10 R4-2, +12 R4-5).
+- vitest: 217 passed + 2 skipped (was 212+2; +5 R4-3).
+- tsc: 0 NEW errors (the 2 pre-existing Timeline.drag.test.ts errors remain).
 
 ### GUI-03R3-W-D Track Header UX v0.1 (✅ pytest 650+1, vitest 212+2, tsc 0 NEW errors, **17/17 browser PASS**, commit 44095c3, push origin ✅)
 
