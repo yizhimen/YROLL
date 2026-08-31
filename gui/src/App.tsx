@@ -483,6 +483,32 @@ export default function App() {
     return () => clearTimeout(t);
   }, [project, activeTimelineId]);
 
+  // GUI-03R4-R4: marquee selection — Timeline computes the hit set
+  // and passes it here; we either replace or extend selectedSet
+  // based on the additive flag (Ctrl/Cmd held during drag).
+  const onMarqueeSelect = (
+    newSelectedSet: Set<string>,
+    additive: boolean,
+  ) => {
+    if (additive) {
+      setSelectedSet((prev) => {
+        const next = new Set(prev);
+        for (const id of newSelectedSet) next.add(id);
+        return next;
+      });
+    } else {
+      setSelectedSet(new Set(newSelectedSet));
+    }
+    // Keep `selected` (the single-selection head) pointing at one
+    // member of the new set if non-empty.
+    const first = newSelectedSet.values().next().value as string | undefined;
+    setSelected(first ?? null);
+  };
+  const onMarqueeCancel = () => {
+    // Currently no-op (the marquee rect is owned by Timeline).
+    // Hook reserved for future "press Esc to clear selection" UX.
+  };
+
   // GUI-03R3-1A: drag payload log sink. The smoke script reads it
   // back via page.evaluate(...). Reset on each mount so tests
   // start with an empty log.
@@ -1590,6 +1616,9 @@ export default function App() {
         // Timeline can label the "below-tracks" drop zone correctly
         // (V/A/T). The Timeline never reads from a global drag state.
         draggingAssetKind={draggingAssetKind}
+        // GUI-03R4-R4: marquee selection callbacks.
+        onMarqueeSelect={onMarqueeSelect}
+        onMarqueeCancel={onMarqueeCancel}
         onSeek={seek}
         onSelect={(id, viaAi, ctrl) => {
           if (viaAi) {

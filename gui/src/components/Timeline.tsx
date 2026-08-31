@@ -59,6 +59,16 @@ interface Props {
   onHeaderWidthDelta?: (deltaPx: number) => void;
   onSeek: (frame: number) => void;
   onSelect: (clipId: string, viaAiZone: boolean, ctrl?: boolean) => void;
+  /** GUI-03R4-R4: marquee selection — pointer-drag on EMPTY track
+   *  area selects all clips whose bbox intersects the rect. App
+   *  receives the new set and either replaces (additive=false) or
+   *  extends (additive=true, Ctrl/Cmd held) selectedSet. */
+  onMarqueeSelect?: (
+    newSelectedSet: Set<string>,
+    additive: boolean,
+  ) => void;
+  /** GUI-03R4-R4: cancel any in-flight marquee (Esc key). */
+  onMarqueeCancel?: () => void;
   /** Pointermove preview. `newStartFrame` is an INTEGER TimelineFrame. */
   onDragMove: (clipId: string, newStartFrame: number, ghostSnapFrame?: number | null) => void;
   /** GUI-03R3-1E: ghost-snap frame per active drag, keyed by clipId.
@@ -119,6 +129,61 @@ const TRACK_ROLE: Record<string, string> = {
 const trackRoleLabel = (track: { track_id: string; kind: string }): string =>
   TRACK_ROLE[track.track_id] || ({ video: "视频", image: "图像",
     audio: "音频", text: "字幕", subtitle: "字幕" }[track.kind] || track.kind);
+
+// GUI-03R4-R4: marquee selection helper. Pure function — given a
+// marquee rect in .timeline-content coord space, return the set of
+// clip_ids whose bbox intersects the rect. Y-extent is per track
+// row; X-extent is per clip's timeline_range.
+//
+// HIT-TEST PRIORITY (per spec):
+//   Clip > Playhead/Ruler > Empty Track → marquee.
+// Pointer-down on a .clip is handled by ClipBlock (existing path);
+// this function only runs for marquee drags that started on
+// EMPTY track-content.
+interface MarqueeRect {
+  startX: number; startY: number;
+  currentX: number; currentY: number;
+  additive: boolean;
+}
+
+function computeMarqueeSelection(
+  m: MarqueeRect,
+  visibleTracks: ReadonlyArray<{
+    track_id: string; clip_ids: string[];
+  }>,
+  project: Project,
+  pxPerF: number,
+  seqFps: { num: number; den: number },
+): Set<string> {
+  const x1 = Math.min(m.startX, m.currentX);
+  const x2 = Math.max(m.startX, m.currentX);
+  const y1 = Math.min(m.startY, m.currentY);
+  const y2 = Math.max(m.startY, m.currentY);
+  const hit = new Set<string>();
+  // Y per track row in coord space: tracks start after the minimap
+  // (18px) + ruler (26px). Track N's top is 18 + 26 + N * 56,
+  // bottom is 18 + 26 + (N + 1) * 56.
+  for (const track of visibleTracks) {
+    // Index of this track in visibleTracks (top to bottom).
+    const idx = visibleTracks.findIndex((t) => t.track_id === track.track_id);
+    if (idx < 0) continue;
+    const trackTop = 18 + 26 + idx * 56;
+    const trackBottom = trackTop + 56;
+    // Does the marquee y-range intersect this track row?
+    if (y2 < trackTop || y1 > trackBottom) continue;
+    for (const cid of track.clip_ids) {
+      const c = project.clips[cid];
+      if (!c) continue;
+      const sFrame = c.timeline_range.start * seqFps.num / seqFps.den;
+      const eFrame = c.timeline_range.end * seqFps.num / seqFps.den;
+      const cx1 = sFrame * pxPerF;
+      const cx2 = eFrame * pxPerF;
+      if (cx2 < x1 || cx1 > x2) continue;
+      hit.add(cid);
+    }
+  }
+  return hit;
+}
 
 // GUI-03R3-W-D: semantic track-kind icons. Inline SVG so they
 // render identically across systems (emoji can vary). Three
@@ -189,6 +254,8 @@ export default function Timeline({
   onContentRef,
   onHeaderWidthDelta,
   onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onTrackMute, onTrackLock, onTrackHide, onAssetDrop, onAssetDropNewTrack,
+  onMarqueeSelect,
+  onMarqueeCancel,
   dragGhost,
   draggingAssetKind = null,
   showEmptyTracks = false,
@@ -231,6 +298,13 @@ export default function Timeline({
   const paneRef = useRef<HTMLDivElement | null>(null);   // .timeline-pane (outer flex container)
   const contentRef = useRef<HTMLDivElement | null>(null); // .timeline-content (SCROLLABLE; the coord space)
   const headersRef = useRef<HTMLDivElement | null>(null); // .timeline-headers (vertical-scroll-synced)
+  // GUI-03R4-R4: marquee selection state. Coordinates are in
+  // .timeline-content space (frame 0 = x=0). When set, a translucent
+  // rect is drawn and pointermove updates `currentX/currentY`. On
+  // pointerup we compute clip intersection and call onMarqueeSelect.
+  const [marquee, setMarquee] = useState<
+    { startX: number; startY: number; currentX: number; currentY: number;
+      additive: boolean } | null>(null);
   const [viewport, setViewport] = useState({ left: 0, width: 1 });
   // Sequence (canonical timebase) — provides fps for frame↔px math
   const seq = useProjectSequence();
@@ -616,6 +690,54 @@ export default function Timeline({
                 // track" intent to App.tsx (which calls add_clip
                 // with track_id = this row's id). Core preserves
                 // the track id and rejects overlap.
+                //
+                // GUI-03R4-R4: pointerdown on EMPTY track area
+                // (NOT on .clip — hit-test priority is clip first)
+                // starts a marquee selection. The marquee is
+                // tracked at the window level (pointermove/pointerup)
+                // so it survives the pointer leaving the row.
+                onPointerDown={(e) => {
+                  // Only left button, and only when the pointerdown
+                  // actually landed on the empty .track-content
+                  // (not on a child .clip — that path is handled
+                  // by ClipBlock's own onPointerDown which calls
+                  // onSelect + start drag).
+                  if (e.button !== 0) return;
+                  const target = e.target as HTMLElement;
+                  if (target !== e.currentTarget) return;
+                  const content = contentRef.current;
+                  if (!content) return;
+                  const rect = content.getBoundingClientRect();
+                  const x = e.clientX - rect.left + content.scrollLeft;
+                  const y = e.clientY - rect.top + content.scrollTop;
+                  e.preventDefault();
+                  setMarquee({
+                    startX: x, startY: y,
+                    currentX: x, currentY: y,
+                    additive: e.ctrlKey || e.metaKey,
+                  });
+                  const move = (ev: PointerEvent) => {
+                    const cx = ev.clientX - rect.left + content.scrollLeft;
+                    const cy = ev.clientY - rect.top + content.scrollTop;
+                    setMarquee((m) => m ? { ...m, currentX: cx, currentY: cy } : m);
+                  };
+                  const up = () => {
+                    window.removeEventListener("pointermove", move);
+                    window.removeEventListener("pointerup", up);
+                    // Commit the marquee via setMarquee callback
+                    // (the actual intersection happens here).
+                    setMarquee((m) => {
+                      if (m && onMarqueeSelect) {
+                        const hit = computeMarqueeSelection(
+                          m, visibleTracks, project, pxPerF, seq.fps);
+                        onMarqueeSelect(hit, m.additive);
+                      }
+                      return null;
+                    });
+                  };
+                  window.addEventListener("pointermove", move);
+                  window.addEventListener("pointerup", up);
+                }}
                 onDragOver={(e) => {
                   if (e.dataTransfer.types.includes("text/yroll-asset")) {
                     e.preventDefault();
@@ -750,6 +872,32 @@ export default function Timeline({
         {/* ONE absolute PlayheadOverlay — spans ruler + all tracks.
             pointer-events: none. position = canonical frameToPixel. */}
         <div className="playhead-overlay" style={{ left: playheadX }} />
+
+        {/* GUI-03R4-R4: marquee rectangle. Drawn inside
+            .timeline-content (which has the coord space). The rect
+            uses the same y-offsets as the track rows
+            (R3 row geometry) so the visual matches the hit-test. */}
+        {marquee && (() => {
+          const x1 = Math.min(marquee.startX, marquee.currentX);
+          const y1 = Math.min(marquee.startY, marquee.currentY);
+          const x2 = Math.max(marquee.startX, marquee.currentX);
+          const y2 = Math.max(marquee.startY, marquee.currentY);
+          return (
+            <div
+              className="marquee-rect"
+              data-testid="marquee-rect"
+              style={{
+                position: "absolute",
+                left: x1, top: y1,
+                width: x2 - x1, height: y2 - y1,
+                border: "1px dashed #ffd479",
+                background: "rgba(255, 212, 121, 0.10)",
+                pointerEvents: "none",
+                zIndex: 8,
+              }}
+            />
+          );
+        })()}
       </div>
     </div>
   );
