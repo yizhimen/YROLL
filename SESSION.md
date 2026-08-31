@@ -1,6 +1,6 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + **GUI-03R3-W-A Keyboard bugs + Selection-level Delete v0.1 ✅**；Sanlihe manual smoke 待补）
+## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + **GUI-03R3-W-B Track Auto-Create / Auto-Delete ✅**；Sanlihe browser smoke 待补）
 
 ### GUI-03R2 Timeline Interaction Reliability v0.1 (commit c36764d, push origin ✅)
 Driven by real Sanlihe browser usage. Baseline = main@e601608. Audit-first (no code changes until measured), then fix in spec order, then verify.
@@ -259,6 +259,63 @@ Baseline: baf8ed6 (post-03R3-1E)。Audit 文档：`docs/GUI-03R3-2-AUDIT.md`。�
 修改文件：
 - `docs/GUI-03R3-2-AUDIT.md` — 完整 audit 报告
 - `gui/smoke/03r3-2-audit.mjs` — 测量脚本（Playwright + CDP）
+
+### GUI-03R3-W-B Track Auto-Create / Auto-Delete v0.1 (✅ pytest 648+2, vitest 200+2, tsc 0 NEW errors, commit b04265f, push origin ✅)
+Baseline: 03R3-W-A (eac4a87). Plan: `docs/GUI-03R3-Implementation-Plan-v0.1.md` §3.
+
+**Architectural change**: flipped the long-pinned invariant `tl.tracks` may contain empty tracks. The new invariant is `for t in tl.tracks: len(t.clip_ids) >= 1`. Empty tracks don't persist as user-facing structure. The migration is enforced **atomically with the originating mutation** (no separate "cleanup" Operation) and **at load time** for legacy projects.
+
+**Core layer (yroll/core/)**:
+- `commands.py`:
+  - `_cleanup_empty_tracks(tl, except_track_ids=())` private helper — never renumbers remaining tracks. Returns list of removed track ids.
+  - `delete_track(track_id, ...)` explicit public API — refuses with `CommandError("track not found: ...")` on unknown track_id (distinguishes from internal cleanup's silent idempotency). Refuses with "still has N clip(s)" on non-empty.
+  - `ensure_track_for_drop(asset_type, prefer_kind=None, insert_after_track_id=None, tl_start_frame=None, tl_end_frame=None, ...)` — takes STRUCTURAL INTENT ONLY, no pixel coordinates. GUI resolves pointer geometry into semantic intent before calling.
+  - Wired `_cleanup_empty_tracks` into `remove_clip`, `move_clip`, `ripple_delete_clip`, `delete_selection`. The removed track ids land in the Operation's `after.removed_tracks` (backwards-compatible).
+  - `remove_clip` captures the original track's state in `before["removed_track"]` so `_apply_inverse` can restore it on revert (one user intent = one Operation).
+- `manifest.py`:
+  - `ASSET_TYPE_TO_TRACK_KINDS` changed from `set[str]` to `tuple[str, ...]`. Sets have hash-order iteration (non-deterministic); tuples give stable "preferred kind first" fallback. `subtitle → ("subtitle", "text")`, `text → ("text", "subtitle")`. Documented and pinned.
+- `project.py`:
+  - `ProjectCore.open()` runs a load-time migration: removes empty tracks from every Timeline, then `save_state()` if any were removed. Idempotent. Pre-W-B projects on disk (with old `ensure_default_tracks` empties) self-heal on next load.
+
+**Server (yroll/server/app.py)**:
+- `POST /tracks/delete` — wraps `cmd.delete_track`. Rejects with 400 on unknown/non-empty track.
+- `POST /tracks/ensure_for_drop` — wraps `cmd.ensure_track_for_drop`. Returns the resolved Track JSON.
+
+**Tests** (33 new pytest):
+- `tests/test_track_auto_delete.py` (10): remove / move / ripple / multi-path / explicit-delete / unknown-id / private / revert / no-cleanup-when-non-empty.
+- `tests/test_track_id_stability.py` (8): V1/V2/V3 → delete V2 → V1/V3 keep ids; next new visual reuses V2; explicit delete preserves outer ids; cross-track move preserves outer ids; batch delete preserves non-empty ids; unknown-id raises; non-empty refuses; repeated insert_after creates sequential ids.
+- `tests/test_ensure_track_for_drop.py` (10): image/audio/subtitle on empty Timeline → v1/a1/t1; insert_after creates new; prefer_kind honored / ignored when disallowed; unknown asset type raises; unknown anchor raises; idempotent; tl_start/tl_end used for overlap.
+- `tests/test_no_orphan_empty_tracks.py` (5): **static guard** scanning every project under `projects/`; legacy load; legacy cleaned on load; spot-check cleanup on every mutator path; `add_track` is not followed by cleanup (explicit user action).
+
+**Existing tests updated for the flipped invariant**:
+- `test_track_allocation.py`: `remove_all_clips_keeps_tracks_in_core` → `remove_all_clips_auto_removes_track`; asset_type_to_kinds_map updated for tuple; `test_track_role_optional_and_round_trips` adds a clip so the test track survives migration.
+- `test_core.py::test_move_and_cross_track` updated for cross-track auto-delete.
+- `test_cross_track_link.py::test_p01_cross_track_move` updated for text-vs-subtitle kind lookup.
+- `test_timeline_migration.py::test_existing_legacy_fixture_loads_clean` updated for load-time cleanup; `test_timeline_local_state_isolated` adds clips to test tracks.
+
+**Project migrations** (one-time, on-disk):
+- `projects/jdz-chaishao/current.json`: 8 empty tracks → 5 (non-empty)
+- `projects/sanlihe-story/current.json`: 8 empty tracks → 2 (non-empty)
+- `projects/sanlihe-slice-30s/current.json`: 22 empty tracks → 0 (gitignored — load-time migration handles fresh reads)
+
+**Regression**:
+- pytest **648 passed + 2 skipped** (was 615; +33 new tests)
+- vitest **200 passed + 2 skipped** (unchanged — GUI not touched in W-B)
+- tsc **0 NEW errors** (the 2 pre-existing `Timeline.drag.test.ts` errors remain; W-B does not touch them)
+
+**Invariants protected**:
+- `for t in tl.tracks: len(t.clip_ids) >= 1` — pinned by `test_no_orphan_empty_tracks.py` static guard scanning every project under `projects/`.
+- Track ids are stable across auto-delete (V1/V2/V3 → V1/V3 stays V1/V3).
+- One user intent = one Core Operation (cleanup folded into the originating Operation).
+- `delete_track` distinguishes internal cleanup idempotency from explicit public deletion (unknown track_id raises clear error).
+- `ensure_track_for_drop` consumes semantic placement intent only, never GUI pixel coordinates.
+
+**Browser smoke**: Sanlihe project loads cleanly through `ProjectCore.open()` with 22 tracks (no empty). Existing `gui/smoke/03r3-sanlihe.mjs` can be re-run by the user to verify in-browser behavior; W-B's Core changes are exercised by the existing smoke scenarios that add/remove clips.
+
+**Known gaps after this batch** (out of W-B scope):
+- GUI drop handler still uses the old `onDrop → add_clip` path (W-C will switch to `ensure_track_for_drop` with the new `insert_after_track_id` semantic).
+- Track header column is still 80px (W-D).
+- Close Gap / Batch Close Gaps (W-G).
 
 ### GUI-03R3-W-A Keyboard bugs + Selection-level Delete v0.1 (✅ pytest 615+2, vitest 200+2, tsc clean, commit ff5125a, push origin ✅)
 Baseline: 03R3-2 (bd088af). Audit: `docs/GUI-03R3-Workspace-Reality-Audit-v0.2.md`. Plan: `docs/GUI-03R3-Implementation-Plan-v0.1.md` (with 6 corrections applied per user feedback).
