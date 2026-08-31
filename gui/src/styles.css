@@ -64,7 +64,12 @@ body {
   min-height: 0;
 }
 .timeline-headers {
-  flex-shrink: 0; width: 80px;
+  /* GUI-03R3-W-D: the column width is controlled by App.tsx
+   * (clamp 80–300, default 160, persisted in localStorage) via
+   * the inline `style={{ width: headerWidth }}` on the element.
+   * The CSS `width` here is only a fallback for the pre-hydrate
+   * first paint. */
+  flex-shrink: 0; width: 160px;
   background: #1c1c1c; border-right: 1px solid #2a2a2a;
   display: flex; flex-direction: column;
   /* GUI-03R3-2 P0-3: vertical scroll for inspecting lower tracks.
@@ -82,27 +87,52 @@ body {
 }
 .track-label-title {
   font-size: 11px; color: #ccc;
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 5px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-/* GUI-03R3-2 P1-3: track kind badge + compact id. */
-.track-kind-badge {
-  display: inline-block;
-  padding: 0 4px; border-radius: 3px; font-size: 10px;
-  background: #2a2a2a; color: #ddd;
+/* GUI-03R3-W-D: semantic track kind icon (inline SVG).
+ * Replaces the old text-only .track-kind-badge. Color is the
+ * only kind-driven attribute; the shape is fixed per kind. */
+.track-kind-icon {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  width: 16px; height: 16px; flex-shrink: 0;
+  border-radius: 3px;
+  background: #232323;
+  color: #999;
 }
-.track-label-row .track-id { color: #888; font-size: 10px; }
+.track-kind-icon.kind-text,
+.track-kind-icon.kind-subtitle { color: #ffd479; }   /* 字幕 — yellow */
+.track-kind-icon.kind-video,
+.track-kind-icon.kind-image { color: #79b8ff; }       /* 视频/图像 — blue */
+.track-kind-icon.kind-audio { color: #79e0a0; }      /* 音频 — green */
+/* Legacy badge kept as a no-op fallback so any stray reference
+ * in markup doesn't render as raw text. */
+.track-kind-badge { display: none; }
+/* GUI-03R3-W-D: role label (主画面 / B-roll / 旁白 / 字幕 / ...).
+ * Distinct from the kind icon so the user sees both the SHAPE
+ * and the WORD. */
+.track-role-label {
+  color: #ccc; font-size: 11px; font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis;
+  min-width: 0;
+}
+.track-label-row .track-id { color: #888; font-size: 10px; flex-shrink: 0; }
 
 .track-label-buttons {
   display: flex; gap: 2px; flex-wrap: wrap;
-  /* Hover-reveal: hidden until the row is hovered/focused. */
-  opacity: 0;
+  /* GUI-03R3-W-D: always visible at REDUCED opacity so the user
+   * can see the current state without hovering. Hover/focus
+   * lifts opacity to 1.0. */
+  opacity: 0.4;
   transition: opacity 80ms ease;
 }
 .track-label-row:hover .track-label-buttons,
 .track-label-row:focus-within .track-label-buttons { opacity: 1; }
 
-/* GUI-03R3-2 P1-3: compact icon-only buttons. */
+/* GUI-03R3-2 P1-3: compact icon-only buttons.
+ * GUI-03R3-W-D: width accommodates the new SVG-only eye icon
+ * (no emoji glyph width variance). */
 .track-icon-btn {
   background: transparent; border: 1px solid transparent; color: #999;
   width: 22px; height: 20px; padding: 0; border-radius: 3px;

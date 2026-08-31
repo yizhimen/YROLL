@@ -80,6 +80,20 @@ def test_arrow_up_down_jump_to_boundary():
     assert down.params["direction"] == 1, "ArrowDown should mean 'next boundary'"
 
 
+# ---------------------------------------------------------------------------
+# GUI-03R3-W-D: Home centers the playhead in the ContentViewport. The
+# binding is GUI-local (no Core mutation, no /keyboard/execute endpoint);
+# it lives in the keymap so the Help dialog can derive its labels from
+# KEY_TABLE without inventing a second shortcut definition.
+# ---------------------------------------------------------------------------
+
+def test_home_centers_playhead():
+    h = lookup_key("Home")
+    assert h is not None, "Home binding missing from keymap"
+    assert h.mutation_op == "_center_playhead"
+    assert h.description == "center playhead in viewport"
+
+
 def test_describe_keymap_includes_all_keys():
     km = describe_keymap()
     keys = {entry["key"] for entry in km}
@@ -87,7 +101,8 @@ def test_describe_keymap_includes_all_keys():
     for k in ["J", "K", "L", "Shift+J", "Shift+L", "I", "O",
               "S", "Delete", "Shift+Delete", "ArrowLeft", "ArrowRight",
               "Shift+ArrowLeft", "Shift+ArrowRight", "Space",
-              "ArrowUp", "ArrowDown"]:  # GUI-03R3-W-A.2: added
+              "ArrowUp", "ArrowDown",
+              "Home"]:  # GUI-03R3-W-D: added (center playhead)
         assert k in keys, f"missing key in keymap: {k}"
 
 

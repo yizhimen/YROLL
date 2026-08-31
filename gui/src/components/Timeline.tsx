@@ -35,8 +35,22 @@ interface Props {
   inPoint?: number | null;
   outPoint?: number | null;
   height?: number;
+  /** GUI-03R3-W-D: pixel width of the LEFT track-header column.
+   *  Persisted in localStorage by App.tsx. Range 80–300, default 160.
+   *  Resizing this column does NOT alter the Timeline Content Origin
+   *  (frame 0 stays at x=0 inside .timeline-content); it only changes
+   *  the physical width of the OUTSIDE-coord-space label column. */
+  headerWidth?: number;
   snapMode?: "always" | "alt" | "off";
   highlightRel?: boolean;
+  /** GUI-03R3-W-D: callback that exposes the .timeline-content
+   *  element to App.tsx so the keyboard dispatcher can scroll the
+   *  ContentViewport (Home = center playhead). The Content Origin
+   *  (frame 0 = x=0) is preserved — this only adjusts scrollLeft. */
+  onContentRef?: (el: HTMLDivElement | null) => void;
+  /** GUI-03R3-W-D: resize-handle drag delta. App owns the width
+   *  (clamp + persist in localStorage). Range 80–300px. */
+  onHeaderWidthDelta?: (deltaPx: number) => void;
   onSeek: (frame: number) => void;
   onSelect: (clipId: string, viaAiZone: boolean, ctrl?: boolean) => void;
   /** Pointermove preview. `newStartFrame` is an INTEGER TimelineFrame. */
@@ -100,11 +114,74 @@ const trackRoleLabel = (track: { track_id: string; kind: string }): string =>
   TRACK_ROLE[track.track_id] || ({ video: "视频", image: "图像",
     audio: "音频", text: "字幕", subtitle: "字幕" }[track.kind] || track.kind);
 
+// GUI-03R3-W-D: semantic track-kind icons. Inline SVG so they
+// render identically across systems (emoji can vary). Three
+// semantic shapes:
+//   text / subtitle → "T" inside a rounded square (the standard
+//     "text track" glyph in NLEs).
+//   video / image → triangle "play" (visual track, whether the
+//     underlying asset is video or image).
+//   audio → music note (audio track).
+const TrackKindIcon = ({ kind }: { kind: string }) => {
+  const k = kind;
+  if (k === "text" || k === "subtitle") {
+    return (
+      <svg viewBox="0 0 16 16" width="14" height="14"
+        aria-label="字幕轨" role="img"
+        data-track-kind-icon="text">
+        <rect x="1" y="1" width="14" height="14" rx="2" ry="2"
+          fill="none" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M5 4.5h6 M8 4.5v8 M5.5 11.5l2.5 -2 2.5 2"
+          fill="none" stroke="currentColor" strokeWidth="1.4"
+          strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (k === "video" || k === "image") {
+    return (
+      <svg viewBox="0 0 16 16" width="14" height="14"
+        aria-label="视频轨" role="img"
+        data-track-kind-icon="video">
+        <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" ry="1.5"
+          fill="none" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M6.5 5.5 L11 8 L6.5 10.5 Z"
+          fill="currentColor" />
+      </svg>
+    );
+  }
+  if (k === "audio") {
+    return (
+      <svg viewBox="0 0 16 16" width="14" height="14"
+        aria-label="音频轨" role="img"
+        data-track-kind-icon="audio">
+        <path d="M6 12V4l6-1v8"
+          fill="none" stroke="currentColor" strokeWidth="1.4"
+          strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx="4.5" cy="12" r="1.8"
+          fill="none" stroke="currentColor" strokeWidth="1.4" />
+        <circle cx="10.5" cy="11" r="1.8"
+          fill="none" stroke="currentColor" strokeWidth="1.4" />
+      </svg>
+    );
+  }
+  // Unknown kind: render a generic dot so the row never collapses.
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14"
+      aria-label={kind} role="img"
+      data-track-kind-icon="unknown">
+      <circle cx="8" cy="8" r="3" fill="currentColor" />
+    </svg>
+  );
+};
+
 export default function Timeline({
   project, selectedIds, playheadFrame, pxPerSec, selRange, inPoint, outPoint,
   height = 240,
+  headerWidth = 160,
   snapMode = "always",
   highlightRel = false,
+  onContentRef,
+  onHeaderWidthDelta,
   onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onTrackMute, onTrackLock, onTrackHide, onAssetDrop, onAssetDropNewTrack,
   dragGhost,
   draggingAssetKind = null,
@@ -269,7 +346,15 @@ export default function Timeline({
     <div className="timeline-pane" ref={paneRef} onWheel={onWheel}
       style={{ height, flexShrink: 0 }}>
       {/* ── LEFT STICKY: track-name headers (OUTSIDE coord space) ─────────── */}
-      <div className="timeline-headers" ref={headersRef}>
+      {/* GUI-03R3-W-D: width is now controlled by the `headerWidth`
+          prop (App owns it + persists it in localStorage). The
+          header column lives OUTSIDE the ContentViewport coord
+          space — resizing it does not shift frame 0. */}
+      <div
+        className="timeline-headers"
+        ref={headersRef}
+        style={{ width: headerWidth }}
+      >
         {/* Spacer above the tracks, matching the minimap height */}
         <div className="timeline-headers-spacer" />
         {visibleTracks.map((track) => (
@@ -280,12 +365,25 @@ export default function Timeline({
             style={{ display: track.hidden ? "none" : "flex" }}
           >
             <div className="track-label-title">
-              <span className="track-kind-badge">{trackRoleLabel(track)}</span>
+              {/* GUI-03R3-W-D: semantic kind icon + track id +
+                  role label. The icon is an inline SVG so it
+                  renders identically across systems. Color is
+                  driven by `kind` (text/subtitle → yellow,
+                  video/image → blue, audio → green) so the user
+                  can scan track kinds at a glance. */}
+              <span className={`track-kind-icon kind-${track.kind}`}>
+                <TrackKindIcon kind={track.kind} />
+              </span>
               <span className="track-id">{track.track_id}</span>
+              <span className="track-role-label">{trackRoleLabel(track)}</span>
             </div>
-            {/* GUI-03R3-2 P1-3: compact icon-only controls. Hover the
-                track-label row to reveal the controls (default
-                hidden). No "Delete Track" in this batch. */}
+            {/* GUI-03R3-W-D: mute/lock/visibility are ALWAYS
+                visible at reduced opacity so the user can see
+                the current state without hovering. Hover/focus
+                lifts the opacity to 1.0. Visibility uses an eye
+                icon (not a prohibition sign) so "currently
+                visible" reads as 👁 and "currently hidden" reads
+                as 👁‍🗨 / "hide". */}
             <div className="track-label-buttons">
               {track.kind !== "text" && (
                 <button
@@ -311,15 +409,77 @@ export default function Timeline({
                 onClick={() => onTrackHide?.(track.track_id, !track.hidden)}
                 aria-label="hide"
               >
-                {track.hidden ? "👁" : "🚫"}
+                {/* GUI-03R3-W-D: eye icon (open vs crossed-out),
+                    never a prohibition sign. The open eye means
+                    "currently visible — click to hide"; the
+                    crossed-out eye means "currently hidden —
+                    click to show". Inline SVG for cross-system
+                    consistency. */}
+                <svg viewBox="0 0 16 16" width="14" height="14"
+                  aria-hidden="true" data-visibility={track.hidden ? "hidden" : "visible"}>
+                  <path d="M1.5 8 C3.5 4.5 5.5 3 8 3 C10.5 3 12.5 4.5 14.5 8 C12.5 11.5 10.5 13 8 13 C5.5 13 3.5 11.5 1.5 8 Z"
+                    fill="none" stroke="currentColor" strokeWidth="1.2"
+                    strokeLinejoin="round" />
+                  <circle cx="8" cy="8" r="2" fill="currentColor" />
+                  {track.hidden && (
+                    <path d="M2 2 L14 14"
+                      stroke="currentColor" strokeWidth="1.4"
+                      strokeLinecap="round" />
+                  )}
+                </svg>
               </button>
             </div>
           </div>
         ))}
       </div>
 
+      {/* ── GUI-03R3-W-D: drag handle between header and content.
+          Resizes the OUTSIDE-coord-space label column only. Frame 0
+          stays at x=0 inside .timeline-content (Content Origin
+          invariant preserved). Range 80–300px enforced by App. */}
+      {onHeaderWidthDelta && (
+        <div
+          className="resize-handle vertical"
+          onPointerDown={(e) => {
+            // Capture the element up-front. The native pointerup
+            // listener we register on `window` outlives any React
+            // re-render of this element; `e.currentTarget` may
+            // already be null by the time it fires.
+            const el = e.currentTarget as HTMLElement;
+            let lastX = e.clientX;
+            el.classList.add("hover");
+            document.body.style.cursor = "col-resize";
+            document.body.style.userSelect = "none";
+            const onMove = (ev: PointerEvent) => {
+              const delta = ev.clientX - lastX;
+              lastX = ev.clientX;
+              onHeaderWidthDelta(delta);
+              ev.preventDefault();
+            };
+            const onUp = () => {
+              el.classList.remove("hover");
+              document.body.style.cursor = "";
+              document.body.style.userSelect = "";
+              window.removeEventListener("pointermove", onMove);
+              window.removeEventListener("pointerup", onUp);
+            };
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp);
+          }}
+          title="拖动调整轨道标题列宽度（80–300px）"
+        />
+      )}
+
       {/* ── RIGHT: ContentViewport (scrollable; frame 0 = x=0) ─────────────── */}
-      <div className="timeline-content" ref={contentRef} onScroll={syncViewport}>
+      <div className="timeline-content" ref={(el) => {
+        // GUI-03R3-W-D: expose the .timeline-content element to App
+        // so the keyboard dispatcher (Home = _center_playhead) can
+        // scroll the ContentViewport. The element's geometry is
+        // identical to before — frame 0 stays at x=0; we only
+        // hand the element out, not transform it.
+        contentRef.current = el;
+        onContentRef?.(el);
+      }} onScroll={syncViewport}>
         {/* Minimap: click/drag to jump. Top of ContentViewport. */}
         <div
           className="minimap"

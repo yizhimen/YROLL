@@ -247,3 +247,44 @@ describe("W-A.2 keymap contract for Delete / Shift+Delete / Space / ↑↓", () 
     expect((down?.params as { direction?: number })?.direction).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// GUI-03R3-W-D: Home → _center_playhead. The Help dialog derives its
+// labels from this binding so we pin the on-the-wire contract here.
+// The binding is GUI-local (no Core mutation, no /keyboard/execute
+// endpoint); the keymap is the single source of truth.
+// ---------------------------------------------------------------------------
+describe("W-D keymap contract for Home (center playhead)", () => {
+  const keymap = () => ({
+    bindings: [
+      { key: "Home", description: "center playhead in viewport",
+        mutation_op: "_center_playhead", params: {} },
+    ],
+  });
+
+  it("Home → mutation_op=_center_playhead, no params", async () => {
+    vi.mocked(api.getKeymap).mockResolvedValueOnce(keymap());
+    const { result } = renderHook(() => useCoreKeymap());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const h = result.current.find((a) => a.key === "Home");
+    expect(h).toBeTruthy();
+    expect(h?.name).toBe("_center_playhead");
+    expect(h?.params).toEqual({});
+  });
+
+  it("Home is a local action (deltaFrames=0, no Core mutation)", async () => {
+    vi.mocked(api.getKeymap).mockResolvedValueOnce(keymap());
+    const { result } = renderHook(() => useCoreKeymap());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const h = result.current.find((a) => a.key === "Home");
+    // The binding does NOT nudge the playhead; it only scrolls the
+    // ContentViewport. deltaFrames stays 0.
+    expect(h?.deltaFrames).toBe(0);
+  });
+});

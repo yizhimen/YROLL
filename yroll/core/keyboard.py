@@ -18,6 +18,7 @@ Bindings:
   ← / →          nudge playhead by 1 frame
   Shift+← / →    nudge playhead by 10 frames
   ↑ / ↓          jump to next/prev clip boundary
+  Home           center playhead in viewport (GUI-local scroll)
 
 Inputs are always (selection, project_state, playhead_frame) — a pure
 function so the GUI can preview the action before commit.
@@ -101,6 +102,14 @@ KEY_TABLE: dict[str, KeyboardAction] = {
     "ArrowDown": KeyboardAction(
         "ArrowDown", "jump to next clip boundary",
         "_nudge_playhead_boundary", {"direction": +1}),
+    # GUI-03R3-W-D: Home centers the playhead in the visible
+    # ContentViewport. The action is GUI-local (no Core mutation,
+    # no /keyboard/execute endpoint); the binding exists so the
+    # keymap is the single source of truth for shortcut labels
+    # (the Help dialog derives its rows from KEY_TABLE).
+    "Home": KeyboardAction(
+        "Home", "center playhead in viewport",
+        "_center_playhead", {}),
 }
 
 

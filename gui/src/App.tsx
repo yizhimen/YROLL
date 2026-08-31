@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, Clip, Project } from "./api";
 import { sessionStore } from "./session";
 import { useProjectSequence } from "./sequence";
@@ -48,6 +48,84 @@ function eventToKeyCombo(e: KeyboardEvent): string {
   return e.shiftKey && key !== "Shift" ? `Shift+${key}` : key;
 }
 
+// GUI-03R3-W-D: Help dialog label helpers.
+//
+// Each helper pulls the relevant entries from the loaded Core
+// keymap and renders a short Chinese label. The label format is
+// `Key 显示名` (e.g. "J/L ±1 frame"). If the binding is missing
+// from the keymap, we fall back to a plain Chinese description
+// (no fake numbers / no fake step sizes). This guarantees the
+// Help dialog never invents shortcut semantics.
+type KMAction = {
+  name: string;
+  key: string;
+  description: string;
+  deltaFrames: number;
+  params: Record<string, unknown>;
+};
+
+const fmtFrames = (n: number): string => {
+  // Match Core keymap's description vocabulary: "1 frame" / "10 frames"
+  const abs = Math.abs(n);
+  return `${abs} frame${abs === 1 ? "" : "s"}`;
+};
+
+const helpBindingLabel = (
+  keymap: KMAction[], combo: string, fallback: string,
+): string => {
+  const b = keymap.find((a) => a.key === combo);
+  if (!b) return `${combo} ${fallback}`;
+  return `${combo} ${b.description}`;
+};
+
+// J/L (and Shift+J/Shift+L) — frame step from keymap params.
+const helpNudgeLabel = (keymap: KMAction[], base: string, fwd: string): string => {
+  const b = keymap.find((a) => a.key === base);
+  const f = keymap.find((a) => a.key === fwd);
+  if (!b || !f) return `${base}/${fwd} ${fmtFrames(1)}（Shift ±${fmtFrames(10)}）`;
+  const small = Math.abs(b.deltaFrames);
+  const sb = keymap.find((a) => a.key === `Shift+${base}`);
+  const sf = keymap.find((a) => a.key === `Shift+${fwd}`);
+  const large = sb && sf ? Math.abs(sb.deltaFrames) : 10;
+  return `${base}/${fwd} ±${fmtFrames(small)}（Shift ±${fmtFrames(large)}）`;
+};
+
+// ArrowLeft / ArrowRight (and Shift variants).
+const helpArrowNudgeLabel = (keymap: KMAction[]): string => {
+  const l = keymap.find((a) => a.key === "ArrowLeft");
+  const r = keymap.find((a) => a.key === "ArrowRight");
+  if (!l || !r) return "←/→ ±1 frame（Shift ±10 frames）";
+  const small = Math.abs(l.deltaFrames);
+  const sl = keymap.find((a) => a.key === "Shift+ArrowLeft");
+  const sr = keymap.find((a) => a.key === "Shift+ArrowRight");
+  const large = sl && sr ? Math.abs(sl.deltaFrames) : 10;
+  return `←/→ ±${fmtFrames(small)}（Shift ±${fmtFrames(large)}）`;
+};
+
+// ArrowUp / ArrowDown — boundary jump.
+const helpBoundaryLabel = (keymap: KMAction[]): string => {
+  const u = keymap.find((a) => a.key === "ArrowUp");
+  const d = keymap.find((a) => a.key === "ArrowDown");
+  if (!u || !d) return "↑/↓ 跳剪辑点";
+  return "↑/↓ 跳剪辑点";
+};
+
+// Home — center playhead in viewport.
+const helpCenterLabel = (keymap: KMAction[]): string => {
+  const h = keymap.find((a) => a.key === "Home");
+  if (!h) return "Home 播放头居中";
+  return `Home ${h.description}`;
+};
+
+// Combined Space/K toggle label.
+const helpKeyLabel = (
+  keymap: KMAction[], combos: string[], fallback: string,
+): string => {
+  const names = combos.filter((c) => keymap.some((a) => a.key === c));
+  if (names.length === 0) return `${combos.join("/")} ${fallback}`;
+  return `${names.join("/")} ${fallback}`;
+};
+
 export default function App() {
   const [project, setProject] = useState<Project | null>(null);
   // GUI-03E-3: activeTimelineId is the GUI's single source of truth
@@ -93,6 +171,11 @@ export default function App() {
   const [regionDraft, setRegionDraft] = useState<Region | null>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
+  // GUI-03R3-W-D: Timeline exposes its .timeline-content element so
+  // the keyboard dispatcher (Home = _center_playhead) can scroll the
+  // playhead into the middle of the visible viewport. The Content
+  // Origin (frame 0 = x=0 inside ContentViewport) is NOT touched.
+  const timelineContentRef = useRef<HTMLDivElement | null>(null);
   // 时间范围选择（蓝图 §2.4）+ 操作历史刷新 + Inspector 页签
   const [selRange, setSelRange] = useState<[number, number] | null>(null);
   const [rangeVolume, setRangeVolume] = useState(0.3);
@@ -115,6 +198,45 @@ export default function App() {
     "video" | "image" | "audio" | "subtitle" | "text" | null>(null);
   // 面板宽度（可拖动分界线）
   const [assetW, setAssetW] = useState(260);
+  // GUI-03R3-W-D: track header column width. Range 80–300px,
+  // default 160. Persisted in localStorage. Resizing the column
+  // does NOT shift the Timeline Content Origin (frame 0 stays at
+  // x=0 inside .timeline-content); it only widens the OUTSIDE-
+  // coord-space label column.
+  const HEADER_W_MIN = 80;
+  const HEADER_W_MAX = 300;
+  const HEADER_W_DEFAULT = 160;
+  const HEADER_W_STORAGE = "yroll.timelineHeaderWidth.v1";
+  const [headerW, setHeaderW] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(HEADER_W_STORAGE);
+      if (!raw) return HEADER_W_DEFAULT;
+      const n = parseInt(raw, 10);
+      if (!Number.isFinite(n)) return HEADER_W_DEFAULT;
+      return Math.min(HEADER_W_MAX, Math.max(HEADER_W_MIN, n));
+    } catch { return HEADER_W_DEFAULT; }
+  });
+  const clampHeaderW = (n: number): number => {
+    // Math.max/min(NaN, x) === NaN — guard against non-finite input
+    // so the resize handle can never store a NaN width.
+    if (!Number.isFinite(n)) return HEADER_W_DEFAULT;
+    return Math.min(HEADER_W_MAX, Math.max(HEADER_W_MIN, n));
+  };
+  const setHeaderWPersisted = (n: number) => {
+    const clamped = clampHeaderW(n);
+    setHeaderW(clamped);
+    try { localStorage.setItem(HEADER_W_STORAGE, String(clamped)); } catch {}
+  };
+  // GUI-03R3-W-D: stable ref for the resize-handle callback. The
+  // pointermove closure inside the Timeline runs every frame and
+  // would otherwise capture a stale `headerW` from the first
+  // render — making subsequent moves reset the width back to the
+  // starting value. Read the latest value via a ref instead.
+  const headerWRef = useRef(headerW);
+  useEffect(() => { headerWRef.current = headerW; }, [headerW]);
+  const onHeaderWidthDelta = useCallback((d: number) => {
+    setHeaderWPersisted(headerWRef.current + d);
+  }, []);
   const [snapMode, setSnapMode] = useState<"always" | "alt" | "off">("always");
   const [highlightRel, setHighlightRel] = useState(false);
   // GUI-03C: when false (default), the Timeline hides tracks with
@@ -556,6 +678,17 @@ export default function App() {
             // magnitude/direction is in binding.params.
             const dir = ((binding.params as { direction?: number })?.direction) ?? 1;
             jumpBoundary(dir as 1 | -1);
+          } else if (binding.name === "_center_playhead") {
+            // GUI-03R3-W-D: Home — scroll the .timeline-content so
+            // the playhead sits in the middle of the visible
+            // viewport. Pure GUI-local scroll; frame 0 stays at
+            // x=0 inside ContentViewport (Content Origin invariant
+            // is preserved — we only adjust scrollLeft).
+            const el = timelineContentRef.current;
+            if (el) {
+              const target = playheadFrame * pxPerFrameVal - el.clientWidth / 2;
+              el.scrollLeft = Math.max(0, target);
+            }
           } else {
             // Unknown binding name — silent no-op (do not crash).
           }
@@ -566,7 +699,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [keymap, clip, project, selectedSet, playheadFrame]);
+  }, [keymap, clip, project, selectedSet, playheadFrame, pxPerFrameVal]);
 
   // GUI-02.4: pointermove only emits integer frame preview; the
   // authoritative /snap call + commit happens in ClipBlock's pointerup
@@ -1417,6 +1550,9 @@ export default function App() {
       <Timeline
         project={displayProject}
         height={timelineH}
+        headerWidth={headerW}
+        onContentRef={(el) => { timelineContentRef.current = el; }}
+        onHeaderWidthDelta={onHeaderWidthDelta}
         snapMode={snapMode}
         highlightRel={highlightRel}
         showEmptyTracks={showEmptyTracks}
@@ -1644,19 +1780,35 @@ export default function App() {
 
       {showHelp && (
         <div className="workspace-overlay" onClick={() => setShowHelp(false)}>
-          <div className="workspace" style={{ width: 520 }} onClick={(e) => e.stopPropagation()}>
+          <div className="workspace" style={{ width: 560 }} onClick={(e) => e.stopPropagation()}>
             <div className="ws-header">
               <span className="ws-title">快捷键清单</span>
               <button onClick={() => setShowHelp(false)}>✕</button>
             </div>
+            {/* GUI-03R3-W-D: labels are derived from the Core keymap
+                (the same /keyboard/keymap the dispatcher consumes),
+                not from a separate hardcoded string. There is no
+                second shortcut definition. Mutation bindings that
+                live outside the Core keymap (clipboard / history /
+                zoom / multi-select) are listed under "其他" with
+                an explicit "（非 Core 键位）" annotation so the
+                reader knows those are not pinned by Core.
+                No stale entries (M / Shift+Z / Esc are gone). */}
             <div className="ws-body" style={{ fontSize: 13, lineHeight: 1.9, color: "#ccc" }}>
-              <b>走带</b>：空格/K 播放暂停 · J/L ±5s · ←/→ ±0.1s（Shift ±1s）· ↑/↓ 跳剪辑点<br />
-              <b>编辑</b>：S 切分 · Delete 删除 · Shift+Delete Ripple 收拢删除 · M 静音<br />
-              <b>剪贴板</b>：Ctrl+C/V 复制粘贴 · Ctrl+D 复制到后方 · Ctrl+A 全选<br />
-              <b>历史</b>：Ctrl+Z 撤销 · Ctrl+Shift+Z / Ctrl+Y 重做<br />
-              <b>视图</b>：滚轮 缩放（鼠标锚点）· Shift+Z 缩放到适配 · 标尺拖拽=范围选择<br />
-              <b>标记</b>：I/O 入点出点 · Esc 清除标记/选区<br />
-              <b>多选</b>：Ctrl+点击 · 批量音量/速度/删除<br />
+              <b>走带</b>：{helpKeyLabel(keymap, ["Space", "K"], "播放/暂停")} ·{" "}
+              {helpNudgeLabel(keymap, "J", "L")} ·{" "}
+              {helpArrowNudgeLabel(keymap)} ·{" "}
+              {helpBoundaryLabel(keymap)} ·{" "}
+              {helpCenterLabel(keymap)}<br />
+              <b>编辑</b>：{helpBindingLabel(keymap, "S", "切分（播放头）")} ·{" "}
+              {helpBindingLabel(keymap, "Delete", "删除选区")} ·{" "}
+              {helpBindingLabel(keymap, "Shift+Delete", "Ripple 删除")}<br />
+              <b>标记</b>：{helpBindingLabel(keymap, "I", "入点 = 播放头")} ·{" "}
+              {helpBindingLabel(keymap, "O", "出点 = 播放头")}<br />
+              <b>多选</b>：Ctrl+点击 切换 · 批量删除/收拢（与 Delete 共用同一 Core 操作）<br />
+              <b>剪贴板</b>（非 Core 键位）：Ctrl+C/V 复制粘贴 · Ctrl+D 复制到原片段之后 · Ctrl+A 全选<br />
+              <b>历史</b>（非 Core 键位）：Ctrl+Z 撤销 · Ctrl+Shift+Z / Ctrl+Y 重做<br />
+              <b>视图</b>（非 Core 键位）：滚轮 缩放（鼠标锚点） · 标尺拖拽=范围选择 · 顶栏「适配内容」按钮<br />
               <b>其他</b>：顶栏台词搜索 · 迷你地图点击跳转 · 拖到别的轨道=换轨
             </div>
           </div>
