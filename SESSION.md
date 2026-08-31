@@ -260,6 +260,37 @@ Baseline: baf8ed6 (post-03R3-1E)。Audit 文档：`docs/GUI-03R3-2-AUDIT.md`。�
 - `docs/GUI-03R3-2-AUDIT.md` — 完整 audit 报告
 - `gui/smoke/03r3-2-audit.mjs` — 测量脚本（Playwright + CDP）
 
+### GUI-03R3-2 Timeline Workspace Stabilization v0.1 (✅ 11/11 browser PASS)
+Baseline: 6ac72a0 + 03R3-1E changes。
+
+| 任务 | 状态 | 关键改动 |
+|------|------|----------|
+| P0-1 Frame safety | ✅ | 服务端 `[0, project_max_frame]` 硬约束；`/move`、`/trim`、`/split` 都校验；GUI-side clamp 也加了一层。`Project.max_timeline_frame()` helper。6 个 pytest。 |
+| P0-2 Fixed Timeline Header | ✅ | `.minimap` + `.ruler` `position: sticky; top: 0`；ruler 与 minimap 不滚；track header column 在 coord space 外（已经是横向 sticky）。 |
+| P0-3 Track Body vertical scroll | ✅ | `.timeline-headers` `overflow-y: auto` + JS 同步 `scrollTop`。Header label 跟着 track rows 走。 |
+| P0-4 Composite layer lifecycle | ✅ | `PreviewPlayer` 改用 `useProjectSequence()` 拿 `project_revision`（`project.sequence?.project_revision` 在 /project 端点不存在 → 之前 plan 不 fetch → composite 不渲染）。Layer lifecycle 现在正确：frame 60 显示 7 张图，frame 180 显示 3 张图。 |
+| P1-1 Default view | ✅ | 新增 `适配内容` 按钮 + 首次加载自动跑 Fit Content。`pxPerSec = clientWidth / maxEnd`。Slider min 从 4 调到 1。 |
+| P1-2 Semantic Track Order | ✅ | `KIND_RANK: text(0) > video/image(1) > audio(2)` + 自然数字后缀排序（v1,v2,v10 不再 v1,v10,v11,v2）。 |
+| P1-3 Track controls | ✅ | 紧凑 icon-only 按钮（🔊/🔇, 🔓/🔒, 👁/🚫），默认 hover-reveal。V1=主画面、V2=B-roll、A1=旁白、T1=字幕。 |
+| P1-4 Preview canvas boundary | ✅ | preview frame 加了 `outline: 2px solid #ffd479`，让用户清楚看到输出 canvas 的实际边界（letterbox vs canvas content 一目了然）。 |
+
+**Regression**：
+- pytest **607 passed + 2 skipped**（+6 个新的 bounds tests）
+- vitest **196 passed + 2 skipped**（browser test 不计入）
+- tsc **0 errors**
+- 浏览器 smoke（real sanlihe-slice-30s）：**11/11 PASS**（vertical scroll sticky、ruler 对齐、Fit Content、server-side bounds、layer lifecycle、semantic order、compact controls、canvas outline）
+
+修改文件：
+- `yroll/core/manifest.py` — `max_timeline_frame()`
+- `yroll/server/app.py` — `/move`, `/trim`, `/split` 服务端 bounds
+- `gui/src/App.tsx` — Fit Content effect + 适配内容 按钮
+- `gui/src/components/ClipBlock.tsx` — 客户端 final-frame clamp
+- `gui/src/components/PreviewPlayer.tsx` — `useProjectSequence()` 拿 revision；canvas outline
+- `gui/src/components/Timeline.tsx` — sticky chrome、JS header sync、semantic order、role labels、compact icons
+- `gui/src/styles.css` — sticky / outline / track-icon-btn
+- `gui/src/components/Timeline.drag.test.ts` — skip when no Chromium CDP
+- `tests/test_frame_safety_bounds.py` — 6 个 bounds tests
+
 ## 关键不变量（4 个 closure）
 1. Frame-native edit chain
 2. TimelineFrame / ClipFrame / SourceFrame 显式区分
