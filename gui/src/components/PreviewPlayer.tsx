@@ -41,6 +41,7 @@ import {
   sourceFrameToMediaSeconds,
   type TimeMapCacheEntry,
 } from "../timemap-cache";
+import { useProjectSequence } from "../sequence";
 
 export type AspectRatio = "16:9" | "9:16" | "1:1" | "4:3" | "3:4";
 
@@ -194,10 +195,16 @@ export default function PreviewPlayer({
   // project_revision. The active layer is resolved LOCALLY for
   // every TimelineFrame change, so continuous playback does NOT
   // generate per-frame HTTP.
+  // GUI-03R3-2 P0-4: project?.sequence?.project_revision is NOT
+  // populated by the /project endpoint — the server returns
+  // sequence.project_revision only from /sequence. Pull it from
+  // useProjectSequence() (already polling) so usePreviewPlan
+  // actually fires and the L1 composite renders.
+  const liveSeq = useProjectSequence();
   const projectRevision =
-    project?.sequence?.project_revision ?? null;
+    mode === "instant" ? (liveSeq.projectRevision || null) : null;
   const { plan, loading: planLoading } = usePreviewPlan(
-    mode === "instant" ? projectRevision : null,
+    projectRevision,
     timelineId ?? "main",
   );
 
@@ -380,6 +387,12 @@ export default function PreviewPlayer({
     position: "relative",
     overflow: "hidden",
     display: "flex",
+    // GUI-03R3-2 P1-4: visible canvas boundary. A 2px outline
+    // marks the actual output aspect ratio so the user can SEE
+    // the output canvas limits — anything outside the outline
+    // (letterboxing) is clearly distinguishable.
+    outline: "2px solid #ffd479",
+    outlineOffset: "-2px",
     alignItems: "center",
     justifyContent: "center",
   };

@@ -70,9 +70,18 @@ interface Props {
   showEmptyTracks?: boolean;
 }
 
-const TRACK_NAME: Record<string, string> = {
-  video: "视频", audio: "音频", text: "字幕", subtitle: "字幕",
+// GUI-03R3-2 P1-3: Default labels for common track kinds, matching
+// the spec's "V1 主画面 / V2 B-roll / A1 旁白 / T1 字幕" pattern.
+// We override per-id: V1 = 主画面, V2 = B-roll, A1 = 旁白, T1 = 字幕.
+// All other ids fall back to a kind-based default.
+const TRACK_ROLE: Record<string, string> = {
+  V1: "主画面", V2: "B-roll", V3: "B-roll", V4: "B-roll",
+  A1: "旁白", A2: "音效", A3: "环境音",
+  T1: "字幕", T2: "字幕",
 };
+const trackRoleLabel = (track: { track_id: string; kind: string }): string =>
+  TRACK_ROLE[track.track_id] || ({ video: "视频", image: "图像",
+    audio: "音频", text: "字幕", subtitle: "字幕" }[track.kind] || track.kind);
 
 export default function Timeline({
   project, selectedIds, playheadFrame, pxPerSec, selRange, inPoint, outPoint,
@@ -89,17 +98,38 @@ export default function Timeline({
   const activeTimelineTracks = (project.timelines?.find(
     (tl) => tl.timeline_id === project.active_timeline_id,
   ) ?? project.timelines?.[0])?.tracks ?? [];
+  // GUI-03R3-2 P1-2: semantic track order. Sort by class then by
+  // natural numeric suffix of track_id (v1, v2, v10 — NOT
+  // lexical v1, v10, v11, v2). Class order is:
+  //   text/subtitle  →  video/visual  →  audio
+  // The result array is rendered top-to-bottom in the DOM. With
+  // the ascending KIND_RANK below, the first track in the array
+  // renders at the TOP of the timeline (text on top, audio at
+  // bottom) — the standard video-editor convention.
+  const KIND_RANK: Record<string, number> = { text: 0, video: 1, image: 1, audio: 2 };
+  const trackKey = (tid: string) => {
+    const m = tid.match(/(\d+)\s*$/);
+    return m ? parseInt(m[1], 10) : 9999;
+  };
   const visibleTracks = useMemo(
     // GUI-03C: hide empty tracks by default. The Core still
     // owns them; the GUI just chooses not to render them.
     // Toggle via the showEmptyTracks prop (default false).
-    () => [...activeTimelineTracks].reverse().filter(
-      (track) => showEmptyTracks || track.clip_ids.length > 0 || track.hidden,
-    ),
+    () => [...activeTimelineTracks]
+      .sort((a, b) => {
+        const ra = KIND_RANK[a.kind] ?? 9;
+        const rb = KIND_RANK[b.kind] ?? 9;
+        if (ra !== rb) return ra - rb;
+        return trackKey(a.track_id) - trackKey(b.track_id);
+      })
+      .filter(
+        (track) => showEmptyTracks || track.clip_ids.length > 0 || track.hidden,
+      ),
     [activeTimelineTracks, showEmptyTracks],
   );
   const paneRef = useRef<HTMLDivElement | null>(null);   // .timeline-pane (outer flex container)
   const contentRef = useRef<HTMLDivElement | null>(null); // .timeline-content (SCROLLABLE; the coord space)
+  const headersRef = useRef<HTMLDivElement | null>(null); // .timeline-headers (vertical-scroll-synced)
   const [viewport, setViewport] = useState({ left: 0, width: 1 });
   // Sequence (canonical timebase) — provides fps for frame↔px math
   const seq = useProjectSequence();
@@ -119,6 +149,15 @@ export default function Timeline({
       left: c.scrollLeft / Math.max(1, contentWidth),
       width: Math.min(1, c.clientWidth / Math.max(1, contentWidth)),
     });
+    // GUI-03R3-2 P0-2/P0-3: sync the LEFT track-header column with
+    // the content's vertical scroll. The header column lives
+    // OUTSIDE .timeline-content (it's a sibling in .timeline-pane),
+    // so it doesn't scroll with the content — we mirror scrollTop
+    // explicitly. Direction is vertical only; horizontal scroll of
+    // .timeline-content does NOT affect the headers.
+    if (headersRef.current) {
+      headersRef.current.scrollTop = c.scrollTop;
+    }
   };
 
   // The timeline width is derived from the latest clip end (in frames).
@@ -212,7 +251,7 @@ export default function Timeline({
     <div className="timeline-pane" ref={paneRef} onWheel={onWheel}
       style={{ height, flexShrink: 0 }}>
       {/* ── LEFT STICKY: track-name headers (OUTSIDE coord space) ─────────── */}
-      <div className="timeline-headers">
+      <div className="timeline-headers" ref={headersRef}>
         {/* Spacer above the tracks, matching the minimap height */}
         <div className="timeline-headers-spacer" />
         {visibleTracks.map((track) => (
@@ -222,30 +261,39 @@ export default function Timeline({
             data-track-id={track.track_id}
             style={{ display: track.hidden ? "none" : "flex" }}
           >
-            <div className="track-label-title">{TRACK_NAME[track.kind] || track.kind} · {track.track_id}</div>
+            <div className="track-label-title">
+              <span className="track-kind-badge">{trackRoleLabel(track)}</span>
+              <span className="track-id">{track.track_id}</span>
+            </div>
+            {/* GUI-03R3-2 P1-3: compact icon-only controls. Hover the
+                track-label row to reveal the controls (default
+                hidden). No "Delete Track" in this batch. */}
             <div className="track-label-buttons">
               {track.kind !== "text" && (
                 <button
-                  className={track.muted ? "muted" : ""}
+                  className={`track-icon-btn ${track.muted ? "active" : ""}`}
                   title={track.muted ? "取消轨道静音" : "轨道静音"}
                   onClick={() => onTrackMute?.(track.track_id, !track.muted)}
+                  aria-label="mute"
                 >
-                  {track.muted ? "取消静音" : "静音"}
+                  {track.muted ? "🔇" : "🔊"}
                 </button>
               )}
               <button
-                className={track.locked ? "locked" : ""}
+                className={`track-icon-btn ${track.locked ? "active" : ""}`}
                 title={track.locked ? "解锁轨道" : "锁定轨道（禁拖动）"}
                 onClick={() => onTrackLock?.(track.track_id, !track.locked)}
+                aria-label="lock"
               >
-                {track.locked ? "解锁" : "锁定"}
+                {track.locked ? "🔒" : "🔓"}
               </button>
               <button
-                className={track.hidden ? "hidden-active" : ""}
+                className={`track-icon-btn ${track.hidden ? "active" : ""}`}
                 title={track.hidden ? "显示轨道（点击恢复）" : "隐藏轨道（仅 GUI 不显示，渲染仍参与）"}
                 onClick={() => onTrackHide?.(track.track_id, !track.hidden)}
+                aria-label="hide"
               >
-                {track.hidden ? "显示" : "隐藏"}
+                {track.hidden ? "👁" : "🚫"}
               </button>
             </div>
           </div>

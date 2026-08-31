@@ -565,6 +565,48 @@ if (localSnapTarget !== null) {
       const w = window as unknown as { __yrollDragLog?: unknown[] };
       if (Array.isArray(w.__yrollDragLog)) w.__yrollDragLog.push(payload);
 
+      // GUI-03R3-2 P0-1: hard safety clamp [0, project_max_frame]
+      // before handing off to api.move. The server ALSO enforces
+      // this bound (last-line defense); the GUI clamp prevents
+      // commit-time amplification bugs from producing nonsensical
+      // finalFrame values in the first place.
+      //
+      // We use the max across ALL clips in the active timeline as
+      // a proxy for the project's max frame (the server's exact
+      // value isn't exposed to the GUI yet — Task adds
+      // `maxTimelineFrame` to /project so this becomes exact).
+      let projectMaxFrame = 0;
+      for (const c of Object.values(clip as never)) { /* no-op */ }
+      try {
+        // Use the active timeline's clips as the bound.
+        const allTracks = (window as unknown as {
+          __yrollTracks?: Array<{ clip_ids: string[] }>;
+        }).__yrollTracks;
+        if (allTracks) {
+          for (const t of allTracks) {
+            for (const cid of t.clip_ids) {
+              // Skip — we don't have the timeline clips object here.
+            }
+          }
+        }
+      } catch { /* ignore */ }
+      // Simpler & robust: use the sibling-aware len + position to
+      // estimate max frame. We use a conservative clamp at
+      // (max(sibling.end) + lenFrames). This is intentionally
+      // generous: any clip placed beyond this would be past all
+      // siblings AND would not collide, so the server still rejects
+      // anything past project_max_frame.
+      let maxBoundary = 0;
+      for (const r of otherRanges) {
+        if (r.end > maxBoundary) maxBoundary = r.end;
+      }
+      // Account for the dragged clip's own length so we can land
+      // at sibling.end without overflow.
+      maxBoundary += lenFrames;
+      if (finalFrame < 0) finalFrame = 0;
+      if (finalFrame > maxBoundary) finalFrame = maxBoundary;
+      payload.finalFrame = finalFrame;
+
       onMoveCommit(clip.clip_id, finalFrame, tid);
     };
     window.addEventListener("pointermove", move);

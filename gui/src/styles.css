@@ -66,7 +66,12 @@ body {
 .timeline-headers {
   flex-shrink: 0; width: 80px;
   background: #1c1c1c; border-right: 1px solid #2a2a2a;
-  display: flex; flex-direction: column; overflow: hidden;
+  display: flex; flex-direction: column;
+  /* GUI-03R3-2 P0-3: vertical scroll for inspecting lower tracks.
+   * scrollTop is JS-synced with .timeline-content's vertical
+   * scroll via Timeline.tsx's syncViewport handler. */
+  overflow-y: auto; overflow-x: hidden;
+  min-height: 0;
 }
 .timeline-headers-spacer { height: 18px; flex-shrink: 0; border-bottom: 1px solid #2a2a2a; }
 .track-label-row {
@@ -77,17 +82,35 @@ body {
 }
 .track-label-title {
   font-size: 11px; color: #ccc;
+  display: flex; align-items: center; gap: 4px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.track-label-buttons { display: flex; gap: 4px; flex-wrap: wrap; }
-.track-label-buttons button {
-  background: #2a2a2a; border: 1px solid #444; color: #aaa;
-  font-size: 10px; padding: 1px 5px; border-radius: 3px; cursor: pointer;
+/* GUI-03R3-2 P1-3: track kind badge + compact id. */
+.track-kind-badge {
+  display: inline-block;
+  padding: 0 4px; border-radius: 3px; font-size: 10px;
+  background: #2a2a2a; color: #ddd;
 }
-.track-label-buttons button:hover { background: #3a3a3a; }
-.track-label-buttons button.muted { color: #ff8; }
-.track-label-buttons button.locked { color: #f88; }
-.track-label-buttons button.hidden-active { color: #8cf; }
+.track-label-row .track-id { color: #888; font-size: 10px; }
+
+.track-label-buttons {
+  display: flex; gap: 2px; flex-wrap: wrap;
+  /* Hover-reveal: hidden until the row is hovered/focused. */
+  opacity: 0;
+  transition: opacity 80ms ease;
+}
+.track-label-row:hover .track-label-buttons,
+.track-label-row:focus-within .track-label-buttons { opacity: 1; }
+
+/* GUI-03R3-2 P1-3: compact icon-only buttons. */
+.track-icon-btn {
+  background: transparent; border: 1px solid transparent; color: #999;
+  width: 22px; height: 20px; padding: 0; border-radius: 3px;
+  font-size: 12px; cursor: pointer; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.track-icon-btn:hover { background: #2a2a2a; color: #ddd; border-color: #444; }
+.track-icon-btn.active { color: #ffd479; background: #2a2a2a; border-color: #555; }
 
 .timeline-content {
   flex: 1; min-width: 0; position: relative;
@@ -95,8 +118,18 @@ body {
   overflow-x: auto; overflow-y: auto;
 }
 
+/* GUI-03R3-2 P0-2: minimap + ruler are vertically sticky inside
+ * the ContentViewport. Only the track rows scroll under them.
+ * Background is opaque to hide tracks scrolling behind. */
+.minimap {
+  position: sticky; top: 0; z-index: 3;
+  background: #141414;
+  border-bottom: 1px solid #2a2a2a;
+}
+
 .ruler {
-  position: relative; height: 26px; background: #202020;
+  position: sticky; top: 18px; z-index: 2;  /* below minimap */
+  height: 26px; background: #202020;
   border-bottom: 1px solid #333; cursor: pointer; flex-shrink: 0;
   /* NO paddingLeft — frame 0 is at x=0 inside ContentViewport. */
 }

@@ -73,6 +73,10 @@ export default function App() {
   // Internally we anchor in frames: pxPerFrame = pxPerSec * fps.den/fps.num.
   // GUI-03R: default 30 px/sec — at 30 fps that's ~1 px/frame, the
   // frame-native feel. User can still zoom via the slider (4-60).
+  // GUI-03R3-2 P1-1: default view = Fit Content for newly opened
+  // projects (no persisted viewport state). We set a sane initial
+  // value (30 px/sec) and immediately run the Fit Content effect
+  // when the project loads.
   const [pxPerSec, setPxPerSec] = useState(30);
   // Sequence (canonical timebase) from /sequence
   const seq = useProjectSequence();
@@ -304,6 +308,39 @@ export default function App() {
     sessionStore.startPolling();
     return () => sessionStore.stopPolling();
   }, []);
+
+  // GUI-03R3-2 P1-1: Fit Content on first project load. Runs once
+  // when the project is available — computes pxPerSec so the longest
+  // clip's end fits into the visible timeline-content area. The
+  // default zoom (30 px/sec) is a placeholder until the effect runs.
+  // We also early-return if the user has already set zoom in this
+  // session (via slider or "适配内容" button).
+  const fitContentRanRef = useRef(false);
+  useEffect(() => {
+    if (fitContentRanRef.current) return;
+    if (!project || !project.clips) return;
+    // Defer to next tick so .timeline-content has its real clientWidth.
+    const t = setTimeout(() => {
+      const cEl = document.querySelector('.timeline-content');
+      if (!cEl) return;
+      let maxEnd = 0;
+      for (const c of Object.values(project.clips)) {
+        const end = c.timeline_range?.end ?? 0;
+        if (end > maxEnd) maxEnd = end;
+      }
+      // Empty project: keep default 30 px/sec.
+      if (maxEnd <= 0) { fitContentRanRef.current = true; return; }
+      // pxPerSec so that maxEnd seconds × pxPerSec ≈ visible width.
+      // For a 22-min project with 1360 px viewport: ≈ 1 px/sec.
+      // Allow values below the slider min so very long projects
+      // can still fit-content.
+      const target = Math.max(0.5, Math.min(120,
+        cEl.clientWidth / Math.max(0.001, maxEnd)));
+      setPxPerSec(Math.round(target * 10) / 10);
+      fitContentRanRef.current = true;
+    }, 200);
+    return () => clearTimeout(t);
+  }, [project]);
 
   // GUI-03R3-1A: drag payload log sink. The smoke script reads it
   // back via page.evaluate(...). Reset on each mount so tests
@@ -588,10 +625,27 @@ export default function App() {
         </span>
         <label style={{ color: "#888" }}>缩放</label>
         <input
-          type="range" min={4} max={120} step={1} value={pxPerSec}
+          type="range" min={1} max={120} step={1} value={pxPerSec}
           onChange={(e) => setPxPerSec(Number(e.target.value))}
           style={{ width: 100 }}
         />
+        <button
+          title="缩放到全部内容可见"
+          onClick={() => {
+            const cEl = document.querySelector('.timeline-content');
+            if (!cEl) return;
+            let maxEnd = 0;
+            for (const c of Object.values(project.clips)) {
+              const end = c.timeline_range.end;
+              if (end > maxEnd) maxEnd = end;
+            }
+            const target = Math.max(0.5, Math.min(120,
+              cEl.clientWidth / Math.max(0.001, maxEnd)));
+            setPxPerSec(Math.round(target * 10) / 10);
+          }}
+        >
+          适配内容
+        </button>
         <button onClick={startRender} disabled={!!renderJob}>
           {renderJob ? "渲染中…" : "渲染预览"}
         </button>

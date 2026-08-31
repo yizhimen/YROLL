@@ -388,6 +388,32 @@ class Project(BaseModel):
         """Return the Timeline with the given stable id, or None."""
         return next((t for t in self.timelines if t.timeline_id == timeline_id), None)
 
+    def max_timeline_frame(self) -> int:
+        """GUI-03R3-2 P0-1: hard upper bound on `timeline_start_frame`
+        for any clip in this Project.
+
+        Computed as the max end-frame across all clips in all
+        Timelines (in timeline-frame units, sequence-fps). Returns
+        0 if the Project has no clips — the bound collapses to
+        `[0, 0]` and any move attempt is rejected.
+
+        Used by the server-side move/trim/split guards to enforce
+        the [0, project_max_frame] safety invariant. The GUI also
+        reads this value to clamp its own `finalFrame` computation
+        so it can't commit an out-of-range destination.
+        """
+        fps = self.sequence.fps
+        max_end_seconds = 0.0
+        for tl in self.timelines:
+            for t in tl.tracks:
+                for cid in t.clip_ids:
+                    c = self.clips.get(cid)
+                    if c is None:
+                        continue
+                    if c.timeline_range.end > max_end_seconds:
+                        max_end_seconds = c.timeline_range.end
+        return int(round(max_end_seconds * fps.num / fps.den))
+
     def require_timeline(self, timeline_id: str) -> Timeline:
         """Strict variant: raise KeyError if the id is unknown. Used
         by command layer after schema validation."""

@@ -592,6 +592,12 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         for legacy in ("new_source_start", "new_source_end"):
             if legacy in req.model_fields_set:
                 raise HTTPException(400, f"GUI-02: '{legacy}' (seconds) is no longer accepted; use 'new_source_{legacy.replace('new_source_','')}_frame'")
+        # GUI-03R3-2 P0-1: source-frame bounds (>=0; < asset
+        # source frame count is checked deeper in Core).
+        for fname in ("new_source_start_frame", "new_source_end_frame"):
+            v = getattr(req, fname, None)
+            if v is not None and v < 0:
+                raise HTTPException(400, f"trim: {fname}={v} < 0")
         return guard(_check_rev(baseRevision, lambda: st.cmd.trim_clip_frame(
             clip_id,
             src_start_frame=req.new_source_start_frame,
@@ -607,6 +613,13 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         # converts timeline_frame -> source_frame.
         if "at_source_time" in req.model_fields_set:
             raise HTTPException(400, "GUI-02: 'at_source_time' (seconds) is no longer accepted; use 'at_timeline_frame'")
+        # GUI-03R3-2 P0-1: split position must lie inside the
+        # project's content range.
+        if req.at_timeline_frame < 0:
+            raise HTTPException(400, f"split: at_timeline_frame={req.at_timeline_frame} < 0")
+        _max = st.core.project.max_timeline_frame()
+        if req.at_timeline_frame > _max:
+            raise HTTPException(400, f"split: at_timeline_frame={req.at_timeline_frame} > project_max_frame={_max}")
         left, right = guard(_check_rev(baseRevision, lambda: st.cmd.split_clip_frame(
             clip_id, at_timeline_frame=req.at_timeline_frame,
             why=req.why, timeline_id=(timeline_id or None))))
@@ -617,6 +630,17 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
               baseRevision: int = None):
         if "new_timeline_start" in req.model_fields_set:
             raise HTTPException(400, "GUI-02: 'new_timeline_start' (seconds) is no longer accepted; use 'new_timeline_start_frame'")
+        # GUI-03R3-2 P0-1: hard safety bound [0, project_max_frame].
+        # Catches the audit's "pointer delta 10 px → committed
+        # style.left 126150 px" amplification — the server now
+        # refuses any destination outside the project's existing
+        # content range. Clients SHOULD pre-clamp; this is the
+        # last-line defense.
+        _max = st.core.project.max_timeline_frame()
+        if req.new_timeline_start_frame < 0:
+            raise HTTPException(400, f"move: new_timeline_start_frame={req.new_timeline_start_frame} < 0; clip start cannot be negative")
+        if req.new_timeline_start_frame > _max:
+            raise HTTPException(400, f"move: new_timeline_start_frame={req.new_timeline_start_frame} > project_max_frame={_max}; refusing out-of-range destination (P0-1 safety)")
         return guard(_check_rev(baseRevision, lambda: st.cmd.move_clip_frame(
             clip_id,
             new_timeline_start_frame=req.new_timeline_start_frame,
