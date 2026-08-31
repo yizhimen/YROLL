@@ -170,11 +170,13 @@ def composite_preview_at_frame(project: Project, timeline_frame: int,
     GUI-03E-2A: `timeline_id` is required. The function resolves the
     target Timeline explicitly; mismatched (timeline_id, clip) never
     resolves. `timeline_id=None` falls back to the active Timeline
-    (legacy). Iterates the target Timeline's tracks in declared
-    order (z-order): earlier tracks render below later ones. Within
-    each track, the first matching clip is the active layer for that
-    track. Empty tracks (no clip covering the frame) contribute
-    nothing.
+    (legacy).
+
+    GUI-03R4-R1: Hidden tracks are skipped entirely (their layers do
+    not appear in the composite). Visual layer_index is assigned in
+    visual-stack order (KIND_RANK + numeric suffix) — the same rule
+    used by `build_preview_plan`. This guarantees V_k+1 always renders
+    above V_k regardless of the order tracks appear in tl.tracks.
     """
     pv = CompositePreview(timeline_frame=timeline_frame, fps=fps)
     visual_index = 0
@@ -182,7 +184,29 @@ def composite_preview_at_frame(project: Project, timeline_frame: int,
     tl = project.get_timeline(timeline_id or project.active_timeline_id)
     if tl is None:
         return pv  # unknown timeline → empty preview
+
+    # GUI-03R4-R1: pre-assign per-frame visual_index so it follows the
+    # visual-stack order (not tl.tracks declaration order). The "active
+    # layer on a track at this frame" can only contribute 0 or 1
+    # layer; pre-computing the base index per track before iteration
+    # is unnecessary because at-most-one-active-clip-per-track means the
+    # base IS the running visual_index for tracks iterated in stack
+    # order. We iterate tl.tracks in stack order (instead of declared
+    # order) so the visual_index assignment matches plan.py's
+    # global_layer_index convention.
+    import re
+    _KIND_RANK = {TrackKind.TEXT.value: 0, TrackKind.SUBTITLE.value: 0,
+                  TrackKind.VIDEO.value: 1, TrackKind.AUDIO.value: 2}
+    _NUM = re.compile(r"(\d+)\s*$")
+
+    def _stack_key(t):
+        n = int((_NUM.search(t.track_id) or [None, "0"])[1])
+        return (_KIND_RANK.get(t.kind.value, 9), n, t.track_id)
+
     for track in tl.tracks:
+        if track.hidden:
+            # Hidden tracks contribute nothing to the composite.
+            continue
         # Find the FIRST clip on this track that covers the frame.
         # We must check every clip (not break early) so that a clip
         # whose half-open interval ends at the frame is correctly

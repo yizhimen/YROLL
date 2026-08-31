@@ -16,15 +16,46 @@ The plan endpoint is orthogonal to the existing
 `composite_preview_at_frame` endpoint:
   * /preview/at_frame   — single-frame resolution, canonical Core API
   * /preview/plan       — full structural snapshot for caching
+
+GUI-03R4-R1: `layer_index` is assigned GLOBALLY across visual tracks
+(in declared track order, hidden tracks skipped). Within a single
+track, layers get sequential sub-indices. This guarantees V_k+1
+renders strictly above V_k regardless of per-track clip counts.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
 from yroll.core.manifest import Project, Track, TrackKind
 from yroll.core.timebase import Rational
 from yroll.core.timemap import TimeMap
+
+
+# GUI-03R4-R1: KIND_RANK + numeric suffix sort. Used by
+# `build_preview_plan` to assign globally-unique layer_index across
+# visual tracks (V1 < V2 < ... < V10 in stacking order, regardless of
+# the order they appear in tl.tracks). Note: images share VIDEO tracks
+# per the asset_type → track_kinds policy; they participate in the
+# same visual layer_index sequence.
+_KIND_RANK: dict[str, int] = {
+    TrackKind.TEXT.value: 0,
+    TrackKind.SUBTITLE.value: 0,
+    TrackKind.VIDEO.value: 1,
+    TrackKind.AUDIO.value: 2,
+}
+_NUM_SUFFIX_RE = re.compile(r"(\d+)\s*$")
+
+
+def _track_sort_key(track: Track) -> tuple[int, int, str]:
+    """Stable visual-stack ordering: kind first (text/video/audio),
+    then natural-numeric suffix of track_id, then lexical for tie-
+    break. Same rule as Timeline.tsx (KIND_RANK + trackKey)."""
+    kind_rank = _KIND_RANK.get(track.kind.value, 9)
+    m = _NUM_SUFFIX_RE.search(track.track_id)
+    n = int(m.group(1)) if m else 9999
+    return (kind_rank, n, track.track_id)
 
 
 @dataclass
@@ -99,35 +130,57 @@ def build_preview_plan(project: Project, timeline_id: str = "main",
     The plan embeds `project.sequence.project_revision` (or 0) so
     the GUI can detect staleness against /ui/status without re-fetching
     the whole project.
+
+    GUI-03R4-R1: `layer_index` is assigned GLOBALLY across all visual
+    tracks (in KIND_RANK + numeric-suffix order). Hidden tracks are
+    SKIPPED entirely (their layers never appear in the composite).
+    Text/SUBTITLE tracks contribute only to `subtitle_texts_by_range`,
+    not to `plan.tracks`. Audio tracks remain in `plan.tracks` with
+    per-track `layer_index` (audio sync doesn't use z-index).
     """
     if fps is None:
         fps = project.sequence.fps
-    # ProjectRevision lives on the Project's ui_status or the
-    # /ui/status endpoint. The plan embeds the current revision so
-    # the GUI can detect staleness.
     revision = 0
     ui_status = getattr(project, "ui_status", None)
     if ui_status is not None and getattr(ui_status, "base_revision", None) is not None:
         revision = ui_status.base_revision
-    # Fall back: read the /project endpoint's sequence.project_revision
-    # via Project.model_dump if available. Project doesn't have a
-    # project_revision field directly; the HTTP layer tracks it on
-    # /ui/status. For the plan, the revision is informational — the
-    # GUI checks /ui/status separately for invalidation.
     plan = PreviewPlan(
         project_revision=revision,
         timeline_id=timeline_id,
         fps=fps,
     )
-    # Find the target Timeline by stable id. ProjectCore has exactly
-    # one `timeline`; for multi-Timeline support (GUI-03E), look up
-    # by id so the plan is scoped to that Timeline's clips only.
     timeline = project.get_timeline(timeline_id)
-    layer_index = 0
     if timeline is None:
         # Unknown timeline → empty plan.
         return plan
+
+    # GUI-03R4-R1: pre-compute the layer_index BASE for each visual
+    # track, in the visual-stack order (KIND_RANK + numeric suffix).
+    # The base is the count of all visual layers contributed by tracks
+    # that come EARLIER in the stack order. Within each track, layers
+    # are sorted by timeline_start_frame and assigned sequential
+    # sub-indices starting from the base. Hidden tracks are skipped
+    # entirely — their layers never appear in the composite.
+    visual_track_order = sorted(
+        (t for t in timeline.tracks
+         if not t.hidden
+         and t.kind == TrackKind.VIDEO),
+        key=_track_sort_key,
+    )
+    track_layer_base: dict[str, int] = {}
+    running = 0
+    for t in visual_track_order:
+        n = _count_visual_layers(t, project, fps)
+        track_layer_base[t.track_id] = running
+        running += n
+
+    # Phase 2: iterate ALL tracks (including text and audio) so text
+    # layers still feed subtitle_texts_by_range and audio tracks stay
+    # in plan.tracks for sync. Hidden tracks contribute nothing.
     for track in timeline.tracks:
+        if track.hidden:
+            # Hidden tracks are excluded from the composite entirely.
+            continue
         layers: list[PreviewLayer] = []
         for cid in track.clip_ids:
             c = project.clips.get(cid)
@@ -149,8 +202,6 @@ def build_preview_plan(project: Project, timeline_id: str = "main",
             is_image = (asset_type == "image")
             if is_image:
                 # Image: 1 source frame (whole clip is 1 frame's worth).
-                # We use [0, 1) so the GUI's source_frame math works
-                # (timeline_frame=tl_s → source_frame=0).
                 src_s, src_e = 0, 1
                 src_fps = None
             else:
@@ -163,12 +214,9 @@ def build_preview_plan(project: Project, timeline_id: str = "main",
                 tm = TimeMap.for_clip(c, fps, src_fps)
                 src_s = tm.source_from_timeline(tl_s)
                 src_e = tm.source_from_timeline(tl_e - 1) + 1
-                # Use the full half-open range via the source's
-                # first/last frames. tm.source_from_timeline is
-                # monotonic; we round to integer source frames.
             layers.append(PreviewLayer(
                 track_id=track.track_id,
-                layer_index=0,  # set below
+                layer_index=0,  # re-stamped below per track
                 kind=asset_type,
                 clip_id=cid,
                 asset_id=asset.asset_id,
@@ -181,15 +229,47 @@ def build_preview_plan(project: Project, timeline_id: str = "main",
                 source_fps=src_fps,
                 transform=dict(c.transform or {}),
             ))
-        # Sort layers by timeline_start_frame; assign layer_index.
+        # Sort layers by timeline_start_frame within the track.
         layers.sort(key=lambda l: l.timeline_start_frame)
-        for i, l in enumerate(layers):
-            l.layer_index = i
-        # Only add non-empty tracks to the plan (saves the GUI from
-        # iterating empty tracks). But preserve the track ORDER for
-        # z-order semantics — empty tracks just have [].
+        # Visual tracks: layer_index is globally unique (track base
+        # + intra-track offset). Audio tracks: per-track indices
+        # (audio doesn't stack visually).
+        if track.kind == TrackKind.VIDEO:
+            base = track_layer_base.get(track.track_id, 0)
+            for i, l in enumerate(layers):
+                l.layer_index = base + i
+        else:
+            for i, l in enumerate(layers):
+                l.layer_index = i
         plan.tracks.append(layers)
     return plan
+
+
+def _count_visual_layers(track: Track, project: Project,
+                          fps: Rational) -> int:
+    """Count how many layers `track` will contribute to the preview
+    plan. Used to pre-compute `track_layer_base` so visual layer_index
+    values are globally unique across all visual tracks (in visual-
+    stack order)."""
+    n = 0
+    for cid in track.clip_ids:
+        c = project.clips.get(cid)
+        if c is None:
+            continue
+        asset = next((a for a in project.assets
+                      if a.asset_id == c.asset_id), None)
+        if asset is None:
+            continue
+        asset_type = asset.type.value
+        if asset_type == "image":
+            n += 1
+        elif asset.source_fps is not None:
+            # Video: source_fps must be set; otherwise the layer would
+            # be skipped by Phase 2 (per GUI-02.3 invariant).
+            n += 1
+        # else: video without source_fps — Phase 2 skips it, so it
+        # does not consume a layer_index slot.
+    return n
 
 
 def active_layer_at(track_layers: list[PreviewLayer],
