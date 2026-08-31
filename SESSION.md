@@ -1,6 +1,71 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + GUI-03R3-W-B ✅ + GUI-03R3-W-C ✅ + **GUI-03R3-W-C Runtime Verification ✅**；W-D paused；Stale Help UI reported as follow-up）
+## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + GUI-03R3-W-B ✅ + GUI-03R3-W-C ✅ + GUI-03R3-W-C Runtime Verification ✅ + **GUI-03R3-W-D ✅**；Stale Help UI fixed in W-D；404 follow-up recorded separately）
+
+### GUI-03R3-W-D Track Header UX v0.1 (✅ pytest 650+1, vitest 212+2, tsc 0 NEW errors, **17/17 browser PASS**, commit 44095c3, push origin ✅)
+
+Baseline: W-C (`59829c1`). Plan: `docs/GUI-03R3-Implementation-Plan-v0.1.md §2`. Audit & acceptance: `gui/smoke/03r3-w-d-track-header.mjs`.
+
+**Prerequisite fix (Help dialog) shipped in this batch.** The dialog at `App.tsx:1653-1660` taught stale seconds-based shortcuts ("J/L ±5s · ←/→ ±0.1s"). Labels are now derived from the Core keymap via small helpers in `App.tsx` (`helpBindingLabel`, `helpNudgeLabel`, `helpArrowNudgeLabel`, `helpBoundaryLabel`, `helpCenterLabel`, `helpKeyLabel`). No second shortcut definition. Clipboard / undo / zoom / multi-select stay as explicit non-Core entries with an "（非 Core 键位）" annotation.
+
+**Home binding added** to `yroll/core/keyboard.py` (`Home` → `_center_playhead`) and wired in `App.tsx`'s dispatcher: scrolls `.timeline-content` so the playhead lands in the middle. Content Origin invariant preserved (frame 0 stays at x=0 inside ContentViewport; we only adjust scrollLeft). `tests/test_keyboard.py::test_home_centers_playhead` + `gui/src/keymap.test.ts` W-D contract.
+
+**Track semantic icons** (inline SVG, not emoji — cross-system consistent):
+*  `text` / `subtitle` → T inside a rounded square (yellow `#ffd479`)
+*  `video` / `image` → play triangle (blue `#79b8ff`)
+*  `audio` → music note (green `#79e0a0`)
+
+Track label format: `<icon> <track_id> <role_label>` — `V1 主画面`, `V2 B-roll`, `A1 旁白`, `T1 字幕`. Per-id overrides from the existing `TRACK_ROLE` map (`V1=主画面`, `V2=B-roll`, `A1=旁白`, `T1=字幕`).
+
+**Mute/Lock/Visibility always visible at reduced opacity.** Removed hover-reveal (`.track-label-buttons` was `opacity: 0` + hover → `1`). Now base `opacity: 0.4` (state apparent without hover) and `:hover` / `:focus-within` → `1.0`. **Visibility uses an eye icon (open vs crossed-out), NOT a prohibition sign** — inline SVG `<svg><path eye-outline/><circle pupil/>{crossed-out?}</svg>`. The data-visibility attribute on the SVG reflects current state for tooling.
+
+**Resizable track header column.** Drag handle (`.resize-handle.vertical`) between `.timeline-headers` and `.timeline-content`. App.tsx owns `headerW` (clamp 80–300, NaN-safe default 160) and persists to `localStorage["yroll.timelineHeaderWidth.v1"]`. **`onHeaderWidthDelta` uses a ref-backed `headerWRef`** (the closure captures `headerW` once at render time, so without the ref the second pointermove would reset to the start value — caught by the smoke test, fixed in this batch).
+
+**Content Origin invariant verified.** After resize (160→240), `.ruler .tick` (frame 0) and `.track-content` left edges both move by the same 80px, so `tick.left - trackContent.left` stays 0 — frame 0 is still at x=0 inside the ContentViewport. The header column lives OUTSIDE the coord space (it was already a sibling, never a gutter).
+
+**Tests**:
+*  `tests/test_keyboard.py`: `test_home_centers_playhead` (+1); `test_describe_keymap_includes_all_keys` updated to assert Home. +2 pytest.
+*  `gui/src/keymap.test.ts`: W-D keymap contract for Home (+2 vitest).
+*  `gui/src/headerWidth.test.ts` (new, 7 tests): clamp [80,300], NaN → 160, default 160 on empty/invalid localStorage, storage key stable.
+
+**404 waveform/file URL follow-up** (`docs/GUI-03R3-W-D-404-followup.md`): the missing-media 404s from W-C Runtime Verification §2 are recorded as a separate issue — server should return placeholder bodies or 404 with JSON `{missing:true}`; AssetPanel should swap `<img onError>` to a placeholder. NOT mixed into W-D.
+
+**Regression**:
+*  pytest **650 passed + 1 skipped** (was 648 + 2; +2 from W-D)
+*  vitest **212 passed + 2 skipped** (was 203 + 2; +9 from W-D: 2 Home keymap + 7 headerWidth)
+*  tsc **0 NEW errors** (the 2 pre-existing `Timeline.drag.test.ts` errors remain)
+*  Browser smoke on Sanlihe: **17/17 PASS**:
+   1. semantic track icons render (kinds present: text, video — audio absent in this fixture)
+   2. mute/lock/visibility opacity=0.4 (always visible)
+   3. visibility uses eye icon (no prohibition sign)
+   4. default header width = 160
+   5. resize handle exists between headers and content
+   6. resize right by 50 → width 160 → 210
+   7. resize past min → clamps to 80
+   8. resize past max → clamps to 300
+   9. width persists across reload (300)
+  10. Content Origin invariant: tick-to-trackContent delta = 0
+  11. Help dialog opens via 帮助 → 快捷键清单
+  12. Help text mentions frames (not seconds)
+  13. Help text has no seconds leakage
+  14. Help text mentions Home (center playhead)
+  15. Help text removed stale M 静音
+  16. Help text removed stale "Shift+Z 缩放到适配"
+  17. 0 NEW console.error entries (excluding pre-existing 404s)
+
+**Files**:
+*  `yroll/core/keyboard.py` — Home binding + binding
+*  `gui/src/App.tsx` — headerWidth state + persistence + Home dispatcher + keymap-derived helpers + Help dialog rewrite
+*  `gui/src/components/Timeline.tsx` — SVG icons + always-visible controls + eye icon + resize handle + onContentRef
+*  `gui/src/styles.css` — `.track-kind-icon` (yellow/blue/green by kind), `.track-role-label`, opacity-0.4 base, hover → 1
+*  `gui/src/keymap.test.ts` — W-D Home contract
+*  `gui/src/headerWidth.test.ts` (new) — clamp + persist
+*  `tests/test_keyboard.py` — Home binding + describe_keymap update
+*  `gui/smoke/03r3-w-d-track-header.mjs` (new) — 17-scenario browser smoke
+*  `gui/smoke/serve-with-proxy-w-d.mjs` (new) — static server with /api proxy (mirrors W-C `serve-with-proxy.mjs`)
+*  `docs/GUI-03R3-W-D-404-followup.md` (new) — separate issue doc
+
+**Out of W-D scope** (per user instruction): not starting W-F yet.
 
 ### W-C Runtime Verification v0.1 (✅ 14/15 DOM PASS, commit b566e79, push origin ✅)
 Baseline: `59829c1` (W-C). Doc: `docs/GUI-03R3-W-C-RUNTIME-VERIFY.md`.
