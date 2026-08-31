@@ -261,9 +261,64 @@ class ProjectCore:
             removed = cl._cleanup_empty_tracks(tl)
             if removed:
                 any_removed = True
-        if any_removed:
+        # GUI-03R4-R2: load-time repair of historical negative-start
+        # clips. Some legacy projects on disk have clips whose
+        # timeline_range.start < 0 (e.g. sanlihe v1/cff462a starts at
+        # -0.33s; v6/c2325dd starts at -4.33s). The R4-R2 invariant
+        # is: persisted clip timeline frames cannot have start < 0.
+        # The repair clamps start to 0, shrinks the duration by the
+        # same amount so .end stays at the original end-frame, and
+        # records ONE `repair_negative_start` Operation per clamped
+        # clip in the operations log so the change is auditable.
+        # Idempotent: a project with no negative-start clips exits
+        # early without producing any Operation.
+        repair_recorded = core._apply_negative_start_repair()
+        if any_removed or repair_recorded:
             core.save_state()
         return core
+
+    # ---------- GUI-03R4-R2: load-time repair ----------
+
+    def _apply_negative_start_repair(self) -> bool:
+        """Detect clips whose timeline_range.start < 0 and clamp each
+        to start = 0 (preserving the original end-frame; duration
+        shrinks accordingly). Records ONE `repair_negative_start`
+        Operation per affected clip so the change is auditable.
+
+        Returns True iff any clip was clamped (caller should
+        save_state to persist the repair).
+
+        Idempotency: a project whose has no negative-start clips
+        returns False without producing any Operation. Re-opening a
+        project after the first repair is a no-op.
+        """
+        from yroll.core.commands import CommandLayer
+        from yroll.core.manifest import Actor, TimeRange
+        cl = CommandLayer(self, who=Actor.HUMAN)
+        any_repaired = False
+        # Iterate a stable snapshot (clip_ids ordering).
+        for cid in list(self.project.clips.keys()):
+            c = self.project.clips.get(cid)
+            if c is None:
+                continue
+            if c.timeline_range.start >= 0:
+                continue
+            before = c.model_dump()
+            original_end = c.timeline_range.end
+            # Preserve the original end-frame; duration shrinks.
+            new_start = 0.0
+            new_end = original_end
+            c.timeline_range = TimeRange(start=new_start, end=new_end)
+            after = c.model_dump()
+            cl._record(
+                "repair_negative_start", cid, before, after,
+                why=(f"GUI-03R4-R2: 历史负向 start={before['timeline_range']['start']:.4f}s "
+                     f"自动 clamp 到 0（保留 end={original_end:.4f}s）"),
+                time_range=c.timeline_range,
+                tool="repair.negative_start",
+            )
+            any_repaired = True
+        return any_repaired
 
     def save_state(self) -> None:
         # GUI-02: sync canonical Sequence → flat fields on save so

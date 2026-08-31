@@ -438,10 +438,17 @@ export default function App() {
 
   // GUI-03R3-2 P1-1: Fit Content on first project load. Runs once
   // when the project is available — computes pxPerSec so the longest
-  // clip's end fits into the visible timeline-content area. The
-  // default zoom (30 px/sec) is a placeholder until the effect runs.
-  // We also early-return if the user has already set zoom in this
-  // session (via slider or "适配内容" button).
+  // VISIBLE clip's end fits into the visible timeline-content area.
+  // The default zoom (30 px/sec) is a placeholder until the effect
+  // runs. We also early-return if the user has already set zoom in
+  // this session (via slider or "适配内容" button).
+  //
+  // GUI-03R4-R2: hidden tracks (track.hidden === true) are excluded
+  // from the extent — a hidden track is invisible to the Viewer, so
+  // its tail must not drag the fit-content zoom out. We walk the
+  // active Timeline's tracks, skip hidden ones, and take the max of
+  // visible-track clip ends. If no visible track has any content, we
+  // fall back to the original (all-tracks) extent.
   const fitContentRanRef = useRef(false);
   useEffect(() => {
     if (fitContentRanRef.current) return;
@@ -450,24 +457,31 @@ export default function App() {
     const t = setTimeout(() => {
       const cEl = document.querySelector('.timeline-content');
       if (!cEl) return;
-      let maxEnd = 0;
+      const activeTl = project.timelines?.find(
+        (tl) => tl.timeline_id === activeTimelineId) ?? project.timelines?.[0];
+      const visibleTrackIds = new Set(
+        (activeTl?.tracks ?? []).filter((t) => !t.hidden).map((t) => t.track_id));
+      let maxEndVisible = 0;
+      let maxEndAny = 0;
       for (const c of Object.values(project.clips)) {
         const end = c.timeline_range?.end ?? 0;
-        if (end > maxEnd) maxEnd = end;
+        if (end > maxEndAny) maxEndAny = end;
+        if (visibleTrackIds.has(c.track_id) && end > maxEndVisible) {
+          maxEndVisible = end;
+        }
       }
+      // Use VISIBLE extent for Fit Content; if no visible track has
+      // content, fall back to the whole-project extent.
+      const maxEnd = maxEndVisible > 0 ? maxEndVisible : maxEndAny;
       // Empty project: keep default 30 px/sec.
       if (maxEnd <= 0) { fitContentRanRef.current = true; return; }
-      // pxPerSec so that maxEnd seconds × pxPerSec ≈ visible width.
-      // For a 22-min project with 1360 px viewport: ≈ 1 px/sec.
-      // Allow values below the slider min so very long projects
-      // can still fit-content.
       const target = Math.max(0.5, Math.min(120,
         cEl.clientWidth / Math.max(0.001, maxEnd)));
       setPxPerSec(Math.round(target * 10) / 10);
       fitContentRanRef.current = true;
     }, 200);
     return () => clearTimeout(t);
-  }, [project]);
+  }, [project, activeTimelineId]);
 
   // GUI-03R3-1A: drag payload log sink. The smoke script reads it
   // back via page.evaluate(...). Reset on each mount so tests
@@ -821,11 +835,21 @@ export default function App() {
           onClick={() => {
             const cEl = document.querySelector('.timeline-content');
             if (!cEl) return;
-            let maxEnd = 0;
+            const activeTl = project.timelines?.find(
+              (tl) => tl.timeline_id === activeTimelineId) ?? project.timelines?.[0];
+            const visibleTrackIds = new Set(
+              (activeTl?.tracks ?? []).filter((t) => !t.hidden).map((t) => t.track_id));
+            let maxEndVisible = 0;
+            let maxEndAny = 0;
             for (const c of Object.values(project.clips)) {
               const end = c.timeline_range.end;
-              if (end > maxEnd) maxEnd = end;
+              if (end > maxEndAny) maxEndAny = end;
+              if (visibleTrackIds.has(c.track_id) && end > maxEndVisible) {
+                maxEndVisible = end;
+              }
             }
+            const maxEnd = maxEndVisible > 0 ? maxEndVisible : maxEndAny;
+            if (maxEnd <= 0) return;
             const target = Math.max(0.5, Math.min(120,
               cEl.clientWidth / Math.max(0.001, maxEnd)));
             setPxPerSec(Math.round(target * 10) / 10);

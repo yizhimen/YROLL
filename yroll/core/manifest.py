@@ -397,20 +397,30 @@ class Project(BaseModel):
         """GUI-03R3-2 P0-1: hard upper bound on `timeline_start_frame`
         for any clip in this Project.
 
-        Computed as the max end-frame across all clips in all
-        Timelines (in timeline-frame units, sequence-fps). Returns
-        0 if the Project has no clips — the bound collapses to
-        `[0, 0]` and any move attempt is rejected.
+        Computed as the max end-frame across all clips on VISIBLE
+        tracks (track.hidden == False) in all Timelines (in timeline-
+        frame units, sequence-fps). Returns 0 if the Project has no
+        visible clips — the bound collapses to `[0, 0]` and any move
+        attempt is rejected.
 
         Used by the server-side move/trim/split guards to enforce
         the [0, project_max_frame] safety invariant. The GUI also
         reads this value to clamp its own `finalFrame` computation
         so it can't commit an out-of-range destination.
+
+        GUI-03R4-R2: hidden tracks are excluded. A hidden track is a
+        track the Viewer does not show, so its content should not
+        determine the project extent. Hidden-track content is still
+        kept on disk (the user can un-hide and continue editing), but
+        its tail is not part of the "visible project extent" used for
+        Fit Content, server bounds, and the trim/move/split guards.
         """
         fps = self.sequence.fps
         max_end_seconds = 0.0
         for tl in self.timelines:
             for t in tl.tracks:
+                if t.hidden:
+                    continue
                 for cid in t.clip_ids:
                     c = self.clips.get(cid)
                     if c is None:

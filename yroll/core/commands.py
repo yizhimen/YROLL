@@ -1428,6 +1428,15 @@ class CommandLayer:
         tl = self._timeline(timeline_id)
         """Move to new TIMELINE seconds (legacy). For frame-native, use
         `move_clip_frame(new_timeline_start_frame)`."""
+        # GUI-03R4-R2: persisted clip timeline frames cannot have
+        # start < 0. The Core-level guard rejects the mutation with a
+        # clear CommandError; the server-side /clips/move endpoint
+        # also enforces this as defense-in-depth.
+        if new_timeline_start < 0:
+            raise CommandError(
+                f"move_clip: new_timeline_start={new_timeline_start} < 0; "
+                f"clip start cannot be negative (R2 invariant)"
+            )
         from yroll.core.links import infer_relationships
 
         clip = self._clip(clip_id, timeline_id)
