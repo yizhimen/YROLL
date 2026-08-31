@@ -1,6 +1,6 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + **GUI-03R3-W-B Track Auto-Create / Auto-Delete ✅**；Sanlihe browser smoke 待补）
+## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + GUI-03R3-W-B ✅ + **GUI-03R3-W-C Drop-Zone Wiring ✅**；Sanlihe browser smoke 待补）
 
 ### GUI-03R2 Timeline Interaction Reliability v0.1 (commit c36764d, push origin ✅)
 Driven by real Sanlihe browser usage. Baseline = main@e601608. Audit-first (no code changes until measured), then fix in spec order, then verify.
@@ -259,6 +259,59 @@ Baseline: baf8ed6 (post-03R3-1E)。Audit 文档：`docs/GUI-03R3-2-AUDIT.md`。�
 修改文件：
 - `docs/GUI-03R3-2-AUDIT.md` — 完整 audit 报告
 - `gui/smoke/03r3-2-audit.mjs` — 测量脚本（Playwright + CDP）
+
+### GUI-03R3-W-C Drop-Zone Wiring v0.1 (✅ pytest 648+2, vitest 203+2, tsc 0 NEW errors, commit d4c057e, push origin ✅)
+Baseline: 03R3-W-B (d8fc4ab). Plan: `docs/GUI-03R3-Implementation-Plan-v0.1.md` §3 + §4.
+
+**W-B Core layer unchanged.** W-C is the GUI wiring layer that exposes W-B's `ensure_track_for_drop` + auto-create/auto-delete behavior to the user through visible drop affordances.
+
+**Drop contract** (locked):
+- **Existing track** → `App.onAssetDrop(assetId, trackId, frame)` → `api.addImageClip` / `api.addClip` with explicit `track_id`. Core preserves the track id; overlap is rejected (no silent move to a different track).
+- **Below all tracks** → `App.onAssetDropNewTrack(assetId, lastTrackId, frame)` → `api.ensureTrackForDrop(assetType, insertAfterTrackId=last)` → `api.addImageClip` / `api.addClip` on the returned track. Core decides the new track id; existing tracks never rename.
+
+The GUI **never** sends pixel coordinates to Core. `ensure_track_for_drop` takes the last visible track id (resolved by hit-testing in the Timeline render layer) as the structural intent.
+
+**GUI changes**:
+- `gui/src/api.ts`: `api.ensureTrackForDrop(assetType, preferKind?, insertAfterTrackId?)` → `POST /tracks/ensure_for_drop` (Core endpoint shipped in W-B).
+- `gui/src/App.tsx`:
+  - `draggingAssetKind` state — driven by AssetPanel dragstart/dragend. The Timeline reads this prop, never a global drag state.
+  - `onAssetDropNewTrack` handler: `ensureTrackForDrop` → `addClip` on the new track. Image/video/audio paths supported; subtitle drop-out-of-v0.1 scope (AssetPanel's `+` button still handles subtitle insertion).
+- `gui/src/components/AssetPanel.tsx`: `onAssetDragStart(assetId, kind)` / `onAssetDragEnd()` callbacks notify the App of the drag state.
+- `gui/src/components/Timeline.tsx`:
+  - New prop `onAssetDropNewTrack` + `draggingAssetKind`.
+  - `<div class="drop-zone-new-track" data-drop-zone="below-tracks">` rendered below all visible tracks (only when there's at least one track AND `onAssetDropNewTrack` is wired).
+  - Visual kind label: "新建视频轨 ▾" / "新建音频轨 ▾" / "新建字幕轨 ▾" driven by `draggingAssetKind`.
+  - `track-content` `onDragOver` / `onDragLeave` add/remove the `.drag-over` class so the user sees WHERE the clip will land before mouseup.
+- `gui/src/styles.css`:
+  - `.drop-zone-new-track` — 28px tall, dashed border, faint background. `.drag-over` lifts border + bg to brand color.
+  - `.track-content.drag-over` — inset 2px brand-color border + faint highlight (existing-track hover feedback).
+
+**Tests** (3 new vitest):
+- `gui/src/api.dropZone.test.ts` (3): `ensureTrackForDrop` sends the right method/path/body; forwards `prefer_kind`; nulls out `insert_after_track_id` when not provided.
+
+**Browser smoke** (user-runnable): `gui/smoke/03r3-w-c-drop-zone.mjs`. Verifies:
+- The drop-zone DOM is rendered with `data-drop-zone="below-tracks"`.
+- The `.drag-over` class lands when a synthetic dragover fires on the drop zone.
+- No empty track rows are rendered after mutations (belt-and-suspenders on top of W-B's static guard).
+
+The actual create-vs-reuse paths are pinned by `tests/test_ensure_track_for_drop.py` + `tests/test_track_auto_delete.py` on the Core side (W-B's tests). The browser smoke focuses on DOM structure + UI affordances.
+
+**Regression**:
+- pytest **648 + 2 skipped** (unchanged — no Core changes in W-C)
+- vitest **203 + 2 skipped** (was 200; +3 new drop-zone wiring tests)
+- tsc **0 NEW errors** (the 2 pre-existing `Timeline.drag.test.ts` errors remain; W-C does not touch them — reporting honestly)
+
+**Browser smoke (user-runnable)**:
+```
+yroll serve projects/sanlihe-slice-30s
+cd gui && pnpm dev
+chromium --remote-debugging-port=9222 http://localhost:5173
+node gui/smoke/03r3-w-c-drop-zone.mjs
+```
+
+**Known gaps after this batch** (out of W-C scope):
+- Subtitle drag-on-empty-area: deferred. The drop zone explicitly says "subtitle is out of v0.1 drop scope" via a status message rather than doing a wrong-allocator round trip.
+- Vertical-gap between two existing tracks: the current behavior (drop on whichever row the pointer is over) is preserved; vertical-gap affordance deferred to a follow-up.
 
 ### GUI-03R3-W-B Track Auto-Create / Auto-Delete v0.1 (✅ pytest 648+2, vitest 200+2, tsc 0 NEW errors, commit b04265f, push origin ✅)
 Baseline: 03R3-W-A (eac4a87). Plan: `docs/GUI-03R3-Implementation-Plan-v0.1.md` §3.
