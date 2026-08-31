@@ -70,12 +70,12 @@ interface Props {
   onTransportReady?: (api: { toggle: () => void }) => void;
 }
 
-const ASPECTS: { id: AspectRatio; label: string; w: number; h: number }[] = [
-  { id: "16:9", label: "16:9", w: 16, h: 9 },
-  { id: "9:16", label: "9:16", w: 9, h: 16 },
-  { id: "1:1",  label: "1:1",  w: 1,  h: 1 },
-  { id: "4:3",  label: "4:3",  w: 4,  h: 3 },
-  { id: "3:4",  label: "3:4",  w: 3,  h: 4 },
+const ASPECTS: { id: AspectRatio; label: string; w: number; h: number; tooltip: string }[] = [
+  { id: "16:9", label: "16:9", w: 16, h: 9, tooltip: "横屏 (YouTube / B站)" },
+  { id: "9:16", label: "9:16", w: 9, h: 16, tooltip: "竖屏 (抖音 / 快手)" },
+  { id: "1:1",  label: "1:1",  w: 1,  h: 1,  tooltip: "方形 (小红书 / 朋友圈)" },
+  { id: "4:3",  label: "4:3",  w: 4,  h: 3,  tooltip: "传统电视" },
+  { id: "3:4",  label: "3:4",  w: 3,  h: 4,  tooltip: "竖版传统" },
 ];
 
 export default function PreviewPlayer({
@@ -403,6 +403,26 @@ export default function PreviewPlayer({
     }
   }, [playheadFrame, playing, audioNow.map((c) => c.clip_id).join(",")]);
 
+  // GUI-03R4-R6: explicit canvas dimensions from a ResizeObserver on
+  // .preview-stage. Inner-dimension rule: longest side =
+  // min(stageWidth, stageHeight × aspect); other side = longest /
+  // aspect. This replaces CSS `aspectRatio` magic so resizing the
+  // inspector pane visibly resizes the canvas.
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [stageSize, setStageSize] = useState<{ width: number; height: number }>({ width: 1, height: 1 });
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      setStageSize({ width: rect.width, height: rect.height });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const stageStyle: React.CSSProperties = {
     width: "100%",
     height: "100%",
@@ -412,10 +432,29 @@ export default function PreviewPlayer({
     background: "#000",
     overflow: "hidden",
   };
+  // Compute explicit width/height from aspect + stage size. Aspect
+  // is given as "W:H" (e.g. "16:9"). Longest side wins.
+  const aspectParts = aspect.split(":").map(Number);
+  const aspectW = aspectParts[0] || 16;
+  const aspectH = aspectParts[1] || 9;
+  // Fit inside the stage with a small inset (16px on each side).
+  const inset = 16;
+  const availW = Math.max(1, stageSize.width - inset * 2);
+  const availH = Math.max(1, stageSize.height - inset * 2);
+  // Two candidates: constrained by width, constrained by height.
+  let canvasW: number;
+  let canvasH: number;
+  if (availW / aspectW <= availH) {
+    // Width-bound: width = availW, height = availW / aspectW.
+    canvasW = availW;
+    canvasH = availW / aspectW;
+  } else {
+    canvasH = availH;
+    canvasW = availH * aspectW;
+  }
   const frameStyle: React.CSSProperties = {
-    aspectRatio: aspect.replace(":", " / "),
-    maxWidth: "100%",
-    maxHeight: "100%",
+    width: canvasW,
+    height: canvasH,
     background: "#000",
     position: "relative",
     overflow: "hidden",
@@ -442,7 +481,7 @@ export default function PreviewPlayer({
           <span className="preview-asset-label">素材预览：{overrideSrc.label}</span>
           <button onClick={onClearOverride}>返回时间轴</button>
         </div>
-        <div className="preview-stage">
+        <div className="preview-stage" ref={stageRef}>
           <div style={frameStyle}>
             {overrideSrc.isImage ? (
               <img style={videoStyle} src={overrideSrc.url} alt="" />
@@ -480,10 +519,10 @@ export default function PreviewPlayer({
           <button key={a.id}
             className={`aspect-btn ${aspect === a.id ? "active" : ""}`}
             onClick={() => onAspect?.(a.id)}
-            title={`${a.w}:${a.h}`}>{a.label}</button>
+            title={`${a.tooltip} — ${a.w}:${a.h}`}>{a.label}</button>
         ))}
       </div>
-      <div className="preview-stage">
+      <div className="preview-stage" ref={stageRef}>
         {/* GUI-03R2 P0-F: visible TimelineFrame progress indicator.
             TimelineFrame is authoritative; HTMLMediaElement.currentTime
             is NEVER read for state (per closure invariant §02-5).
@@ -502,6 +541,26 @@ export default function PreviewPlayer({
           />
         </div>
         <div style={frameStyle}>
+          {/* GUI-03R4-R6: playhead-in-canvas marker. TimelineFrame
+              is authoritative; we render a 1px vertical line at
+              (playheadFrame / endFrame) × canvasWidth. Color
+              matches the timeline .playhead-overlay (#ff5050). */}
+          {clockRef.current?.endFrame && clockRef.current.endFrame > 0 && (
+            <div
+              data-testid="preview-playhead-marker"
+              style={{
+                position: "absolute",
+                top: 0, bottom: 0,
+                left: `${Math.min(100, Math.max(0,
+                  (playheadFrame / Math.max(1, clockRef.current.endFrame)) * 100))}%`,
+                width: "1px",
+                background: "#ff5050",
+                pointerEvents: "none",
+                zIndex: 9998,
+                boxShadow: "0 0 4px rgba(255, 80, 80, 0.6)",
+              }}
+            />
+          )}
           {mode === "rendered" && renderedUrl ? (
             <video key={renderedUrl} ref={videoRef} src={renderedUrl}
               controls onTimeUpdate={onTimeUpdate} style={videoStyle} />
