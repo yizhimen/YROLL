@@ -10,10 +10,13 @@ import { sessionStore } from "./session";
 
 // GUI-03R5-B1: every API test must put the SessionStore into EDIT
 // first so api.gated()'s new ensureReady() gate doesn't reject the
-// call with "session not in EDIT state".
+// call with "session not in EDIT state". We use the public surface
+// (setSessionId + subscribe dance is too noisy for tests); casting
+// // to `any` here is intentional and isolated.
 function enterEditMode() {
   sessionStore._reset();
-  sessionStore.set({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (sessionStore as any).set({
     sessionId: "test-session",
     loaded: true,
     mine: true,

@@ -301,8 +301,6 @@ import {
   frameRulerLabel,
   frameToRulerSeconds,
 } from "./frames";
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
-
 import { api } from "./api";
 import { sessionStore } from "./session";
 

@@ -94,7 +94,7 @@ export function canMutate(s: ProjectSession): boolean {
  *  every state — including CONNECTING. The Viewer must work even
  *  before the first /ui/status lands. */
 export function canRead(s: ProjectSession): boolean {
-  return s.loaded || s.editorState !== "OBSERVE" || s.editorState !== "CONNECTING";
+  return true;
 }
 
 /** GUI-03R5-B1: one-shot promise that resolves once the editor is
@@ -129,26 +129,29 @@ export function ensureReady(timeoutMs: number = 8000): Promise<void> {
       new Error("session in OBSERVE mode; mutations blocked"));
   }
   if (sessionStore._readyPromise) return sessionStore._readyPromise;
+  let unsub: () => void = () => {};
+  let timer: ReturnType<typeof setTimeout> | null = null;
   const ready = new Promise<void>((resolve, reject) => {
-    const unsub = sessionStore.subscribe(() => {
+    unsub = sessionStore.subscribe(() => {
       const cur = sessionStore.get();
-      if (canMutate(cur)) { unsub(); clearTimeout(timer); resolve(); return; }
-      // GUI-03R5-B1: if EDIT mode but no sessionId, we're in a
-      // degenerate state — no subscription will ever fire to fix
-      // it (the state won't change on its own). Surface the
-      // no_session error immediately so callers don't hang.
+      if (canMutate(cur)) {
+        unsub(); if (timer) clearTimeout(timer); resolve(); return;
+      }
+      // GUI-03R5-B1: degenerate state — no subscription will ever
+      // fire to fix it. Surface the no_session error immediately
+      // so callers don't hang.
       if (cur.editorState === "EDIT" && cur.sessionId === null) {
-        unsub(); clearTimeout(timer);
+        unsub(); if (timer) clearTimeout(timer);
         reject(new Error("session in EDIT but no sessionId; mutations blocked"));
         return;
       }
       if (cur.editorState === "OBSERVE") {
-        unsub(); clearTimeout(timer);
+        unsub(); if (timer) clearTimeout(timer);
         reject(new Error("session in OBSERVE mode; mutations blocked"));
         return;
       }
     });
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       unsub();
       reject(new Error("session ready timeout"));
     }, timeoutMs);
@@ -156,18 +159,18 @@ export function ensureReady(timeoutMs: number = 8000): Promise<void> {
     // A test that pre-seeds editorState === EDIT via set({loaded:true,
     // mine:true, alive:true}) should NOT have us re-refresh and clobber
     // that state with whatever /ui/status returns (which won't know
-    // about the test's mock session id). The subscribe above already
-    // saw canMutate(s0) === true at the very first state check below.
+    // about the test's mock session id).
     if (s0.editorState === "CONNECTING") {
       if (!sessionStore._pollTimerActive()) sessionStore.startPolling();
       void sessionStore.refresh().catch(() => { /* ignore */ });
-  }
+    }
   });
   // After subscribing, check the current state again — the caller may
   // have transitioned to EDIT between the pre-check and the subscribe
   // (e.g., via a synchronous set() in a test setup).
   if (canMutate(sessionStore.get())) {
-    unsub(); clearTimeout(timer);
+    unsub();
+    if (timer) clearTimeout(timer);
     return Promise.resolve();
   }
   sessionStore._readyPromise = ready;
@@ -214,7 +217,10 @@ class SessionStore {
     };
   }
 
-  private set(patch: Partial<ProjectSession>): void {
+  /** Apply a state patch. Public so tests can drive the store
+   *  directly; production code uses the typed setters
+   *  (setSessionId / bumpRevision / noteGateError / etc.). */
+  set(patch: Partial<ProjectSession>): void {
     // GUI-03R5-B1: every state patch re-derives editorState from the
     // raw fields. Components MUST consult editorState (via
     // canMutate(s)) rather than reasoning about mine/alive/loaded
