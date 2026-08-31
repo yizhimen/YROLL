@@ -32,6 +32,7 @@ import {
   trackRowGeometry,
 } from "../timeline-geometry";
 import ClipBlock from "./ClipBlock";
+import ContextMenu, { type MenuItem } from "./ContextMenu";
 
 interface Props {
   project: Project;
@@ -317,6 +318,110 @@ export default function Timeline({
     { startX: number; startY: number; currentX: number; currentY: number;
       additive: boolean } | null>(null);
   const [viewport, setViewport] = useState({ left: 0, width: 1 });
+  // GUI-03R5-B4 (Decision 5): track-header right-click context
+  // menu. Closed = null. The menu's items are computed when the
+  // user right-clicks, using the current track state.
+  const [trackCtxMenu, setTrackCtxMenu] = useState<
+    { x: number; y: number; track_id: string } | null>(null);
+  // Gap right-click menu (track-content right-click): closes
+  // THIS gap (the one containing the click point) or, with an
+  // option, closes all gaps on this track. The user can also
+  // close all visible gaps.
+  const [gapCtxMenu, setGapCtxMenu] = useState<{
+    x: number; y: number; track_id: string;
+    gap: { startSec: number; endSec: number } | null;
+  } | null>(null);
+  const trackCtxItems = useMemo<MenuItem[]>(() => {
+    if (!trackCtxMenu) return [];
+    const track = visibleTracks.find(
+      (t) => t.track_id === trackCtxMenu.track_id);
+    if (!track) return [];
+    const items: MenuItem[] = [
+      // GUI-03R5-B4: contextual gap action — closes ALL gaps on
+      // this single track. Single-track scope is the user-explicit
+      // answer to "what does this button do?" (vs the deleted
+      // topbar which closed all visible tracks).
+      {
+        label: "关闭本轨道所有间隙",
+        hint: "track-scope",
+        onClick: () => {
+          onCloseGapsBatch?.([track.track_id]);
+          setTrackCtxMenu(null);
+        },
+      },
+      { label: "——", separator: true },
+      // Existing track controls consolidated into the same menu.
+      // visibleTracks filters out text/subtitle tracks above
+      // (TrackKind is closed); the explicit `as string` cast
+      // silences TS's "no overlap" narrowing.
+      ...(track.kind !== "text" && (track.kind as string) !== "subtitle"
+        ? [{
+            label: track.muted ? "取消静音" : "静音",
+            onClick: () => {
+              onTrackMute?.(track.track_id, !track.muted);
+              setTrackCtxMenu(null);
+            },
+          } as MenuItem]
+        : []),
+      {
+        label: track.locked ? "解锁轨道" : "锁定轨道（禁拖动）",
+        onClick: () => {
+          onTrackLock?.(track.track_id, !track.locked);
+          setTrackCtxMenu(null);
+        },
+      },
+      {
+        label: track.hidden ? "显示轨道" : "隐藏轨道",
+        onClick: () => {
+          onTrackHide?.(track.track_id, !track.hidden);
+          setTrackCtxMenu(null);
+        },
+      },
+    ];
+    return items;
+  }, [trackCtxMenu, visibleTracks, onCloseGapsBatch,
+       onTrackMute, onTrackLock, onTrackHide]);
+  // GUI-03R5-B4: gap context menu items. The track-content
+  // onContextMenu computes the gap containing the click and
+  // stores it in `gapCtxMenu`; the items below read it back.
+  const gapCtxItems = useMemo<MenuItem[]>(() => {
+    if (!gapCtxMenu) return [];
+    const track = visibleTracks.find(
+      (t) => t.track_id === gapCtxMenu.track_id);
+    if (!track) return [];
+    const items: MenuItem[] = [];
+    if (gapCtxMenu.gap) {
+      items.push({
+        label: "关闭这个间隙",
+        hint: `${gapCtxMenu.gap.startSec.toFixed(2)}s – `
+            + `${gapCtxMenu.gap.endSec.toFixed(2)}s`,
+        onClick: () => {
+          onCloseGap?.(gapCtxMenu.track_id,
+            gapCtxMenu.gap!.startSec, gapCtxMenu.gap!.endSec);
+          setGapCtxMenu(null);
+        },
+      });
+    }
+    items.push({
+      label: "关闭本轨道所有间隙",
+      hint: "track-scope",
+      onClick: () => {
+        onCloseGapsBatch?.([gapCtxMenu.track_id]);
+        setGapCtxMenu(null);
+      },
+    });
+    items.push({
+      label: "关闭全部可见间隙",
+      hint: "all-tracks",
+      onClick: () => {
+        const ids = visibleTracks.filter((t) => !t.hidden)
+          .map((t) => t.track_id);
+        onCloseGapsBatch?.(ids);
+        setGapCtxMenu(null);
+      },
+    });
+    return items;
+  }, [gapCtxMenu, visibleTracks, onCloseGap, onCloseGapsBatch]);
   // Sequence (canonical timebase) — provides fps for frame↔px math
   const seq = useProjectSequence();
   // pxPerFrame derived from perceived pxPerSec and the project's fps.
@@ -469,6 +574,19 @@ export default function Timeline({
             className={`track-label-row ${track.hidden ? "track-hidden" : ""}`}
             data-track-id={track.track_id}
             style={{ display: track.hidden ? "none" : "flex" }}
+            // GUI-03R5-B4: right-click on a track HEADER opens the
+            // contextual track menu (Close gaps + mute/lock/hide).
+            // Right-click on the CONTENT row (handled by the
+            // track-content onContextMenu below) opens the
+            // "Close this gap" menu — separate, single-gap scope.
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setTrackCtxMenu({
+                x: e.clientX,
+                y: e.clientY,
+                track_id: track.track_id,
+              });
+            }}
           >
             <div className="track-label-title">
               {/* GUI-03R3-W-D: semantic kind icon + track id +
@@ -814,7 +932,16 @@ export default function Timeline({
                     ? Math.max(0.0, clickSec + 5)  // arbitrary finite end
                     : bestGap[1];
                   if (gEnd - gStart <= 1e-6) return;
-                  onCloseGap?.(track.track_id, gStart, gEnd);
+                  // GUI-03R5-B4: open the context menu instead of
+                  // immediately closing. The user picks: close THIS
+                  // gap, close ALL gaps on this track, or close
+                  // ALL visible-track gaps. (Single-gap fire was the
+                  // R4-5 behavior; the new behavior is contextual.)
+                  setGapCtxMenu({
+                    x: e.clientX, y: e.clientY,
+                    track_id: track.track_id,
+                    gap: { startSec: gStart, endSec: gEnd },
+                  });
                 }}
                 onDragOver={(e) => {
                   if (e.dataTransfer.types.includes("text/yroll-asset")) {
@@ -977,6 +1104,20 @@ export default function Timeline({
           );
         })()}
       </div>
+      {/* GUI-03R5-B4: track-header right-click menu. */}
+      <ContextMenu
+        pos={trackCtxMenu}
+        items={trackCtxItems}
+        testid="track-context-menu"
+      />
+      {/* GUI-03R5-B4: gap right-click menu (right-click on an
+          empty area in a track-content row → "Close this gap").
+          We reuse the same ContextMenu shell. */}
+      <ContextMenu
+        pos={gapCtxMenu}
+        items={gapCtxItems}
+        testid="gap-context-menu"
+      />
     </div>
   );
 }

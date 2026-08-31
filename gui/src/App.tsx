@@ -875,17 +875,14 @@ export default function App() {
           onChange={(e) => setPxPerSec(Number(e.target.value))}
           style={{ width: 100 }}
         />
-        <button
-          title="批量关闭当前可见轨道的所有间隙（每条轨道一个 Operation）"
-          onClick={() => {
-            const activeTl = project?.timelines?.find(
-              (tl) => tl.timeline_id === activeTimelineId) ?? project?.timelines?.[0];
-            const ids = (activeTl?.tracks ?? []).filter((t) => !t.hidden).map((t) => t.track_id);
-            onCloseGapsBatch(ids);
-          }}
-        >
-          批量关闭间隙
-        </button>
+        {/* GUI-03R5-B4 (Decision 5): the "批量关闭间隙" topbar button
+            was REMOVED. Gap actions are now CONTEXTUAL:
+            - Right-click on an empty area in a track → "Close this gap"
+              (already implemented in Timeline.tsx)
+            - Right-click on a track header → context menu with
+              "Close all gaps on this track" + mute/lock/hide/delete
+              (added in B4) */}
+
         <button
           title="缩放到全部内容可见"
           onClick={() => {
