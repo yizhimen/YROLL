@@ -1912,12 +1912,19 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         GUI-03E-2A: timeline_id is required. The plan only contains
         clips owned by that Timeline; cross-Timeline clipping is
         impossible.
+
+        R5 audit (2026-09-01): inject the canonical project revision
+        (same `get_current_revision` used by /sequence and the
+        mutation gate) into build_preview_plan so the plan's
+        `project_revision` matches /sequence and /ui/status exactly.
         """
         from yroll.core.plan import (
             PreviewPlan, build_preview_plan, PreviewLayer,
         )
         plan: PreviewPlan = build_preview_plan(
-            st.core.project, timeline_id=(timeline_id or None))
+            st.core.project,
+            timeline_id=(timeline_id or None),
+            project_revision=get_current_revision(st.core))
 
         def _layer_to_dict(l: PreviewLayer) -> dict:
             return {

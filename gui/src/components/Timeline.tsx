@@ -573,7 +573,11 @@ export default function Timeline({
             key={track.track_id}
             className={`track-label-row ${track.hidden ? "track-hidden" : ""}`}
             data-track-id={track.track_id}
-            style={{ display: track.hidden ? "none" : "flex" }}
+            // R5 audit (2026-09-01): track.hidden must NOT collapse
+            // the header row. Hidden state is communicated visually
+            // via the .track-hidden CSS class (opacity 0.5, italic
+            // label) and suppresses ONLY Preview/Composite participation
+            // (handled in PreviewPlayer via plan.hidden filter).
             // GUI-03R5-B4: right-click on a track HEADER opens the
             // contextual track menu (Close gaps + mute/lock/hide).
             // Right-click on the CONTENT row (handled by the
@@ -808,8 +812,11 @@ export default function Timeline({
             <div
               key={track.track_id}
               className={`track-row ${track.hidden ? "track-hidden" : ""}`}
-              style={{ width, display: track.hidden ? "none" : "flex" }}
+              style={{ width }}
               data-track-id={track.track_id}
+              // R5 audit (2026-09-01): track.hidden must NOT collapse
+              // the content row. Row stays visible (clips remain in
+              // Timeline); only Preview participation is suppressed.
             >
               <div
                 className="track-content"

@@ -124,12 +124,23 @@ def _timeline_range_frames(c, fps):
 
 
 def build_preview_plan(project: Project, timeline_id: str = "main",
-                       fps: Optional[Rational] = None) -> PreviewPlan:
+                       fps: Optional[Rational] = None,
+                       project_revision: Optional[int] = None) -> PreviewPlan:
     """Build a PreviewPlan for the project's current state.
 
-    The plan embeds `project.sequence.project_revision` (or 0) so
-    the GUI can detect staleness against /ui/status without re-fetching
+    The plan embeds `project_revision` so the GUI can detect
+    staleness against /ui/status and /sequence without re-fetching
     the whole project.
+
+    R5 audit (2026-09-01): `project_revision` is sourced from the
+    canonical `get_current_revision(core)` (the same function used
+    by /sequence and the mutation gate) — injected by the caller
+    as a parameter. We no longer read `project.ui_status.base_revision`
+    because that attribute is never assigned anywhere in the project
+    model. Resolution order:
+      1. `project_revision` parameter (canonical, server-supplied)
+      2. `project.sequence.project_revision` (future-proof fallback)
+      3. 0 (last-resort, must never silently mismatch /sequence)
 
     GUI-03R4-R1: `layer_index` is assigned GLOBALLY across all visual
     tracks (in KIND_RANK + numeric-suffix order). Hidden tracks are
@@ -140,10 +151,11 @@ def build_preview_plan(project: Project, timeline_id: str = "main",
     """
     if fps is None:
         fps = project.sequence.fps
-    revision = 0
-    ui_status = getattr(project, "ui_status", None)
-    if ui_status is not None and getattr(ui_status, "base_revision", None) is not None:
-        revision = ui_status.base_revision
+    if project_revision is not None:
+        revision = int(project_revision)
+    else:
+        seq_rev = getattr(project.sequence, "project_revision", None)
+        revision = int(seq_rev) if seq_rev is not None else 0
     plan = PreviewPlan(
         project_revision=revision,
         timeline_id=timeline_id,

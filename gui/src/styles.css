@@ -338,6 +338,32 @@ body {
   /* frame 0 = x=0 inside .track-row. Children .clip use position:absolute
      with left: tlStart * pxPerF (no gutter offset). */
 }
+/* R5 audit (2026-09-01): .track-hidden is the visual cue for a track
+ * hidden from Preview/Composite participation. The row + header stay
+ * in the layout (so the user can see their track and its clips); only
+ * PreviewPlayer filters them out via the cached plan's `hidden` flag.
+ * Earlier `display: none` semantics were removed — see Timeline.tsx
+ * comments. */
+.track-row.track-hidden {
+  opacity: 0.45;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0,
+    transparent 8px,
+    rgba(255, 210, 121, 0.05) 8px,
+    rgba(255, 210, 121, 0.05) 16px
+  );
+}
+.track-label-row.track-hidden {
+  opacity: 0.55;
+  font-style: italic;
+  background: #181818;
+}
+.track-label-row.track-hidden .track-id,
+.track-label-row.track-hidden .track-role-label {
+  color: #8a8a8a;
+  text-decoration: line-through wavy #888;
+}
 .track-content {
   position: absolute; inset: 0;
 }
