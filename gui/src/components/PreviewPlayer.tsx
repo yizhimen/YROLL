@@ -805,12 +805,33 @@ export default function PreviewPlayer({
                 />
               ))}
             </div>
-          ) : clip && asset && sourceFrame !== null && timeMapEntry ? (
-            // Fallback L0 single-clip path (used when the composite
-            // fetch hasn't completed yet, e.g. very first render).
+          ) : clip && asset ? (
+            // Fallback L0 single-clip path. The membership comparison
+            // was already verified in FRAMES at line 226-228 (no unit
+            // mismatch — clipFramesFromSec converts seconds→frames at
+            // the storage→edit boundary).
+            //
+            // The L0 render branches on asset.type:
+            //   image → render the asset URL directly. Images have no
+            //          source timebase; the TimeMap fetch above returns
+            //          422 for image clips and sourceFrame stays null.
+            //          We MUST NOT require sourceFrame/timeMapEntry
+            //          here — doing so made the L0 fallback unreachable
+            //          for images, which caused the "in-gap" placeholder
+            //          to fire on frames that DO have an image clip
+            //          (audit finding #7). The image's sourceFrame is
+            //          implicitly 0 (single source frame).
+            //   video → additionally require sourceFrame + timeMapEntry
+            //          (loaded async via fetchTimeMap). When those are
+            //          still in flight, show a "loading" placeholder —
+            //          NOT the misleading "in-gap" text, since the
+            //          membership DID match.
             asset.type === "image" ? (
-              <img style={videoStyle} src={`/assets/${asset.asset_id}/file`} alt="" />
-            ) : (
+              <img style={videoStyle}
+                src={`/assets/${asset.asset_id}/file`}
+                alt=""
+                data-layer-kind={asset.type} />
+            ) : sourceFrame !== null && timeMapEntry ? (
               <video key={clip.clip_id} ref={videoRef}
                 src={`/assets/${asset.asset_id}/file`}
                 controls autoPlay muted
@@ -840,8 +861,19 @@ export default function PreviewPlayer({
                   e.currentTarget.play().catch(() => undefined);
                 }}
                 style={videoStyle} />
+            ) : (
+              // Video clip membership matched, but the TimeMap fetch
+              // is still in flight. Genuine "loading" state — the
+              // clip IS there (frame-domain membership matched);
+              // we just haven't derived SourceFrame yet.
+              <div className="placeholder">⏳ 加载中…</div>
             )
           ) : (
+            // No clip at this playhead frame. This is the ONLY case
+            // where "in-gap" is truthful — the membership comparison
+            // at line 226-228 found zero clips at playheadFrame. The
+            // playback position is genuinely outside every visible
+            // clip's range on this Timeline.
             <div className="placeholder">
               {clips.length === 0
                 ? "📭 时间轴是空的——从素材库拖到 V1 轨"

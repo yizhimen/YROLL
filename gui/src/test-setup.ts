@@ -30,3 +30,18 @@ if (typeof globalThis.requestAnimationFrame === "undefined") {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).cancelAnimationFrame = (_id: number): void => {};
 }
+
+// GUI-03R6: jsdom doesn't implement ResizeObserver — PreviewPlayer
+// uses it on the .preview-stage element to drive explicit canvas
+// dimensions. Stub to a no-op observer so React's useEffect doesn't
+// throw on mount.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _RO: any = (globalThis as any).ResizeObserver;
+if (typeof _RO === "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
