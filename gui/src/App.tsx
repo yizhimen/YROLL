@@ -1045,17 +1045,27 @@ export default function App() {
   // integer-aligned. Downstream components (PreviewPlayer's
   // L0 fallback) will not see a stale `end: 412.5` for a clip
   // being dragged to frame 0.
+  // R6.2-B5: dragPreview stores INTEGER TimelineFrames (the pointer-
+  // derived candidate clamped by sibling collisions). timeline_range
+  // is stored in SECONDS on the Core side. The previous code wrote
+  // `dragPreview[id]` directly into `timeline_range.start` and added
+  // `durFrames` (frames) to `end` — mixing units produced a 30x
+  // visual amplification: a 1px drag (1 frame ≈ 0.033s) showed the
+  // clip jumping to start=1 (1 second = 30 frames). Convert the
+  // frame value to seconds at the boundary; preserve the duration.
   const seqFpsForDisplay = project?.sequence?.fps ?? { num: 30, den: 1 };
   const displayProject: Project = {
     ...project,
     clips: Object.fromEntries(
       Object.entries(project.clips).map(([id, c]) => {
-        const s = dragPreview[id];
-        if (s === undefined) return [id, c];
+        const dragFrame = dragPreview[id];
+        if (dragFrame === undefined) return [id, c];
         const durSec = c.timeline_range.end - c.timeline_range.start;
-        const durFrames = roundHalfAwayFromZero(
-          durSec * seqFpsForDisplay.num / seqFpsForDisplay.den);
-        return [id, { ...c, timeline_range: { start: s, end: s + durFrames } }];
+        const startSec = dragFrame * seqFpsForDisplay.den / seqFpsForDisplay.num;
+        return [id, {
+          ...c,
+          timeline_range: { start: startSec, end: startSec + durSec },
+        }];
       })
     ),
   };
@@ -2002,6 +2012,16 @@ export default function App() {
           // the parent would commit the frame first and then
           // dispatch a separate track move, leaving a brief window
           // where the clip lived on the wrong track.
+          // R6.2-B5: clear dragPreview so displayProject doesn't keep
+          // overriding the clip's timeline_range with the last drag
+          // candidate after the server has accepted the move. Without
+          // this, a second drag would inherit the previous drag's
+          // preview state and amplify the visual jump.
+          setDragPreview((p) => {
+              if (!(clipId in p)) return p;
+              const { [clipId]: _drop, ...rest } = p;
+              return rest;
+            });
           if (newTrackId) {
             run(() => api.move(clipId, newStartFrame, "GUI 跨轨拖动",
                   newTrackId), "已跨轨移动");
