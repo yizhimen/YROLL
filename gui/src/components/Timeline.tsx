@@ -80,6 +80,14 @@ interface Props {
   onCloseGapsBatch?: (trackIds: string[]) => void;
   /** Pointermove preview. `newStartFrame` is an INTEGER TimelineFrame. */
   onDragMove: (clipId: string, newStartFrame: number, ghostSnapFrame?: number | null) => void;
+  /** R6.1-B: clamp-boundary flag per clip. `true` while the drag's
+   *  pointer-raw candidate is inside a sibling's range and the
+   *  clamp teleported the preview to the boundary. Used by the
+   *  ClipBlock to apply a dashed red outline + cursor:not-allowed. */
+  onClampBoundary?: (clipId: string, onBoundary: boolean) => void;
+  /** R6.1-B: the per-clip clamp-boundary map keyed by clipId, read
+   *  on every render to apply the visual. Reset on drag end. */
+  dragClampBoundary?: Record<string, boolean>;
   /** GUI-03R3-1E: ghost-snap frame per active drag, keyed by clipId.
    *  Rendered as a thin vertical line inside the clip's track-content
    *  row at `ghostFrame * pxPerFrame`. Visual only — never modifies
@@ -274,6 +282,8 @@ export default function Timeline({
   onCloseGap,
   onCloseGapsBatch,
   dragGhost,
+  onClampBoundary,
+  dragClampBoundary,
   draggingAssetKind = null,
   showEmptyTracks = false,
 }: Props) {
@@ -1040,6 +1050,8 @@ export default function Timeline({
                       canEdit={canEdit}
                       onSelect={onSelect}
                       onDragMove={onDragMove}
+                      onClampBoundary={onClampBoundary}
+                      clampBoundary={!!dragClampBoundary?.[cid]}
                       onMoveCommit={onMoveCommit}
                       onTrimCommit={onTrimCommit}
                     />

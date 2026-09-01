@@ -98,7 +98,7 @@ describe("mutation gate envelope", () => {
     // A split logs more than one operation, so the client cannot just +1.
     stubFetch([uiStatus(9), { match: "/split" }]);
 
-    await api.split("clip-1", 2.5);
+    await api.split("clip-1", 2);
 
     expect(sessionStore.get().revision).toBe(9);
   });

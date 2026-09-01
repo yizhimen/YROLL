@@ -26,6 +26,7 @@ import EditLease from "./components/EditLease";
 import AssetPanel from "./components/AssetPanel";
 import OpsPanel from "./components/OpsPanel";
 import PreviewPlayer, { AspectRatio } from "./components/PreviewPlayer";
+import { usePreviewPlanInvalidation } from "./preview-plan";
 import VisualAdjustPanel from "./components/VisualAdjustPanel";
 import SubtitleEditor from "./components/SubtitleEditor";
 import ExportPanel from "./components/ExportPanel";
@@ -879,6 +880,14 @@ export default function App() {
   // in `computeBringPlan` (pure function, fully tested). See that
   // file for the rationale on why the helper cannot read the React
   // `project` closure.
+  // R6.1-D: PreviewPlan invalidation counter. App.tsx owns it and
+  // passes it to PreviewPlayer. Every successful `run()` call (any
+  // mutation) bumps the counter, which forces the PreviewPlayer's
+  // `usePreviewPlan` to refetch immediately instead of waiting for
+  // the 5-second /sequence poll. This is the single reusable
+  // mechanism — NOT an ad-hoc fetch per call site.
+  const { invalidationVersion, bumpPlanVersion } = usePreviewPlanInvalidation();
+
   const run = async (
     fn: () => Promise<unknown>,
     ok: string,
@@ -887,6 +896,14 @@ export default function App() {
     try {
       await fn();
       await refresh();
+      // R6.1-D: any successful mutation may have changed the
+      // preview plan (new clip, removed clip, hidden track, new
+      // track, etc.). Bump the version so the L1 composite
+      // refetches immediately. Bumping BEFORE `refresh()` would
+      // race against the local `setProject(fresh)` re-render;
+      // bumping after ensures the new project state is in place
+      // when the plan refetch resolves.
+      bumpPlanVersion();
       if (bring) bringClipIntoView(bring);
       setStatus({ ok: true, text: ok });
     } catch (e: any) {
@@ -964,6 +981,17 @@ export default function App() {
   // dragged clip's preview position.
   const [dragPreview, setDragPreview] = useState<Record<string, number>>({});
   const [dragGhost, setDragGhost] = useState<Record<string, number | null>>({});
+  // R6.1-B: clamp-boundary flag per clip. Set true when the drag
+  // pointer-raw candidate is inside a sibling's range and the clamp
+  // teleported the preview to the boundary; reset on drag end.
+  // The Timeline reads this set to apply a dashed red outline +
+  // cursor:not-allowed to the dragged clip. The math is unchanged.
+  const [dragClampBoundary, setDragClampBoundary] = useState<Record<string, boolean>>({});
+  // One-shot "已贴边" status text. Per the R6.1-B constraint, status
+  // text is secondary — the visual outline + cursor are the primary
+  // cues. We show the status ONCE when the boundary is first
+  // entered, not on every pointermove.
+  const clampBoundaryAnnouncedRef = useRef<Set<string>>(new Set());
   const onDragMove = (
     clipId: string,
     newStartFrame: number,
@@ -974,6 +1002,29 @@ export default function App() {
     setDragPreview((p) => ({ ...p, [clipId]: newStartFrame }));
     setDragGhost((p) => ({ ...p, [clipId]: ghostSnapFrame }));
   };
+  // R6.1-B: callback from ClipBlock on every pointermove. We
+  // detect the boundary transition (false → true) and surface
+  // a one-shot status text. The set is the persistent state the
+  // Timeline reads to apply the visual.
+  const onClampBoundary = (clipId: string, onBoundary: boolean) => {
+    setDragClampBoundary((p) => {
+      if ((p[clipId] ?? false) === onBoundary) return p;
+      return { ...p, [clipId]: onBoundary };
+    });
+    if (onBoundary && !clampBoundaryAnnouncedRef.current.has(clipId)) {
+      clampBoundaryAnnouncedRef.current.add(clipId);
+      // Lightweight, one-shot — does NOT replace the primary
+      // visual feedback. The user can keep dragging without this
+      // text being re-shown for the same gesture.
+      setStatus({
+        ok: true,
+        text: "已贴边（拖到 sibling 边界，preview 被 clamp 强制贴齐）",
+      });
+    }
+    if (!onBoundary) {
+      clampBoundaryAnnouncedRef.current.delete(clipId);
+    }
+  };
   // commitDrag is no longer needed — ClipBlock calls onMoveCommit
   // directly on pointerup. Kept as a no-op for backward compatibility
   // with the old global pointerup listener (now removed).
@@ -982,30 +1033,52 @@ export default function App() {
     return <div className="app"><div className="statusbar err">{status.text}</div></div>;
   }
 
+  // R6.1-A: the displayProject's per-clip override MUST keep
+  // `timeline_range.{start, end}` in the same frame domain as
+  // everywhere else in the GUI. The pre-R6.1 code computed
+  // `end = int + float` (drag preview start is integer frames;
+  // `c.timeline_range.end - c.timeline_range.start` is float
+  // seconds). That violated the implicit contract that
+  // `timeline_range` is a pair of frame-aligned integers. The
+  // cleanest fix: convert the duration from seconds to frames
+  // using seqFps + roundHalfAwayFromZero, and keep the end
+  // integer-aligned. Downstream components (PreviewPlayer's
+  // L0 fallback) will not see a stale `end: 412.5` for a clip
+  // being dragged to frame 0.
+  const seqFpsForDisplay = project?.sequence?.fps ?? { num: 30, den: 1 };
   const displayProject: Project = {
     ...project,
     clips: Object.fromEntries(
       Object.entries(project.clips).map(([id, c]) => {
         const s = dragPreview[id];
         if (s === undefined) return [id, c];
-        const len = c.timeline_range.end - c.timeline_range.start;
-        return [id, { ...c, timeline_range: { start: s, end: s + len } }];
+        const durSec = c.timeline_range.end - c.timeline_range.start;
+        const durFrames = roundHalfAwayFromZero(
+          durSec * seqFpsForDisplay.num / seqFpsForDisplay.den);
+        return [id, { ...c, timeline_range: { start: s, end: s + durFrames } }];
       })
     ),
   };
 
   const splitAtPlayhead = () => {
     if (!clip) return;
-    // 播放头（timeline 时间）→ 源时间换算
-    const tr = clip.timeline_range;
-    if (playheadFrame <= tr.start || playheadFrame >= tr.end) {
+    // R6.1-A: `api.split` takes `at_timeline_frame: int` (the
+    // playhead position in sequence-fps frames). The pre-R6.1
+    // code mixed seconds (`tr.start/end`) and frames
+    // (`playheadFrame`) in a `ratio` calculation and then sent
+    // the result to api.split as if it were frames — a clear
+    // contract violation (and the assertIntFrame runtime guard
+    // now throws on the offending call). The split is at the
+    // playhead, so the frame-domain value IS the answer: no
+    // seconds→frames conversion needed.
+    const seqFps = project?.sequence?.fps ?? { num: 30, den: 1 };
+    const clipStartF = secondsToFramesEdit(clip.timeline_range.start, seqFps);
+    const clipEndF = secondsToFramesEdit(clip.timeline_range.end, seqFps);
+    if (playheadFrame <= clipStartF || playheadFrame >= clipEndF) {
       setStatus({ ok: false, text: "播放头不在选中 clip 范围内" });
       return;
     }
-    const ratio = (playheadFrame - tr.start) / (tr.end - tr.start);
-    const atSource =
-      clip.source_range.start + (clip.source_range.end - clip.source_range.start) * ratio;
-    run(() => api.split(clip.clip_id, atSource, "GUI 在播放头处切分"), "已切分");
+    run(() => api.split(clip.clip_id, playheadFrame, "GUI 在播放头处切分"), "已切分");
   };
 
   return (
@@ -1214,8 +1287,36 @@ export default function App() {
         }}
         onCommit={() => run(() => api.commit("GUI 手动存档"), "已存版本")}
         onSplit={splitAtPlayhead}
-        onTrimHead={() => clip && run(() => api.trim(clip.clip_id, clip.source_range.start + 0.5), "头部裁掉 0.5s")}
-        onTrimTail={() => clip && run(() => api.trim(clip.clip_id, undefined, clip.source_range.end - 0.5), "尾部裁掉 0.5s")}
+        onTrimHead={() => clip && run(() => {
+          // R6.1-A: frame-domain intent. Pre-R6.1 this was
+          // `clip.source_range.start + 0.5` (SECONDS) which violated
+          // the frame-native contract — Pydantic v2 returned 422
+          // `int_from_float`. Convert at the legacy-storage → Frame
+          // boundary using the asset's source fps, then push the
+          // head forward by the equivalent of 0.5s in frames
+          // (roundHalfAwayFromZero, NOT Math.round).
+          const seqFps = project?.sequence?.fps ?? { num: 30, den: 1 };
+          const asset = project?.assets.find((a) => a.asset_id === clip.asset_id);
+          const srcFps = asset?.source_fps ?? seqFps;
+          const halfSecFrames = roundHalfAwayFromZero(
+            0.5 * srcFps.num / srcFps.den);
+          const newHead = secondsToFramesEdit(clip.source_range.start, srcFps)
+            + halfSecFrames;
+          return api.trim(clip.clip_id, newHead, null, "头部裁掉 0.5s");
+        }, "头部裁掉 0.5s")}
+        onTrimTail={() => clip && run(() => {
+          // R6.1-A: see onTrimHead. The pre-R6.1 code passed
+          // `clip.source_range.end - 0.5` (seconds) to api.trim
+          // (frames contract) — fixed here.
+          const seqFps = project?.sequence?.fps ?? { num: 30, den: 1 };
+          const asset = project?.assets.find((a) => a.asset_id === clip.asset_id);
+          const srcFps = asset?.source_fps ?? seqFps;
+          const halfSecFrames = roundHalfAwayFromZero(
+            0.5 * srcFps.num / srcFps.den);
+          const newTail = secondsToFramesEdit(clip.source_range.end, srcFps)
+            - halfSecFrames;
+          return api.trim(clip.clip_id, null, newTail, "尾部裁掉 0.5s");
+        }, "尾部裁掉 0.5s")}
         onSilenceRemove={() => clip && run(() => api.silenceRemove(clip.clip_id, "GUI 去停顿"), "已去停顿")}
         onDenoise={() => clip && run(() => api.denoise(clip.clip_id, 12, "GUI 降噪"), "已加降噪（重渲染后生效）")}
         onLoudness={() => clip && run(
@@ -1312,6 +1413,7 @@ export default function App() {
             aspect={aspect}
             onAspect={setAspect}
             timelineId={activeTimelineId}
+            planInvalidationVersion={invalidationVersion}
             // GUI-03R3-W-A.4: Space/K (keymap's local-action
             // `_toggle_play` binding) calls into the PreviewPlayer's
             // FrameClock toggle through this ref. FrameClock stays
@@ -1595,10 +1697,34 @@ export default function App() {
                 </>
               )}
               <div className="row">
-                <button onClick={() => run(() => api.trim(clip.clip_id, clip.source_range.start + 0.5), "头部裁掉 0.5s")}>
+                <button onClick={() => {
+                  // R6.1-A: frame-domain intent. See onTrimHead
+                  // in the topbar for the rationale. The 2 paths
+                  // duplicate the same boundary conversion (one
+                  // in the topbar, one in the inspector body);
+                  // a follow-up can extract them to a single
+                  // helper if a third call site appears.
+                  const seqFps = project?.sequence?.fps ?? { num: 30, den: 1 };
+                  const asset = project?.assets.find((a) => a.asset_id === clip.asset_id);
+                  const srcFps = asset?.source_fps ?? seqFps;
+                  const halfSecFrames = roundHalfAwayFromZero(
+                    0.5 * srcFps.num / srcFps.den);
+                  const newHead = secondsToFramesEdit(clip.source_range.start, srcFps)
+                    + halfSecFrames;
+                  run(() => api.trim(clip.clip_id, newHead, null, "头部裁掉 0.5s"), "头部裁掉 0.5s");
+                }}>
                   头裁 0.5s
                 </button>
-                <button onClick={() => run(() => api.trim(clip.clip_id, undefined, clip.source_range.end - 0.5), "尾部裁掉 0.5s")}>
+                <button onClick={() => {
+                  const seqFps = project?.sequence?.fps ?? { num: 30, den: 1 };
+                  const asset = project?.assets.find((a) => a.asset_id === clip.asset_id);
+                  const srcFps = asset?.source_fps ?? seqFps;
+                  const halfSecFrames = roundHalfAwayFromZero(
+                    0.5 * srcFps.num / srcFps.den);
+                  const newTail = secondsToFramesEdit(clip.source_range.end, srcFps)
+                    - halfSecFrames;
+                  run(() => api.trim(clip.clip_id, null, newTail, "尾部裁掉 0.5s"), "尾部裁掉 0.5s");
+                }}>
                   尾裁 0.5s
                 </button>
               </div>

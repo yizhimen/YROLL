@@ -24,7 +24,7 @@ vi.mock("./api", async (importOriginal) => {
 });
 
 import { api } from "./api";
-import { usePreviewPlan, useTimelines } from "./preview-plan";
+import { usePreviewPlan, useTimelines, usePreviewPlanInvalidation } from "./preview-plan";
 
 beforeEach(() => {
   vi.mocked(api.listTimelines).mockReset();
@@ -152,5 +152,75 @@ describe("usePreviewPlan race safety", () => {
     expect(vi.mocked(api.previewPlan)).toHaveBeenLastCalledWith(
       expect.objectContaining({ timeline_id: "tlB" }),
     );
+  });
+});
+
+// =================================================================
+// R6.1-D: PreviewPlan immediate invalidation. App.tsx owns a
+// `bumpPlanVersion` counter and passes it as the 3rd argument to
+// `usePreviewPlan`. Bumping the counter forces a refetch EVEN when
+// the project revision has not changed (the /sequence poll lag
+// scenario that hid the L1 composite after a setTrackHidden
+// mutation for up to 5 seconds).
+// =================================================================
+
+describe("R6.1-D usePreviewPlan invalidationVersion", () => {
+  beforeEach(() => {
+    vi.mocked(api.previewPlan).mockReset();
+  });
+
+  it("usePreviewPlanInvalidation starts at 0 and bumps monotonically", () => {
+    const { result } = renderHook(() => usePreviewPlanInvalidation());
+    expect(result.current.invalidationVersion).toBe(0);
+    act(() => result.current.bumpPlanVersion());
+    expect(result.current.invalidationVersion).toBe(1);
+    act(() => result.current.bumpPlanVersion());
+    expect(result.current.invalidationVersion).toBe(2);
+  });
+
+  it("bumping invalidationVersion forces a refetch even with same revision", async () => {
+    vi.mocked(api.previewPlan).mockResolvedValue({
+      project_revision: 1, timeline_id: "main",
+      fps: { num: 30, den: 1 },
+      tracks: [], subtitle_ranges: [],
+    } as any);
+
+    const { rerender } = renderHook(
+      ({ inv }: { inv: number }) => usePreviewPlan(1, "main", inv),
+      { initialProps: { inv: 0 } },
+    );
+    await waitFor(() =>
+      expect(vi.mocked(api.previewPlan)).toHaveBeenCalledTimes(1),
+    );
+    // Bump the version → must refetch.
+    rerender({ inv: 1 });
+    await waitFor(() =>
+      expect(vi.mocked(api.previewPlan)).toHaveBeenCalledTimes(2),
+    );
+    // Bump again → another refetch.
+    rerender({ inv: 2 });
+    await waitFor(() =>
+      expect(vi.mocked(api.previewPlan)).toHaveBeenCalledTimes(3),
+    );
+  });
+
+  it("the same (rev, tid, inv) tuple does NOT refetch", async () => {
+    vi.mocked(api.previewPlan).mockResolvedValue({
+      project_revision: 1, timeline_id: "main",
+      fps: { num: 30, den: 1 },
+      tracks: [], subtitle_ranges: [],
+    } as any);
+
+    const { rerender } = renderHook(
+      ({ inv }: { inv: number }) => usePreviewPlan(1, "main", inv),
+      { initialProps: { inv: 0 } },
+    );
+    await waitFor(() =>
+      expect(vi.mocked(api.previewPlan)).toHaveBeenCalledTimes(1),
+    );
+    // Same key, multiple rerenders → no extra fetches.
+    rerender({ inv: 0 });
+    rerender({ inv: 0 });
+    expect(vi.mocked(api.previewPlan)).toHaveBeenCalledTimes(1);
   });
 });

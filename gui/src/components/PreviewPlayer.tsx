@@ -26,6 +26,7 @@ import {
   sourceSecondsAt,
   usePreviewPlan,
 } from "../preview-plan";
+import { computeCanvasSize, parseAspect } from "../preview-aspect";
 import {
   type FrameClock,
   createFrameClock,
@@ -64,6 +65,10 @@ interface Props {
   // Preview cannot leak content between Timelines. Falls back to
   // "main" if unset (legacy single-Timeline projects still work).
   timelineId?: string;
+  // R6.1-D: external invalidation counter. App.tsx owns this and
+  // bumps it after every successful mutation; the hook refetches
+  // immediately instead of waiting for the 5-second /sequence poll.
+  planInvalidationVersion?: number;
   // GUI-03R3-W-A.4: expose the playback transport so the parent
   // (App.tsx) can wire Spacebar / K (the keymap's local-action
   // `_toggle_play` binding) to the PreviewPlayer's FrameClock
@@ -88,6 +93,7 @@ export default function PreviewPlayer({
   aspect = "16:9", onAspect,
   durationHint = 120,
   timelineId,
+  planInvalidationVersion = 0,
   onTransportReady,
 }: Props) {
   const [mode, setMode] = useState<"instant" | "rendered">("instant");
@@ -253,6 +259,7 @@ export default function PreviewPlayer({
   const { plan, loading: planLoading } = usePreviewPlan(
     projectRevision,
     timelineId ?? "main",
+    planInvalidationVersion,
   );
 
   // Active composite at the current playheadFrame, derived from
@@ -451,26 +458,21 @@ export default function PreviewPlayer({
     background: "#000",
     overflow: "hidden",
   };
-  // Compute explicit width/height from aspect + stage size. Aspect
-  // is given as "W:H" (e.g. "16:9"). Longest side wins.
-  const aspectParts = aspect.split(":").map(Number);
-  const aspectW = aspectParts[0] || 16;
-  const aspectH = aspectParts[1] || 9;
-  // Fit inside the stage with a small inset (16px on each side).
-  const inset = 16;
-  const availW = Math.max(1, stageSize.width - inset * 2);
-  const availH = Math.max(1, stageSize.height - inset * 2);
-  // Two candidates: constrained by width, constrained by height.
-  let canvasW: number;
-  let canvasH: number;
-  if (availW / aspectW <= availH) {
-    // Width-bound: width = availW, height = availW / aspectW.
-    canvasW = availW;
-    canvasH = availW / aspectW;
-  } else {
-    canvasH = availH;
-    canvasW = availH * aspectW;
-  }
+  // R6.1-C: explicit width/height from a ResizeObserver on
+  // .preview-stage, using the standard "contain" / letterbox rule
+  // (pick the smaller axis scale so the rectangle fits BOTH
+  // dimensions). The pre-R6.1 formula at this site used
+  // `availW / aspectW` as the height — that was dimensionally wrong
+  // (it gave pixels/pixel, not pixels). 16:9 on a 720×405 stage
+  // produced 720×45 (a flat strip) instead of 720×405. The pure
+  // helper `computeCanvasSize` is in `preview-aspect.ts` and is
+  // pinned by `preview-aspect.test.ts` for the 5 standard aspects.
+  const { canvas: { width: canvasW, height: canvasH } } = computeCanvasSize({
+    stageWidth: stageSize.width,
+    stageHeight: stageSize.height,
+    inset: 16,
+    aspect,
+  });
   const frameStyle: React.CSSProperties = {
     width: canvasW,
     height: canvasH,

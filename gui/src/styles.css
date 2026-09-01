@@ -382,6 +382,23 @@ body {
   background: #24406b;
 }
 .clip.selected { border-color: #ffd479; box-shadow: 0 0 0 1px #ffd479; }
+/* R6.1-B: clamp-boundary visual. The drag's pointer-raw candidate
+ * is inside a sibling's range and the clamp teleported the preview
+ * to the sibling's boundary. The math is unchanged — this is a
+ * PRESENTATION-ONLY signal that distinguishes "user wanted here"
+ * from "clamp forced here". A dashed red outline + not-allowed
+ * cursor is the primary cue (per the R6.1-B spec). The outline
+ * color matches the playhead color (#ff5050) for cross-component
+ * consistency. */
+.clip.clamp-boundary {
+  outline: 2px dashed #ff5050;
+  outline-offset: 2px;
+  cursor: not-allowed;
+}
+.clip.clamp-boundary .edit-zone {
+  /* Subtle: 4% red tint over the existing color. */
+  background: rgba(255, 80, 80, 0.04);
+}
 .clip .ai-zone {
   height: 33%; background: rgba(0, 0, 0, 0.35);
   border-bottom: 1px dashed rgba(255, 212, 121, 0.4);

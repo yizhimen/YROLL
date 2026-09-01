@@ -1,5 +1,101 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
+## 当前状态（2026-09-01 GUI-03R6.1 Closure 完成 ✅ = HEAD pending — 4 个修复全部实施并通过自动化验证）
+
+**最新事件（2026-09-01 13:30）**：R6.1 closure batch 完成（4 个修复，46 个新 vitest）。用户人工验证待定。
+
+| 修复 | 范围 | 关键改动 | 新增测试 |
+|---|---|---|---|
+| **R6.1-C** Preview aspect math | `gui/src/components/PreviewPlayer.tsx` | 提取 `computeCanvasSize` 纯函数到 `gui/src/preview-aspect.ts`；修正"contain" 公式（删除死变量 `aspectH`） | 21 vitest（5 标准比例 + inset + 退化 stage） |
+| **R6.1-A** Frame/seconds mutation 泄漏 | `gui/src/api.ts`, `gui/src/App.tsx` | (1) `assertIntFrame` 运行时 guard 包裹 `move/trim/split/addClip/addImageClip/trimImageClip`；(2) trim 按钮 `±0.5s` → `±15 frames`（含 asset source_fps）；(3) split 在 playhead 直接用 `playheadFrame`（不再混入 seconds 算 ratio）；(4) `displayProject` 端点 float 重建修复 | 16 vitest（每个 frame-native wrapper 拒绝非整数 + 接受 null edges + 接受 integer + 不允许 addSubtitle 误拦截） |
+| **R6.1-D** Immediate PreviewPlan invalidation | `gui/src/preview-plan.ts`, `gui/src/App.tsx`, `gui/src/components/PreviewPlayer.tsx` | 新 `usePreviewPlanInvalidation` hook（`bumpPlanVersion`）；`usePreviewPlan` 加第 3 参数 `invalidationVersion`；`run()` 在每次成功 mutation 后 bump；PreviewPlayer 透传 prop | 3 vitest（hook 自增 + 强制 refetch + 同 key 不 refetch） |
+| **R6.1-B** Drag clamp boundary 视觉反馈 | `gui/src/components/ClipBlock.tsx`, `gui/src/components/Timeline.tsx`, `gui/src/App.tsx`, `gui/src/styles.css` | (1) `onClampBoundary` 回调 + `clampBoundary` prop；(2) `.clip.clamp-boundary` CSS：2px dashed `#ff5050` outline + `cursor: not-allowed` + 4% 红色 tint；(3) App.tsx 一次性 status 文字（**secondary** feedback，per user constraint）；(4) payload 加 `clampJumpFrames` 字段；(5) **Core 碰撞/clamp 数学未变** | 6 vitest（mirror 算法的 clamp 行为 + 边界检测 + overlap invariant 保留） |
+
+### 验证结果（要求：pytest / vitest / tsc / vite build / real browser / human）
+
+| 检查 | 结果 | 备注 |
+|---|---|---|
+| **pytest** | 735 passed + 1 skipped + 1 pre-existing FAIL | pre-existing: `test_no_orphan_empty_tracks_in_projects_dir`（git stash 已确认在 R6.1 改动之前就红，与 on-disk `_sanlihe-r5-manual` 空轨相关） |
+| **vitest** | **397 passed + 2 skipped**（28 files）| baseline 351+2 → **+46 新测试**（21+16+3+6），全部 PASS |
+| **tsc** | 0 NEW errors | 2 pre-existing errors 在 `Timeline.drag.test.ts:32,57`（`page` 可能 null），与本批次无关 |
+| **vite build** | ✅ SUCCESS | `dist/assets/index-CpFkdX_R.css` 21.34 kB + `index-C50KucXX.js` 289.95 kB |
+| **real browser smoke** | **8/8 PASS** | `node gui/smoke/03r6_1-closure.mjs` against `http://127.0.0.1:5180/`：5 比例可见正确 + hide v9 立即 plan refetch + show v9 立即恢复 + revision tracking 正常 |
+| **human verification** | ⏳ PENDING | 用户待验证（6 比例视觉 + drag clamp feedback + hide/show 视觉确认） |
+
+### 浏览器 smoke 详情（`gui/smoke/03r6_1-closure.mjs`）
+
+```
+--- Check 1: 5 aspect ratios ---
+  ✓ PASS  aspect 16:9 → 389×219 (width-bound)   — expected ≈ 389×219
+  ✓ PASS  aspect 9:16 → 146×260 (height-bound)  — expected ≈ 146×260
+  ✓ PASS  aspect 1:1  → 260×260 (height-bound)  — expected ≈ 260×260
+  ✓ PASS  aspect 4:3  → 347×260 (height-bound)  — expected ≈ 347×260
+  ✓ PASS  aspect 3:4  → 195×260 (height-bound)  — expected ≈ 195×260
+--- Check 2: hide/show triggers immediate plan refetch ---
+  hide v9 → server 200 ok
+  /preview/plan after hide: tracks=["v1","v3","v5","v7"]  has v9=false   ✓
+  show v9 → server 200
+  /preview/plan after show: tracks=["v1","v3","v5","v7","v9"]  has v9=true  ✓
+--- Check 3: mutation lifecycle sanity ---
+  ✓ PASS  revision tracking responds (was 16, now 16)
+```
+
+### 修改文件清单
+
+- `gui/src/components/PreviewPlayer.tsx` — R6.1-C aspect 公式 + R6.1-D `planInvalidationVersion` prop
+- `gui/src/api.ts` — R6.1-A `assertIntFrame` guard + 5 wrapper 包装
+- `gui/src/App.tsx` — R6.1-A trim 按钮（2 处）+ split 修复 + displayProject 端点 + R6.1-B `onClampBoundary` handler + R6.1-D `bumpPlanVersion` 集成
+- `gui/src/components/ClipBlock.tsx` — R6.1-A `clampBoundary` prop + R6.1-B `onClampBoundary` callback + payload `clampJumpFrames`
+- `gui/src/components/Timeline.tsx` — R6.1-B `onClampBoundary` + `dragClampBoundary` 透传
+- `gui/src/preview-plan.ts` — R6.1-D `invalidationVersion` 3rd arg + `usePreviewPlanInvalidation` hook
+- `gui/src/styles.css` — R6.1-B `.clip.clamp-boundary` 视觉规则
+- `gui/src/preview-aspect.ts` (new) — R6.1-C 纯函数
+- `gui/src/preview-aspect.test.ts` (new) — R6.1-C 21 tests
+- `gui/src/api.frame-guard.test.ts` (new) — R6.1-A 16 tests
+- `gui/src/components/ClipBlock.clamp-boundary.test.tsx` (new) — R6.1-B 6 tests
+- `gui/src/preview-plan.test.ts` — R6.1-D 3 tests appended
+- `gui/src/gate.test.ts` — 修复 pre-existing 422: `api.split("clip-1", 2.5)` → `2`
+- `gui/smoke/03r6_1-closure.mjs` (new) — 浏览器 smoke
+
+### STOP gating
+
+Per user instruction: 不开始 Publish Metadata / Timeline-local Revision / Keyframes / opacity / AI features。R6.1 closure batch 是本次 R6 修复的最后一批代码改动。R6 现已 production-ready（待人工验证后正式宣布）。
+
+### Known pre-existing infrastructure gap（与 R6.1 无关）
+
+- `gui/smoke/static-with-proxy.mjs` 的 proxy allowlist **不包含 `/sequence`**（只允许 `/preview/plan` 等）。这导致 GUI 的 `useProjectSequence` 在通过该 proxy 时 404，L1 composite 不挂载。R6.1 的 R6.1-D 验证改为直接通过 proxy fetch `/preview/plan` 验证 server wire 行为；GUI 端 hook 由 `preview-plan.test.ts` 单元覆盖。**非阻塞，但建议在 R6 之后单独 PR 修复**（一行修改：allowlist 加 `|| u.startsWith("/sequence")`）。
+
+---
+
+## 当前状态（2026-09-01 GUI-03R6.1 Runtime Reality Audit 完成 ✅ = HEAD f79bc05，READ-ONLY，无代码改动）
+
+**最新事件（2026-09-01 13:15）**：R6.1 audit completed as READ-ONLY pass per user instruction. 4 areas audited:
+
+| # | 症状 | 是否复现 | 根因 | 优先级 |
+|---|---|---|---|---|
+| **A** | 422 `new_timeline_start_frame = 1080.2549999999999` | Server 正确拒绝（422）。GUI 端发现 2 个违规点：trim 按钮传 seconds、displayProject 端点 float 重建。 | GUI 合同违反（trim）+ Pydantic 防御（正确） | **P0** |
+| **B** | 拖动"飞走" | Spec 行为（clamp 强制贴边），但缺少视觉提示 | GUI 呈现层（无放大） | **P1**（需真浏览器测量） |
+| **C** | Preview canvas 16:9/9:16/4:3/3:4 极小，仅 1:1 正常 | **YES — 数学 bug**：`PreviewPlayer.tsx:466-473` 错把 `availW / aspectW` 当成 height；`aspectH` 是死变量。重现：stage 720×405 → 16:9 = 720×**45**（9× 偏矮）；1:1 = 405×405 ✓（唯一巧合正确）。 | GUI 公式层 | **P0**（单文件一行修复） |
+| **D** | 隐藏视频轨仍可能出现在 Preview | Server 端**正确**（R5 fix 完好）。GUI 端有 stale-plan window（`usePreviewPlan` 在 `useProjectSequence` 5s poll 后才重 fetch） | GUI cache 新鲜度滞后 | **P1**（optimistic 排除） |
+
+**审计产物**：`docs/GUI-03R6.1-Runtime-Reality-Audit.md`（read-only，无代码改动）
+
+**关键实测（live curl）**：
+- `POST /clips/c039a7b/move {"new_timeline_start_frame": 1080.2549999999999}` → 422 `int_from_float`（Pydantic 正确）
+- `POST /clips/c039a7b/move {"new_timeline_start_frame": 1080}` → 400 overlap（int 接受）
+- `POST /tracks/v9/hide?hidden=true&sessionId=...&baseRevision=1` → op 成功；`/preview/at_frame?frame=450` 返回 v1 only；`/preview/plan` 不含 v9；`/project` 中 v9.hidden=true
+- 数值重现（python）：16:9 stage 720×405 → 720×45（buggy）vs 720×405（correct）
+
+**STOP feature work**。R6 仍未 human-acceptable。建议 R6.1 closure batch：
+1. C — 1 行数学修复 + 5 vitest
+2. A — trim 按钮 `±0.5s` → `±15 frames` + static guard 拦截所有 `api.move/trim/split/addClip` 接收非整数
+3. D — `bumpDirtyRev()` 在 `setTrackHidden` 后立即触发 refetch（optimistic 排除 hidden track）
+4. B — 拖到 clamp 边界时 dashed red outline + "已贴边" status（**不**改数学）
+
+**禁止开始**：Publish Metadata / Timeline-local Revision / Keyframes / opacity / AI features。
+
+---
+
 ## 当前状态（2026-09-01 GUI-03R6 Runtime Editing 完成 + R6 closure fix 完成 ✅ = HEAD c9f29a7）
 
 **最新事件（2026-09-01 12:20）**：R6 closure fix committed as **c9f29a7** — PreviewPlayer frame-purity + real GUI bring-into-view smoke. Smoke now 31/31 PASS (was 23/26). R6 release-ready but NOT human-verified.

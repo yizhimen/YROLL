@@ -20,7 +20,7 @@
 // the active timeline changes between request fire and resolve, the
 // response is discarded.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { api, TimelinesResponse, TimelineSummary } from "./api";
 
 export interface PreviewLayer {
@@ -180,6 +180,15 @@ export function useTimelines(
 // `timelineId` from props on resolve and aborts the state update if
 // the user has already moved on to a different Timeline. This
 // guarantees that Preview-A content cannot leak into Preview-B.
+//
+// R6.1-D: the cache is also keyed by an external `invalidationVersion`
+// (a counter that App.tsx bumps after every successful
+// Preview-affecting mutation — setTrackHidden, addClip, move, trim,
+// removeClip, addTrack, etc.). Without this, the GUI is at the mercy
+// of the 5-second `/sequence` poll to discover the new revision; in
+// the worst case the user hides a track and the L1 composite keeps
+// showing the hidden layer for up to one poll cycle. Bumping the
+// invalidation version forces an immediate refetch.
 
 interface PreviewPlanState {
   plan: PreviewPlan | null;
@@ -191,6 +200,7 @@ interface PreviewPlanState {
 export function usePreviewPlan(
   projectRevision: number | null,
   timelineId: string = "main",
+  invalidationVersion: number = 0,
 ): PreviewPlanState {
   const [plan, setPlan] = useState<PreviewPlan | null>(null);
   const [loading, setLoading] = useState(false);
@@ -203,9 +213,12 @@ export function usePreviewPlan(
 
   useEffect(() => {
     if (projectRevision === null) return;
-    // Per-timeline dedupe: don't refetch if (rev, timeline_id)
-    // already fetched this run.
-    const key = `${projectRevision}:${timelineId}`;
+    // Per-timeline dedupe: don't refetch if (rev, timeline_id,
+    // invalidationVersion) already fetched this run. The
+    // invalidationVersion is appended to the key so a manual bump
+    // from App.tsx forces a refetch even when the project revision
+    // hasn't changed yet (the /sequence poll is on a 5s cadence).
+    const key = `${projectRevision}:${timelineId}:${invalidationVersion}`;
     if (lastKeyRef.current === key) return;
     lastKeyRef.current = key;
     // Clear stale plan when timeline changes: we don't want to
@@ -246,7 +259,27 @@ export function usePreviewPlan(
           setLoading(false);
         }
       });
-  }, [projectRevision, timelineId]);
+  }, [projectRevision, timelineId, invalidationVersion]);
 
   return { plan, loading, error, fetchCount: fetchCountRef.current };
+}
+
+// =================================================================
+// R6.1-D: usePreviewPlanInvalidation — single hook that returns a
+// `bumpPlanVersion()` function. App.tsx calls it after every
+// successful Preview-affecting mutation. The counter is
+// monotonically increasing; the PreviewPlan hook subscribes to it
+// and refetches when it changes.
+//
+// One reusable mechanism, not individual ad-hoc fetches — per the
+// R6.1-D design constraint.
+// =================================================================
+
+export function usePreviewPlanInvalidation(): {
+  invalidationVersion: number;
+  bumpPlanVersion: () => void;
+} {
+  const [version, setVersion] = useState(0);
+  const bump = useCallback(() => setVersion((v) => v + 1), []);
+  return { invalidationVersion: version, bumpPlanVersion: bump };
 }

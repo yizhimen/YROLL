@@ -59,7 +59,8 @@ createServer((req, res) => {
     || u.startsWith("/lease/") || u.startsWith("/history/")
     || u.startsWith("/mutation/") || u.startsWith("/audit/")
     || u.startsWith("/keyboard/") || u.startsWith("/assets")
-    || u.startsWith("/preview.mp4");
+    || u.startsWith("/preview.mp4")
+    || u.startsWith("/sequence");  // GUI-03R2 P0-F: useProjectSequence poll
   if (isAsset) {
     proxyTo(req, res);
     return;

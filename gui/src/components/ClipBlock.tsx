@@ -95,6 +95,19 @@ interface Props {
    *  TimelineFrame. The parent uses this for visual feedback only;
    *  the authoritative commit happens via onMoveCommit. */
   onDragMove: (clipId: string, newTimelineStartFrame: number, ghostSnapFrame?: number | null) => void;
+  /** R6.1-B: clamp-boundary flag. `true` when the last pointermove
+   *  produced a clamped preview different from the pointer-raw
+   *  candidate (the user's pointer is inside a sibling's range and
+   *  the clamp teleported the preview to the boundary). The parent
+   *  renders a dashed red outline + cursor:not-allowed to mark
+   *  the visual distinction. The math is unchanged; this is a
+   *  presentation-only signal. */
+  onClampBoundary?: (clipId: string, onBoundary: boolean) => void;
+  /** R6.1-B: parent's current view of whether THIS clip is on the
+   *  clamp boundary. Used to apply the CSS class. Independent of
+   *  the callback so the parent can drive the visual from
+   *  external state (e.g. an external reset). */
+  clampBoundary?: boolean;
   /** Drag-end move commit. The final TimelineFrame (post-snap +
    *  post-clamp) is passed; the parent forwards to `api.move`. If
    *  the drag also resolved a vertical-track-drop target (the
@@ -131,7 +144,7 @@ export default function ClipBlock({
   snapMode = "always", highlightRel = false, isRelated = false,
   siblings = [],
   canEdit = true,
-  onSelect, onDragMove, onMoveCommit, onTrimCommit, onDropOnTrack,
+  onSelect, onDragMove, onMoveCommit, onTrimCommit, onDropOnTrack, onClampBoundary, clampBoundary = false,
 }: Props) {
   // ---- Trim preview state -------------------------------------------------
   // Source-frame deltas (integer ClipFrame). The visual preview applies
@@ -362,6 +375,10 @@ export default function ClipBlock({
     let lastDeltaFrame = 0;
     let lastPixelDelta = 0;
     let lastGhostSnapFrame: number | null = null;
+    // R6.1-B: |tryStart - clamped| from the most recent pointermove.
+    // Surfaced in the drag-end payload so the audit / status text
+    // can tell the user "the clamp moved the preview N frames".
+    let lastClampJumpFrames = 0;
     const move = (ev: PointerEvent) => {
       // GUI-03R5-B1 (Decision 1): feed the auto-scroll loop the
       // latest pointer X so it can decide whether to scroll the
@@ -388,6 +405,17 @@ export default function ClipBlock({
       lastDeltaFrame = deltaFrame;
       lastPixelDelta = pixelDelta;
       lastGhostSnapFrame = ghost;
+      // R6.1-B: detect clamp teleportation. The Core collision math
+      // is unchanged — `clamped` is the authoritative preview frame.
+      // When the user's pointer pushed `candidate` into an existing
+      // sibling's range, `clamped` lands at the boundary (further
+      // from the pointer than the user intended). We surface that
+      // boundary state to the parent so it can render a dashed red
+      // outline + cursor:not-allowed. `clampJumpFrames` is the
+      // absolute distance the clamp moved the preview.
+      const onClampBoundaryFrame = candidate !== clamped;
+      lastClampJumpFrames = Math.abs(candidate - clamped);
+      if (onClampBoundary) onClampBoundary(clip.clip_id, onClampBoundaryFrame);
       onDragMove(clip.clip_id, clamped, ghost);
     };
 
@@ -599,6 +627,12 @@ if (localSnapTarget !== null) {
         preSnapFrame,
         // Ghost-snap target during drag (visual only, never applied).
         ghostSnapFrame: lastGhostSnapFrame,
+        // R6.1-B: how many frames the clamp teleported the preview
+        // from the pointer-raw candidate. 0 means the user landed
+        // at their intended frame; >0 means the clamp forced a
+        // different landing. The parent uses this to show "已贴边
+        // (jump N frames)" status text. The math is unchanged.
+        clampJumpFrames: lastClampJumpFrames,
         // Authoritative Core snap (one call only).
         authoritativeSnapFrame,
         // Final frame committed to api.move().
@@ -662,6 +696,11 @@ if (localSnapTarget !== null) {
       if (finalFrame < 0) finalFrame = 0;
       if (finalFrame > maxBoundary) finalFrame = maxBoundary;
       payload.finalFrame = finalFrame;
+
+      // R6.1-B: clear the clamp-boundary flag at drag end so the
+      // visual feedback goes away. The next pointerdown will set
+      // it again if the user drags into a sibling again.
+      if (onClampBoundary) onClampBoundary(clip.clip_id, false);
 
       onMoveCommit(clip.clip_id, finalFrame, tid);
     };
@@ -745,7 +784,7 @@ if (localSnapTarget !== null) {
 
   return (
     <div
-      className={`clip ${kindClass} ${selected ? "selected" : ""} ${isRelated && highlightRel ? "related" : ""}`}
+      className={`clip ${kindClass} ${selected ? "selected" : ""} ${isRelated && highlightRel ? "related" : ""} ${clampBoundary ? "clamp-boundary" : ""}`}
       style={{ left, width, boxShadow: isRelated && highlightRel ? "0 0 0 2px #ffd479" : undefined }}
       data-clip-id={clip.clip_id}
       onPointerDown={onPointerDown}

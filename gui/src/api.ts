@@ -147,6 +147,35 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return r.json();
 }
 
+// R6.1-A: runtime defensive guard for frame-native mutation wrappers.
+//
+// The pre-R6.1 contract was "TypeScript says number, the server
+// rejects with 422 on a float" — but the server's 422 with the echoed
+// `input` field is the FIRST signal of a frame/seconds unit mismatch
+// reaching the network. We catch it at the wrapper boundary instead,
+// with a clear error message naming the offending parameter. The
+// guard is intentionally strict: `Number.isInteger` rejects NaN,
+// Infinity, and any non-finite value (the only allowed exceptions are
+// `null` and `undefined` — the server treats those as "no change" for
+// optional edge arguments like trim's head/tail).
+//
+// This is the runtime enforcement layer. The static enforcement
+// layer is the call-site audit in `R6.1-A` (App.tsx, AssetPanel.tsx)
+// and the architectural guard tests in
+// `gui/src/api.frame-guard.test.ts`.
+function assertIntFrame(name: string, value: number | null | undefined): void {
+  if (value === null || value === undefined) return;
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error(
+      `R6.1-A frame-native contract violation: ${name}=${value} ` +
+      `(type=${typeof value}) is not an integer frame. ` +
+      `Convert at the legacy-storage → Frame-domain boundary using ` +
+      `secondsToFramesEdit or secondsToFrames from "./frames". ` +
+      `Never pass seconds directly to a frame-native mutation wrapper.`,
+    );
+  }
+}
+
 // --- Mutation Gate envelope (YROLL-Editor-Foundation-v0.2.md §二) ---
 //
 // Every write goes through mutate(). It injects sessionId + baseRevision
@@ -271,18 +300,36 @@ export const api = {
   // `newSourceStart` / `newSourceEnd` are integer SOURCE FRAMES
   // (asset's source timebase, NOT sequence fps). The server converts
   // them via the asset's source_fps when applying.
-  trim: (clipId: string, newSourceStartFrame?: number, newSourceEndFrame?: number, why = "") =>
-    mutate(`POST`, `/clips/${clipId}/trim`, {
+  //
+  // R6.1-A: frame-native mutation wrappers MUST receive integer
+  // frames. The pre-R6.1 code path at App.tsx:1217,1218,1598,1601
+  // passed `clip.source_range.start + 0.5` (seconds) directly to
+  // `api.trim` and produced a 422 `int_from_float` from Pydantic v2
+  // — a hard contract violation of the frame-native chain. We now
+  // guard every frame-native wrapper at the boundary so a regression
+  // in the call site is caught immediately (no silent round, no
+  // 422 round-trip). `null` / `undefined` are allowed (the wrapper
+  // forwards them as JSON null and the server treats them as
+  // "no change for this edge" in trim/split).
+  trim: (clipId: string, newSourceStartFrame?: number | null, newSourceEndFrame?: number | null, why = "") => {
+    assertIntFrame("trim.newSourceStartFrame", newSourceStartFrame);
+    assertIntFrame("trim.newSourceEndFrame", newSourceEndFrame);
+    return mutate(`POST`, `/clips/${clipId}/trim`, {
       new_source_start_frame: newSourceStartFrame ?? null,
       new_source_end_frame: newSourceEndFrame ?? null,
       why,
-    }),
-  split: (clipId: string, atTimelineFrame: number, why = "") =>
-    mutate("POST", `/clips/${clipId}/split`, { at_timeline_frame: atTimelineFrame, why }),
+    });
+  },
+  split: (clipId: string, atTimelineFrame: number, why = "") => {
+    assertIntFrame("split.atTimelineFrame", atTimelineFrame);
+    return mutate("POST", `/clips/${clipId}/split`, { at_timeline_frame: atTimelineFrame, why });
+  },
   // `newTimelineStart` is an integer TIMELINE FRAME (sequence fps).
-  move: (clipId: string, newTimelineStartFrame: number, why = "", trackId?: string) =>
-    mutate("POST", `/clips/${clipId}/move`,
-      { new_timeline_start_frame: newTimelineStartFrame, new_track_id: trackId ?? null, why }),
+  move: (clipId: string, newTimelineStartFrame: number, why = "", trackId?: string) => {
+    assertIntFrame("move.newTimelineStartFrame", newTimelineStartFrame);
+    return mutate("POST", `/clips/${clipId}/move`,
+      { new_timeline_start_frame: newTimelineStartFrame, new_track_id: trackId ?? null, why });
+  },
   speed: (clipId: string, speed: number, why = "") =>
     mutate("POST", `/clips/${clipId}/speed`, { speed, why }),
   volume: (clipId: string, volume: number, why = "") =>
@@ -542,15 +589,19 @@ addClip: (assetId: string,
           sourceEndFrame: number,
           timelineStartFrame: number,
           trackId: string | null,
-          why = "") =>
-    mutate<Clip>("POST", "/clips", {
+          why = "") => {
+    assertIntFrame("addClip.sourceStartFrame", sourceStartFrame);
+    assertIntFrame("addClip.sourceEndFrame", sourceEndFrame);
+    assertIntFrame("addClip.timelineStartFrame", timelineStartFrame);
+    return mutate<Clip>("POST", "/clips", {
       asset_id: assetId,
       source_start_frame: sourceStartFrame,
       source_end_frame: sourceEndFrame,
       timeline_start_frame: timelineStartFrame,
       track_id: trackId,
       why,
-    }),
+    });
+  },
   // GUI-03B: image-first-class media. Frame-native coordinates; the
   // server derives source_range = (0, 1/seq_fps) and speed=1.0.
   addImageClip: (
@@ -559,22 +610,30 @@ addClip: (assetId: string,
     timelineDurationFrames: number,
     trackId: string | null,
     why = "",
-  ) => mutate<Clip>("POST", "/clips/add_image", {
-    asset_id: assetId,
-    timeline_start_frame: timelineStartFrame,
-    timeline_duration_frames: timelineDurationFrames,
-    track_id: trackId, why,
-  }),
+  ) => {
+    assertIntFrame("addImageClip.timelineStartFrame", timelineStartFrame);
+    assertIntFrame("addImageClip.timelineDurationFrames", timelineDurationFrames);
+    return mutate<Clip>("POST", "/clips/add_image", {
+      asset_id: assetId,
+      timeline_start_frame: timelineStartFrame,
+      timeline_duration_frames: timelineDurationFrames,
+      track_id: trackId, why,
+    });
+  },
   trimImageClip: (
     clipId: string,
-    timelineStartFrame?: number,
-    timelineEndFrame?: number,
+    timelineStartFrame?: number | null,
+    timelineEndFrame?: number | null,
     why = "",
-  ) => mutate<Clip>("POST", `/clips/${clipId}/trim_image`, {
-    timeline_start_frame: timelineStartFrame,
-    timeline_end_frame: timelineEndFrame,
-    why,
-  }),
+  ) => {
+    assertIntFrame("trimImageClip.timelineStartFrame", timelineStartFrame);
+    assertIntFrame("trimImageClip.timelineEndFrame", timelineEndFrame);
+    return mutate<Clip>("POST", `/clips/${clipId}/trim_image`, {
+      timeline_start_frame: timelineStartFrame,
+      timeline_end_frame: timelineEndFrame,
+      why,
+    });
+  },
   revert: (operationId: string, why = "") =>
     mutate("POST", "/revert", { operation_id: operationId, why }),
   volumeRange: (clipId: string, volume: number, start: number, end: number, why = "") =>
