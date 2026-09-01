@@ -109,9 +109,15 @@ async function main() {
   record('B5.setup: c4c290d clip found', true, `box=${JSON.stringify(clipInfo)}`);
 
   // Helper: drag the clip by N px and return before/during/after style.left values.
+  // Re-reads the clip's CURRENT position each call (clips move after each drag).
   async function dragBy(pxDelta) {
-    const startX = clipInfo.left + clipInfo.width / 2;
-    const startY = clipInfo.top + clipInfo.height / 2;
+    const cur = await page.evaluate(() => {
+      const c = document.querySelector('[data-clip-id="c4c290d"]');
+      const r = c.getBoundingClientRect();
+      return { left: r.left, top: r.top, width: r.width, height: r.height };
+    });
+    const startX = cur.left + cur.width / 2;
+    const startY = cur.top + cur.height / 2;
     const endX = startX + pxDelta;
 
     // Polled sampler — captures style.left at 30Hz
