@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api, Project } from "../api";
-import { secondsToFramesEdit } from "../frames";
+import { roundHalfAwayFromZero, secondsToFramesEdit } from "../frames";
 
 interface Props {
   project: Project;
@@ -86,15 +86,24 @@ export default function AssetPanel({ project, activeTimelineId, playheadFrame, o
       // TrackAllocator still picks the start frame when track_id=null,
       // but we seed the request with the playhead as a hint for the
       // case where the allocator can't move (e.g., explicit track).
-      const tlStart = Math.max(0, Math.round(playheadFrame ?? 0));
+      //
+      // GUI-04 04-02 (F5): Math.round is asymmetric — replace with
+      // roundHalfAwayFromZero so a negative-half playheadFrame (e.g.
+      // from a Math.round upstream) doesn't silently land on the
+      // wrong side. tlStart must be ∈ Z when it reaches the
+      // mutation wrapper.
+      const tlStart = Math.max(0, roundHalfAwayFromZero(playheadFrame ?? 0));
       if (asset.type === "image") {
         // GUI-03R: image goes through the frame-native
         // /clips/add_image endpoint. No set_speed, no seconds-as-
         // duration hack. Default 5 seconds @ the project's sequence
         // fps.
+        //
+        // GUI-04 04-02 (F6): Math.round → roundHalfAwayFromZero for
+        // the frame-native mutation wrapper.
         const fps = project.sequence?.fps ?? { num: 30, den: 1 };
         const DEFAULT_IMG_DUR_SEC = 5;
-        const durFrames = Math.round(
+        const durFrames = roundHalfAwayFromZero(
           DEFAULT_IMG_DUR_SEC * fps.num / fps.den);
         await api.addImageClip(assetId, tlStart, durFrames, explicitTrackId,
           mode === "overlay" ? "素材库加入（叠加轨）" : "素材库加入");

@@ -622,8 +622,12 @@ export default function App() {
     const seqFps = project.sequence?.fps ?? {
       num: project.fps_num ?? 30, den: project.fps_den ?? 1,
     };
+    // GUI-04 04-02 (F2): Math.round is asymmetric (-0.5 → 0, but
+    // roundHalfAwayFromZero(-0.5) → -1). Edit coordinates must use
+    // the spec-mandated symmetric primitive so a negative half-frame
+    // boundary doesn't silently land on the wrong side.
     const toFrame = (sec: number) =>
-      Math.round(sec * seqFps.num / seqFps.den);
+      roundHalfAwayFromZero(sec * seqFps.num / seqFps.den);
     const pts = new Set<number>([0]);
     for (const c of Object.values(project.clips)) {
       pts.add(toFrame(c.timeline_range.start));
@@ -1118,7 +1122,17 @@ export default function App() {
                   key={i}
                   className="search-hit"
                   onClick={() => {
-                    seek(h.timeline);
+                    // GUI-04 04-02 (F1): h.timeline is SECONDS (the
+                    // server returns `round(tl, 2)` from
+                    // /search-transcripts). playheadFrame is INTEGER
+                    // frames. Convert at the storage→edit boundary
+                    // using secondsToFramesEdit; otherwise a
+                    // fractional playheadFrame reaches api.split on
+                    // the next user action (assertIntFrame then
+                    // throws "not an integer frame").
+                    const seqFps = project?.sequence?.fps
+                      ?? { num: 30, den: 1 };
+                    seek(secondsToFramesEdit(h.timeline, seqFps));
                     setSelected(h.clip_id);
                     setSelectedSet(new Set([h.clip_id]));
                     setSearchHits([]);
@@ -2062,7 +2076,11 @@ export default function App() {
           if (a.type === "image") {
             const fps = seq.fps;
             const DEFAULT_IMG_DUR_SEC = 5;
-            const durFrames = Math.round(
+            // GUI-04 04-02 (F3): Math.round is asymmetric; use the
+            // spec-mandated symmetric rounding primitive for the
+            // frame-native mutation wrapper. durFrames must be an
+            // integer in [Z].
+            const durFrames = roundHalfAwayFromZero(
               DEFAULT_IMG_DUR_SEC * fps.num / fps.den);
             run(async () => {
               const newClip = await api.addImageClip(assetId, t, durFrames,
@@ -2137,7 +2155,9 @@ export default function App() {
             if (a.type === "image") {
               const fps = seq.fps;
               const DEFAULT_IMG_DUR_SEC = 5;
-              const durFrames = Math.round(
+              // GUI-04 04-02 (F4): Math.round → roundHalfAwayFromZero
+              // for the frame-native mutation wrapper.
+              const durFrames = roundHalfAwayFromZero(
                 DEFAULT_IMG_DUR_SEC * fps.num / fps.den);
               await api.addImageClip(assetId, t, durFrames, newTrackId,
                 "GUI 新建轨道+拖入");
