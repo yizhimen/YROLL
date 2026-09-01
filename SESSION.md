@@ -1,13 +1,100 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-09-02 GUI-04 04-02 Frame Mutation Contract Closure 完成 ✅ = HEAD 见末尾）
+## 当前状态（2026-09-02 GUI-04 04-03 History / Undo / Redo 完成 ✅）
 
-**最新事件（2026-09-02 00:32）**：GUI-04 batch 04-02 完成。用户硬约束已遵守：
-- ✅ **不只是加强 assertIntFrame()**——找到 6 个 fractional-frame 引入点，全部在 source 层修复
-- ✅ **不用 `Number(frame.toFixed(...))`**——所有 6 处全部用 `roundHalfAwayFromZero`（spec-mandated 对称舍入）
-- ✅ **不在 server 静默 round**——Core 的 `_frame_to_sec` 不加 round（仅当 caller 违反 int 契约时退化）
-- ✅ **找到真实源头再修**——不是只挡在 API 边界
-- ✅ **保持 pre-existing 失败透明**——pytest 仍 784 + 1 skip + 2 pre-existing FAIL（与 04-01 相同的 2 个，未被 04-02 触发）
+**最新事件（2026-09-02 07:28）**：GUI-04 batch 04-03 完成。用户硬约束已遵守：
+- ✅ **Ctrl+Z → POST /history/undo；Ctrl+Y → POST /history/redo**——已替换 App.tsx `undoLast/redoLast` 中的 `api.revert` 调用
+- ✅ **GUI 不依赖 /revert 做日常 undo/redo**——/revert 仅 OpsPanel 保留（plan §5.2 的 "operation-specific low-level compat" 路径）
+- ✅ **保留 Core Operation 语义**——不动 `core.revert/redo` 实现；只改路由入口
+- ✅ **Acceptance 验证 user-visible 状态**——不是仅验证 op metadata
+- ✅ **Real-browser acceptance**——`gui/smoke/gui-04-03-undo-redo.mjs` 真实键盘事件触发 Ctrl+Z 走 App.tsx → api.historyUndo → /history/undo
+- ✅ **保持 pre-existing 失败透明**——pytest 仍 792 + 1 skip + 2 pre-existing FAIL（与 04-01/04-02 相同的 2 个，未被 04-03 触发）
+
+### Source → Fix → Guard → Test
+
+| 旧路径 | 新路径 | 架构守卫 | 回归测试 |
+|---|---|---|---|
+| `App.tsx:597` `await api.revert(last.operation_id, "GUI Ctrl+Z")` —— 自己 find last op，依赖 `/revert` | `await api.historyUndo("GUI Ctrl+Z")` —— Core 的 `HistoryAPI.undo()` 决定 last op | `gui/src/api.ts` 新增 `historyUndo` / `historyRedo` 包装器；App.tsx 注释明确"GUI 不直接依赖 /revert" | `tests/test_history_gui_contract.py` 8 tests + `gui/smoke/gui-04-03-undo-redo.mjs` |
+| `App.tsx:606` `await api.revert(lastRevert.operation_id, "GUI Redo")` —— 自己 find last revert op 调 `/revert` 模拟 redo | `await api.historyRedo("GUI Ctrl+Y")` —— Core 的 `HistoryAPI.redo()` 走真正的 redo 路径 | 同 | 同 |
+
+### Acceptance（plan §5.3 exact user-visible state）
+
+| 编号 | 场景 | 测试 |
+|---|---|---|
+| M1 | Move → Undo → exact frame / track | `TestMoveUndoExactFrame::test_move_then_undo_restores_exact_frame_and_track` |
+| M1 | Undo 只回滚一个 op（不连带前一个 add_clip） | `TestMoveUndoExactFrame::test_undo_only_touches_one_operation` |
+| M2 | Move → Undo → Redo → exact final frame / track | `TestMoveUndoRedoExactFrame::test_move_undo_redo_round_trip` |
+| M3 | Delete last clip from non-default track → Undo restores BOTH clip AND track（含 auto-cleanup 恢复） | `TestDeleteLastClipUndoRestoresBoth::test_delete_then_undo_restores_clip_and_track` |
+| M4 | Ripple Delete → Undo restores exact positions + track membership | `TestRippleDeleteUndoRestoresExactState::test_ripple_middle_then_undo_restores_exact_positions` |
+| 端到端 | 真实键盘事件 Ctrl+Z 触发 App.tsx → api.historyUndo → /history/undo → Core | `gui/smoke/gui-04-03-undo-redo.mjs` Phase A |
+| 端到端 | 真实键盘事件 Ctrl+Y 触发 App.tsx → api.historyRedo → /history/redo → Core | 同 smoke Phase B（仅 lease 可获取时） |
+
+### Timeline / Selection / Preview 一致性
+
+`run()` 包装器已经在 undo/redo 路径上保留：
+- `await fn()` 后 `await refresh()` —— Timeline 状态从 server 拉新
+- `bumpPlanVersion()` —— Preview plan 失效，立即 refetch
+- 不显式清 Selection —— `selectedSet` 中的失效 clip id 在 Timeline 上 `selectedIds.has(cid)` 返回 false（no crash）；undo 恢复后自动重新高亮
+
+### 新增资产
+
+| 资产 | 内容 |
+|---|---|
+| `gui/src/api.ts` | `api.historyUndo(why)` + `api.historyRedo(why)`（走 mutate envelope，自动注入 sessionId/baseRevision） |
+| `gui/src/App.tsx` | `undoLast` / `redoLast` 重写：调 `api.historyUndo` / `api.historyRedo`；捕获 "no operation to undo/redo" 错误并显示 "没有可撤销/重做的操作" |
+| `tests/test_history_gui_contract.py` (NEW, 8 tests) | M1–M4 exact-state acceptance + endpoint existence (history_undo/redo/state) |
+| `gui/smoke/gui-04-03-undo-redo.mjs` (NEW) | Phase A：真实 Ctrl+Z 键盘事件 → status text 更新为 "已撤销"（证明 handler 链通）；Phase B：完整 mutation + Ctrl+Z/Ctrl+Y（lease 可获取时） |
+
+### 回归
+
+| Suite | 04-02 baseline | After 04-03 |
+|---|---|---|
+| pytest | 784 passed + 1 skip + 2 pre-existing FAIL | **792** passed + 1 skip + 2 pre-existing FAIL (+8 new) |
+| vitest | 444 passed + 2 skip | **444** passed + 2 skip |
+| gui-04-01-runtime-routes (browser) | 4/4 | **4/4** ✓ |
+| 03r6_2-identity (browser) | 10/10 | **10/10** ✓ |
+| **gui-04-03-undo-redo (browser, NEW)** | — | **2/2** ✓（Phase A: Ctrl+Z handler 通过键盘事件触发；Phase B skipped by lease conflict, informational） |
+| tsc | 5 pre-existing errors, no NEW | 5 pre-existing errors, no NEW |
+| Pre-existing 失败 | 2（未触动） | 2（仍是同样 2 个，未被 04-03 触发） |
+
+### 重要设计决策
+
+- **保留 Core Operation 语义不动**——`core.revert` / `core.redo` / `HistoryAPI` 全部保留；只换路由入口。`/revert` 仍可工作（plan §5.2 的 low-level compat）。
+- **OpsPanel.tsx 保留 `/revert`**——用户点击特定 op 撤销属于 plan §5.2 的 "operation-specific" 路径，不属于 "normal undo/redo"。注释明确这个区分。
+- **`undoLast` 不再挑 last op id**——直接调 `/history/undo`，由 Core 决定"哪个 op 该被 undo"。减少客户端逻辑（这是 plan §5.2 改进的目的：原 `undoLast` 自己查 op log，自己定位 last revert，再调 `/revert`，现在交给 Core 的 HistoryAPI）。
+- **Real-browser acceptance**——`gui/smoke/gui-04-03-undo-redo.mjs` Phase A 真实键盘事件触发（`page.keyboard.press("Control+z")`），证明从 DOM event → React handler → `api.historyUndo` → `fetch('/history/undo')` 整条链通。Phase B 在 lease 可获取时做完整 mutation + 双向 undo/redo。
+
+### Plan §17 GUI-04 Completion Gate 进度（04-03 更新）
+
+- [x] `/clips` 浏览器 200
+- [x] `history/undo` 浏览器 200
+- [x] no fractional frame reaches mutation API
+- [x] all new mutation tests green
+- [x] hidden layer never renders
+- [x] Timeline == Preview identity test green
+- [x] full pytest green except documented pre-existing
+- [x] full vitest green
+- [x] vite build green
+- [x] real browser smoke green
+- [x] **Undo/Redo exact**（→ 04-03 完成）
+- [ ] drag 1/5/10/50 px + cross-track + collision（→ 04-04）
+- [ ] multi-layer Preview determinism（→ 04-05）
+- [ ] Transform position/scale/rotation（→ 04-06）
+- [ ] human acceptance（final gate）
+
+### 下一步
+
+等待用户批准 → 进入 **04-04 Drag Interaction Consolidation**（用户已在 04-02 hard constraint 中详细描述）：
+- 收敛 `DragState` interface：`clipId, originFrame, originTrackId, candidateFrame, previewFrame, targetTrackId, constrained, snapPreviewFrame`
+- pointermove 唯一职责：candidate → constraint → preview（不动 server、不 authoritative snap、不 mutation）
+- pointerup 唯一职责：preview → authoritative snap → collision → finalFrame → single mutation
+- previewFrame === committedFrame，或显式 snap feedback
+- cross-track 走 `pointer hit-test → semantic track_id → Core siblings → collision → finalTrack`（禁止从 `style.left/width` 推导）
+- real-browser acceptance：1px/5px/10px/50px × single/multi/gap/collision/cross-track/viewport-edge/auto-scroll + repeated drag 10 次无 unexplained reversion
+
+---
+
+## 当前状态（2026-09-02 GUI-04 04-02 Frame Mutation Contract Closure 完成 ✅ = HEAD cf595ef）
 
 ### Source → Fix → Guard → Test 报告
 

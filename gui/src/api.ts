@@ -636,6 +636,15 @@ addClip: (assetId: string,
   },
   revert: (operationId: string, why = "") =>
     mutate("POST", "/revert", { operation_id: operationId, why }),
+  // GUI-04 04-03: the GUI's normal Ctrl+Z/Y paths use /history/undo
+  // and /history/redo, NOT /revert. /revert is the operation-specific
+  // low-level compat endpoint (plan §5.2). These wrappers route
+  // through the same Mutation Gate envelope (sessionId +
+  // baseRevision are auto-injected by `mutate`).
+  historyUndo: (why = "") =>
+    mutate<{ operation_id: string }>("POST", `/history/undo?why=${encodeURIComponent(why)}`),
+  historyRedo: (why = "") =>
+    mutate<{ operation_id: string }>("POST", `/history/redo?why=${encodeURIComponent(why)}`),
   volumeRange: (clipId: string, volume: number, start: number, end: number, why = "") =>
     mutate("POST",
       `/clips/${clipId}/volume-range?volume=${volume}&start=${start}&end=${end}&why=${encodeURIComponent(why)}`),

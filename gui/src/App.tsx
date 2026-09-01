@@ -589,24 +589,32 @@ export default function App() {
   const transportRef = useRef<{ toggle?: () => void } | null>(null);
   const clipboard = useRef<Clip | null>(null);
 
-  // 撤销/重做（语义撤销：revert 的 revert = redo）
+  // 撤销/重做（GUI-04 04-03: Ctrl+Z → /history/undo, Ctrl+Y → /history/redo。
+  // /revert 保留为 low-level compat endpoint，GUI 不再依赖它做日常 undo/redo。
+  // /history/undo /history/redo 走 Core 的 HistoryAPI（语义撤销 + redo），
+  // 不需要客户端挑选"最后一个非 revert 的 op id"，减少客户端逻辑。
   const undoLast = async () => {
-    const ops = await api.operations();
-    const last = [...ops].reverse().find(
-      (o) => !o.type.startsWith("revert:") && o.type !== "analyze_loudness");
-    if (last) {
-      await run(() => api.revert(last.operation_id, "GUI Ctrl+Z"), `已撤销 ${last.type}`);
-    } else {
-      setStatus({ ok: false, text: "没有可撤销的操作" });
+    try {
+      await run(() => api.historyUndo("GUI Ctrl+Z"), `已撤销`);
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (msg.includes("no operation to undo") || msg.includes("没有可撤销")) {
+        setStatus({ ok: false, text: "没有可撤销的操作" });
+        return;
+      }
+      throw e;
     }
   };
   const redoLast = async () => {
-    const ops = await api.operations();
-    const lastRevert = [...ops].reverse().find((o) => o.type.startsWith("revert:"));
-    if (lastRevert) {
-      await run(() => api.revert(lastRevert.operation_id, "GUI Redo"), `已重做 ${lastRevert.type}`);
-    } else {
-      setStatus({ ok: false, text: "没有可重做的操作" });
+    try {
+      await run(() => api.historyRedo("GUI Ctrl+Y"), `已重做`);
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (msg.includes("no operation to redo") || msg.includes("没有可重做")) {
+        setStatus({ ok: false, text: "没有可重做的操作" });
+        return;
+      }
+      throw e;
     }
   };
 
