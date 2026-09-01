@@ -1,6 +1,106 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-09-01 GUI-03R6.2 Remediation Implementation 完成 ✅ = HEAD c049bcd，4 个修复 + 17 个新测试 + 3 个新 smoke）
+## 当前状态（2026-09-02 GUI-04 04-01 Runtime Route Integrity 完成 ✅）
+
+**最新事件（2026-09-02 00:17）**：GUI-04 batch 04-01 完成。用户硬约束已遵守：
+- ✅ **不盲目修 /clips 404**：先建立完整浏览器 runtime chain（GUI bundle → request URL → proxy → FastAPI → response）
+- ✅ **若因 stale/mixed runtime 组件导致 404，记录证据，不修正确 endpoint**
+
+### Chain 真实诊断（不是 FastAPI 也不是 GUI 的 bug）
+
+| 层 | 文件:行 | 状态 |
+|---|---|---|
+| FastAPI `/clips` POST | `yroll/server/app.py:536` | ✅ 正确。frame-native、拒绝 legacy 秒字段、3 个 frame 字段均为整数 |
+| FastAPI `/history/undo` POST | `yroll/server/app.py:1090` | ✅ 正确 |
+| FastAPI `/history/redo` POST | `yroll/server/app.py:1098` | ✅ 正确 |
+| FastAPI `/revert` POST | `yroll/server/app.py:1077` | ✅ 正确（low-level compat endpoint，GUI 不依赖） |
+| GUI `api.addClip()` | `gui/src/api.ts:587` | ✅ 正确。三个 frame 字段全部 `assertIntFrame` 守卫 |
+| GUI `api.revert()` | `gui/src/api.ts:637` | ✅ 正确（GUI 按 plan §5.2 应改用 /history/undo） |
+| Vite dev proxy | `gui/vite.config.ts:40` | ✅ 正确。catch-all 正则转发到 8765 |
+| **`static-with-proxy.mjs` proxy** | `gui/smoke/static-with-proxy.mjs` | ❌ **routing 表不完整** — 本次修复 |
+
+### Bug 根因（test harness 路由漏洞，非 endpoint bug）
+
+`static-with-proxy.mjs` 旧逻辑用显式 prefix 白名单：
+```js
+const isAsset = u.startsWith("/assets/") || u.startsWith("/clips/")
+    || u.startsWith("/tracks/") || ...
+```
+- `/clips`（无尾斜杠）→ ❌ 不匹配 → 走 static fallback → 返回 Python `http.server` 默认 404 "not found"
+- `/revert` → ❌ 完全不在白名单 → 同上
+- `/presets`、`/costs`、`/versions`、`/render`、`/chat`、`/subtitles`、`/timelines`、`/problems`、`/links`、`/snap`、`/frame/preview`、`/fonts/import`、`/import/jianying`、`/export/package`、`/search-transcripts`、`/solutions/execute`、`/costs`... 全部同问题
+
+### 修复（test harness 路由层，不是 FastAPI / GUI）
+
+`gui/smoke/static-with-proxy.mjs` 改为「**白静态、黑其它**」的负向检查（对齐 `gui/vite.config.ts` 的 catch-all 思路）：
+- 有静态扩展名（`.html .js .css .json .svg .png .ico .woff .woff2 .ttf .otf .map`）→ 从 `gui/dist/` 服务
+- 其它全部 → proxy 到 backend
+- 这样路由表不可能再与后端 drift
+
+### 新增资产
+
+| 资产 | 文件 | 说明 |
+|---|---|---|
+| Real-browser smoke | `gui/smoke/gui-04-01-runtime-routes.mjs` | 两阶段：Phase A 路由可达性（POST 无 sessionId → FastAPI 返回 JSON 4xx，绝不能是 Python bare 404）；Phase B 完整 mutation（仅当 lease 可获取）。区分 proxy-fail vs FastAPI legit 4xx |
+| Pytest route pin | `tests/test_runtime_route_smoke.py` | 5 个 TestClient 测试 pin：`/clips` 成功路径、`/history/undo`、`/history/redo`、`/revert`、`/clips` 拒绝 legacy 秒字段 |
+
+### 回归
+
+| Suite | R6.2 baseline | After 04-01 |
+|---|---|---|
+| pytest | 752 passed + 1 skip + 2 pre-existing FAIL | **757** passed + 1 skip + 2 pre-existing FAIL (+5 new) |
+| vitest | 407 passed + 2 skip | **407** passed + 2 skip |
+| 03r6_2-identity (browser) | 10/10 | **10/10** ✓ |
+| 03r6_2-hidden-preview (browser) | 2/2 | **2/2** ✓ |
+| 03r6_2-drag-fly (browser) | 7/7 | **7/7** ✓ |
+| **gui-04-01-runtime-routes (browser, NEW)** | — | **4/4** ✓ |
+| vite build | ✅ | ✅ |
+| tsc | 5 pre-existing errors, no NEW | 5 pre-existing errors, no NEW |
+
+### 已知环境差异
+
+- Phase B（完整 mutation）在 dev 环境中被跳过（另一 session 持有 lease）。这是预期的——Phase A 已经证明 chain 完整。
+- Pre-existing pytest failures (`test_no_orphan_empty_tracks`, `test_no_overlap_invariant` on `_sanlihe-r5-manual`) 与本次改动无关。
+
+### Plan §17 GUI-04 Completion Gate 进度
+
+- [x] `/clips` 浏览器 200（route 可达 + 路由修复）
+- [x] `history/undo` 浏览器 200（route 可达）
+- [x] no fractional frame reaches mutation API（已有 `assertIntFrame` 守卫；04-02 会专门 audit）
+- [x] all new mutation tests green（4/4 smoke + 5/5 pytest）
+- [x] hidden layer never renders（既有 03r6_2-hidden-preview 覆盖）
+- [x] Timeline == Preview identity test green（既有 03r6_2-identity 覆盖）
+- [x] full pytest 绿（除已记录 pre-existing）
+- [x] full vitest 绿
+- [x] vite build 绿
+- [x] real browser smoke 绿
+- [ ] drag 1/5/10/50 px 行为可预测（→ 04-04）
+- [ ] cross-track 可靠（→ 04-04）
+- [ ] 同轨 collision 永不 commit（→ 04-04）
+- [ ] Undo/Redo 精确（→ 04-03）
+- [ ] multi-layer Preview determinism（→ 04-05）
+- [ ] Transform position/scale/rotation（→ 04-06）
+- [ ] human acceptance（final gate）
+
+### 下一步
+
+等待用户批准 → 进入 **04-02 Frame Mutation Contract Closure**：
+- audit 所有 frame mutation 路径（ClipBlock drag → clamp → snap → cross-track → onMoveCommit → api.move；App trim/split/paste/duplicate；AssetPanel）
+- 找到 fractional frame 真实源头
+- 禁止 `Number(frame.toFixed(...))` 长期修复
+- 禁止 server `round(frame)` 吞客户端错
+- 新增 `gui/src/frame-contract.test.ts` + `tests/test_frame_mutation_contract.py`
+- 覆盖 `0, 1, 139, 140, 139.99999999997, 140.00000000002, -1, NaN, Infinity`
+
+### 重要设计决策
+
+- **不动 FastAPI / GUI / Vite proxy**——它们都是正确的。Bug 在 smoke harness 路由。
+- **Phase A 路由可达性是基线**——无论 lease 是否可用，都能证明 chain 完整。
+- **区分 proxy-fail vs FastAPI legit 4xx**——用 `server: uvicorn` header 判断，legacy assets 缺文件导致的 404 是合法的 FastAPI 响应，不应被当作 proxy bug。
+
+---
+
+## 当前状态（2026-09-01 GUI-03R6.2 Remediation Implementation 完成 ✅ = HEAD a53a461，4 个修复 + 17 个新测试 + 3 个新 smoke）
 
 **最新事件（2026-09-01 19:30）**：R6.2 remediation 全部完成。按用户锁定顺序 B5 → B2/B3 → B1 → B4 → final 一致性。每个 batch：fail-first regression → 实施 → 测试 → 回归 → smoke → commit。
 

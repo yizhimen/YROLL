@@ -50,33 +50,57 @@ function proxyTo(req, res) {
   req.pipe(proxyReq);
 }
 
+// Paths with one of these extensions are served from the gui/dist
+// static root; everything else is proxied to the backend. This
+// mirrors gui/vite.config.ts's catch-all regex (which excludes only
+// @vite/@react-refresh/node_modules/src/favicon). The previous
+// explicit-prefix list in this file was incomplete: /clips (no
+// trailing slash), /revert, /presets, /costs, /versions, /render,
+// /export/package, /fonts/import, /import/jianying, /chat,
+// /search-transcripts, /subtitles, /links, /frame/preview, /snap,
+// /timelines, /problems, /solutions/execute all fell through to the
+// bare-Python "not found" 404 — masking real FastAPI responses
+// behind the proxy. GUI-04 04-01: flip to a negative check so the
+// route table can never silently drift from the backend again.
+const STATIC_EXT = new Set([
+  ".html", ".js", ".css", ".json", ".svg", ".png", ".ico",
+  ".woff", ".woff2", ".ttf", ".otf", ".map",
+]);
+
 createServer((req, res) => {
   const u = req.url ?? "/";
-  const isAsset = u.startsWith("/assets/") || u.startsWith("/clips/")
-    || u.startsWith("/tracks/") || u.startsWith("/selection/")
-    || u.startsWith("/preview/") || u.startsWith("/project")
-    || u.startsWith("/ui/") || u.startsWith("/operations")
-    || u.startsWith("/lease/") || u.startsWith("/history/")
-    || u.startsWith("/mutation/") || u.startsWith("/audit/")
-    || u.startsWith("/keyboard/") || u.startsWith("/assets")
-    || u.startsWith("/preview.mp4")
-    || u.startsWith("/sequence");  // GUI-03R2 P0-F: useProjectSequence poll
-  if (isAsset) {
-    proxyTo(req, res);
-    return;
+  const pathPart = u.split("?")[0];
+  const ext = extname(pathPart).toLowerCase();
+  const isSpaRoot = u === "/" || pathPart === "/index.html";
+  const isStaticFile = STATIC_EXT.has(ext);
+
+  if (isSpaRoot || isStaticFile) {
+    let diskPath = (u === "/" || pathPart === "/index.html")
+      ? "/index.html"
+      : pathPart;
+    diskPath = normalize(join(ROOT, diskPath));
+    if (!diskPath.startsWith(ROOT)) {
+      res.writeHead(403); res.end("forbidden"); return;
+    }
+    if (existsSync(diskPath)) {
+      res.setHeader("Content-Type", MIME[ext] ?? (isSpaRoot ? "text/html; charset=utf-8" : "application/octet-stream"));
+      createReadStream(diskPath).pipe(res);
+      return;
+    }
+    if (isSpaRoot) {
+      res.writeHead(404); res.end("index.html not found in dist"); return;
+    }
+    // Static file requested but not on disk — fall through to proxy.
+    // The backend may legitimately serve /assets/index-XXXX.js etc.
+    // via its own StaticFiles mount; we don't want to 404 that here.
   }
 
-  let path = u === "/" ? "/index.html" : u.split("?")[0];
-  path = normalize(join(ROOT, path));
-  if (!path.startsWith(ROOT)) {
-    res.writeHead(403); res.end("forbidden"); return;
-  }
-  if (!existsSync(path)) {
-    res.writeHead(404); res.end("not found"); return;
-  }
-  const ext = extname(path).toLowerCase();
-  res.setHeader("Content-Type", MIME[ext] ?? "application/octet-stream");
-  createReadStream(path).pipe(res);
+  // Anything else: API call → proxy to backend. This is the
+  // catch-all that replaces the previous incomplete explicit-prefix
+  // list. If the backend doesn't know the path, it returns its own
+  // proper JSON 4xx — not the bare "not found" this proxy used to
+  // emit.
+  proxyTo(req, res);
 }).listen(STATIC_PORT, "127.0.0.1", () => {
   console.log("URL: http://127.0.0.1:" + STATIC_PORT + "/");
 });
