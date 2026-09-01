@@ -179,3 +179,130 @@ describe("R6 closure fix: PreviewPlayer L0 fallback (image clip)", () => {
     expect(html).not.toContain("播放头在间隙里");
   });
 });
+// R6.2-B2/B3: hidden-track L0 fallback must NOT resurrect the hidden
+// track's clip. Previous bug: PreviewPlayer.tsx:226 used
+// `t.kind === "video"` without filtering `t.hidden`, letting a hidden
+// V1's clips appear in the L0 fallback path even though PreviewPlan
+// (L1) correctly excluded them.
+
+describe("R6.2-B2/B3: hidden track L0 fallback", () => {
+  function makeProjectWithHiddenTrack(opts: {
+    hiddenTrackId: string;
+    visibleTrackId: string;
+    hiddenClipId: string;
+    visibleClipId: string;
+    hiddenAssetId: string;
+    visibleAssetId: string;
+    hiddenStart: number;
+    hiddenEnd: number;
+    visibleStart: number;
+    visibleEnd: number;
+  }) {
+    const assets: Asset[] = [
+      { asset_id: opts.hiddenAssetId, type: "image" as const, path: "/img/h", origin: "u",
+        identity: { duration_sec: undefined, width: 100, height: 100 }, source_fps: null },
+      { asset_id: opts.visibleAssetId, type: "image" as const, path: "/img/v", origin: "u",
+        identity: { duration_sec: undefined, width: 100, height: 100 }, source_fps: null },
+    ];
+    return {
+      project_id: "p1",
+      name: "t",
+      intent: {},
+      sequence: { fps: { num: 30, den: 1 }, width: 1920, height: 1080, project_revision: 1 },
+      assets,
+      timeline: { timeline_id: "main", tracks: [] },
+      clips: {
+        [opts.hiddenClipId]: {
+          clip_id: opts.hiddenClipId, asset_id: opts.hiddenAssetId,
+          track_id: opts.hiddenTrackId,
+          source_range: { start: 0, end: 0.033 },
+          timeline_range: { start: opts.hiddenStart / 30, end: opts.hiddenEnd / 30 },
+          speed: 1, volume: 1, transform: {}, adjustments: [], context: {},
+        },
+        [opts.visibleClipId]: {
+          clip_id: opts.visibleClipId, asset_id: opts.visibleAssetId,
+          track_id: opts.visibleTrackId,
+          source_range: { start: 0, end: 0.033 },
+          timeline_range: { start: opts.visibleStart / 30, end: opts.visibleEnd / 30 },
+          speed: 1, volume: 1, transform: {}, adjustments: [], context: {},
+        },
+      },
+      timelines: [{
+        timeline_id: "main", name: "Main",
+        tracks: [
+          {
+            track_id: opts.hiddenTrackId, kind: "video" as const,
+            hidden: true, clip_ids: [opts.hiddenClipId],
+          },
+          {
+            track_id: opts.visibleTrackId, kind: "video" as const,
+            hidden: false, clip_ids: [opts.visibleClipId],
+          },
+        ],
+      }],
+      active_timeline_id: "main",
+    } as Project;
+  }
+
+  it("hidden first video track: L0 fallback must skip it (no img rendered for hidden asset)", () => {
+    // Hidden V1 has a clip at frames [50, 100]. Visible V2 has a clip
+    // at frames [200, 300]. Playhead at frame 75 should NOT show V1.
+    const project = makeProjectWithHiddenTrack({
+      hiddenTrackId: "v1", visibleTrackId: "v2",
+      hiddenClipId: "c_hidden", visibleClipId: "c_visible",
+      hiddenAssetId: "a_hidden", visibleAssetId: "a_visible",
+      hiddenStart: 50, hiddenEnd: 100, visibleStart: 200, visibleEnd: 300,
+    });
+    const { container } = render(
+      <PreviewPlayer project={project} playheadFrame={75} onPlayhead={() => {}}
+        onStatus={() => {}} renderedUrl={null} />,
+    );
+    const html = container.innerHTML;
+    expect(html).not.toContain("/assets/a_hidden/file");
+    // No img[data-layer-kind] should be rendered (L0 fallback skips hidden).
+    expect(html).not.toMatch(/img[^>]*data-layer-kind/);
+    // L0 fallback should show "in-gap" placeholder instead.
+    expect(html).toContain("播放头在间隙里");
+  });
+
+  it("visible first video track: L0 fallback renders its img", () => {
+    const project = makeProjectWithHiddenTrack({
+      hiddenTrackId: "v1", visibleTrackId: "v2",
+      hiddenClipId: "c_hidden", visibleClipId: "c_visible",
+      hiddenAssetId: "a_hidden", visibleAssetId: "a_visible",
+      hiddenStart: 50, hiddenEnd: 100, visibleStart: 200, visibleEnd: 300,
+    });
+    // Hide V2, show V1 — but V1's range [50,100] doesn't cover frame 75? Wait, it does.
+    // Reverse the setup: visible V1 covers [50,100], hidden V2 covers [200,300].
+    const project2 = makeProjectWithHiddenTrack({
+      hiddenTrackId: "v2", visibleTrackId: "v1",
+      hiddenClipId: "c_hidden", visibleClipId: "c_visible",
+      hiddenAssetId: "a_hidden", visibleAssetId: "a_visible",
+      hiddenStart: 200, hiddenEnd: 300, visibleStart: 50, visibleEnd: 100,
+    });
+    const { container } = render(
+      <PreviewPlayer project={project2} playheadFrame={75} onPlayhead={() => {}}
+        onStatus={() => {}} renderedUrl={null} />,
+    );
+    const html = container.innerHTML;
+    expect(html).toContain("/assets/a_visible/file");
+    expect(html).not.toContain("/assets/a_hidden/file");
+  });
+
+  it("hidden track first but playhead outside any range: placeholder, no asset", () => {
+    const project = makeProjectWithHiddenTrack({
+      hiddenTrackId: "v1", visibleTrackId: "v2",
+      hiddenClipId: "c_hidden", visibleClipId: "c_visible",
+      hiddenAssetId: "a_hidden", visibleAssetId: "a_visible",
+      hiddenStart: 50, hiddenEnd: 100, visibleStart: 200, visibleEnd: 300,
+    });
+    // Frame 150 is between V1 [50,100] and V2 [200,300] — in gap
+    const { container } = render(
+      <PreviewPlayer project={project} playheadFrame={150} onPlayhead={() => {}}
+        onStatus={() => {}} renderedUrl={null} />,
+    );
+    const html = container.innerHTML;
+    expect(html).not.toMatch(/img[^>]*data-layer-kind/);
+    expect(html).toContain("播放头在间隙里");
+  });
+});

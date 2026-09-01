@@ -221,9 +221,18 @@ export default function PreviewPlayer({
   // is the ONE sanctioned helper for this boundary (rounds via
   // roundHalfAwayFromZero, not Math.round). `seqFps` is declared
   // above (line ~102).
+  //
+  // R6.2-B2/B3: the L0 fallback must filter `track.hidden`. The
+  // previous code used `t.kind === "video"` only, which let the
+  // first hidden video track resurrect its clips in the preview
+  // even though the L1 composite (PreviewPlan) correctly excluded
+  // them. Invariant: Track.hidden == true → no renderer layer for
+  // that track. The L0 fallback now skips hidden tracks.
   const vtrack = (project.timelines?.find(
     (tl) => tl.timeline_id === project.active_timeline_id,
-  ) ?? project.timelines?.[0])?.tracks.find((t) => t.kind === "video");
+  ) ?? project.timelines?.[0])?.tracks.find(
+    (t) => t.kind === "video" && !t.hidden,
+  );
   const clips = (vtrack?.clip_ids ?? [])
     .map((id) => project.clips[id])
     .filter(Boolean)
