@@ -41,7 +41,30 @@ def test_p01_cross_track_ripple():
                        if t.kind.value == "video")
         text_track = next(t for t in core.project.timeline.tracks
                           if t.kind.value == "text")
-        target = v_track.clip_ids[1]
+        # R6.2-B1: pick a video clip whose siblings don't overlap it,
+        # so the split's two halves still fit within the no-overlap
+        # invariant. jdz-chaishao has V1 with overlapping clips —
+        # pick a clip that's isolated.
+        fps = core.project.fps_num
+        nonoverlap = []
+        for cid in v_track.clip_ids:
+            c = core.project.clips[cid]
+            cs = round(c.timeline_range.start * fps)
+            ce = round(c.timeline_range.end * fps)
+            ok = True
+            for other in v_track.clip_ids:
+                if other == cid:
+                    continue
+                oc = core.project.clips[other]
+                js = round(oc.timeline_range.start * fps)
+                je = round(oc.timeline_range.end * fps)
+                # half-open interval overlap: c.start < other.end AND other.start < c.end
+                if cs < je and js < ce:
+                    ok = False
+                    break
+            if ok and (ce - cs) >= 60:  # at least 2 seconds to split
+                nonoverlap.append(cid)
+        target = nonoverlap[0] if nonoverlap else v_track.clip_ids[1]
         v_clip = core.project.clips[target]
 
         sub_id = text_track.clip_ids[-1]

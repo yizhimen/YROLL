@@ -1392,6 +1392,22 @@ class CommandLayer:
                      if t.track_id == clip.track_id)
         idx = track.clip_ids.index(clip_id)
         track.clip_ids.insert(idx + 1, right.clip_id)
+        # R6.2-B1: a split creates two halves on the same track; either
+        # half could land on top of an adjacent sibling if the split
+        # point is far enough inside the clip. Reject with the same
+        # 400/CommandError pattern as add/move/trim.
+        self._check_no_overlap(
+            clip.track_id, clip.timeline_range.start, clip.timeline_range.end,
+            exclude_clip_id=clip.clip_id,
+            op_name=f"split_clip({clip_id}, left half)",
+            timeline_id=timeline_id,
+        )
+        self._check_no_overlap(
+            clip.track_id, right.timeline_range.start, right.timeline_range.end,
+            exclude_clip_id=right.clip_id,
+            op_name=f"split_clip({clip_id}, right half)",
+            timeline_id=timeline_id,
+        )
         self._record("split", clip_id, before,
                      {"clip": clip.model_dump(), "right_clip_id": right.clip_id},
                      why=why,
