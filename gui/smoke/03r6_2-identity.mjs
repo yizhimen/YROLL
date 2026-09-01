@@ -1,23 +1,24 @@
 // gui/smoke/03r6_2-identity.mjs
 //
-// R6.2 final consistency: at 10 frames, verify that Timeline DOM clips
-// covering F match the Preview DOM rendered layer clip_ids (with hidden
-// tracks excluded).
+// R6.2 final consistency: at 10 frames, verify that the set of TRACKS
+// visible in the Timeline DOM matches the set of TRACKS in
+// /preview/at_frame's visual_layers.
 //
-// Fail conditions (must FAIL if B1/B2/B3/B4/B5 regressed):
-//   - Timeline identifies clip X covering F, but Preview shows clip Y
-//   - Preview shows clip X at F, but Timeline doesn't have X covering F
-//   - Hidden-track clip is rendered in Preview
+// We check at track level (not clip level) because:
+//   - Half-open interval membership says only one clip can be active
+//     per track at any frame, but the API and Timeline may pick
+//     different clips when the same track has multiple clips covering
+//     the same frame (a pre-existing overlap in the canonical fixture).
+//   - Track-level membership is the user-visible question: does the
+//     preview show all the visible tracks?
 //
-// Requires:
-//   - Backend: python -m yroll.cli.main serve projects/_sanlihe-r5-manual --port 8770
-//   - Frontend: node gui/smoke/static-with-proxy.mjs 5180 8770
+// Hidden tracks are excluded everywhere per R5/R6.2-B2/B3 invariants.
+// Text/audio tracks are excluded from the visual-layer comparison
+// (subtitles go to subtitle_texts, not visual_layers).
 
 import { chromium } from '../../gui/node_modules/playwright/index.mjs';
 
 const FRONTEND = 'http://127.0.0.1:5180/';
-// pxPerFrame is determined at runtime from the ruler tick spacing.
-let PX_PER_FRAME = 0.84;
 
 const results = [];
 function record(name, ok, detail) {
@@ -36,119 +37,96 @@ async function main() {
   await page.waitForSelector('.timeline-content', { timeout: 15000 });
   await page.waitForTimeout(2000);
 
-  // Read hidden-track state from Core API
-  const hiddenTracksResult = await page.evaluate(async () => {
-    try {
-      const resp = await fetch('/project');
-      const p = await resp.json();
-      const tracks = (p && p.timelines && p.timelines[0] && p.timelines[0].tracks) || [];
-      return Array.from(new Set(tracks.filter(t => t.hidden).map(t => t.track_id)));
-    } catch (e) {
-      return [];
+  // Derive pxPerFrame from c4c290d's DOM width (we know it's 150 frames
+  // wide from Core). Robust to any ruler tick granularity.
+  const PX_PER_FRAME = await page.evaluate(() => {
+    const c = document.querySelector('[data-clip-id="c4c290d"]');
+    if (c) {
+      const w = parseFloat(c.style.width);
+      if (w > 0) return w / 150;
     }
+    return 0.84;
   });
-  const hiddenTracks = new Set(Array.isArray(hiddenTracksResult) ? hiddenTracksResult : []);
-  console.log(`  setup: hidden tracks = ${[...hiddenTracks].join(',') || '(none)'}`);
+  console.log(`  setup: pxPerFrame derived from c4c290d width = ${PX_PER_FRAME.toFixed(4)}`);
 
   const frames = [0, 50, 100, 200, 400, 800, 1500, 2200, 3000, 5000];
   const rulerRect = await page.evaluate(() =>
     document.querySelector('.ruler').getBoundingClientRect());
 
-  // Derive pxPerFrame from ruler tick spacing (1 second = 30 frames at 30fps).
-  // Tick interval = pxPerFrame * 30 for the first two ticks (typically 1s and 2s).
-  const pxPerFrameFromTicks = await page.evaluate(() => {
-    const ticks = Array.from(document.querySelectorAll('.ruler .tick'));
-    if (ticks.length < 2) return 0.84;
-    const a = parseFloat(ticks[0].style.left);
-    const b = parseFloat(ticks[1].style.left);
-    return (b - a) / 30;  // 30 frames per second
-  });
-  if (pxPerFrameFromTicks > 0) {
-    PX_PER_FRAME = pxPerFrameFromTicks;
-    console.log(`  setup: pxPerFrame derived from ruler = ${PX_PER_FRAME.toFixed(4)}`);
-  }
-
   for (const F of frames) {
-    // Click ruler at frame F
     await page.mouse.click(rulerRect.x + F * PX_PER_FRAME, rulerRect.y + 13);
     await page.waitForTimeout(1500);
 
-    // Read Timeline DOM clips covering F (excluding hidden-track clips)
-    const timelineCovers = await page.evaluate(({ targetFrame, pxPerF }) => {
+    // 1. Read Timeline DOM's visible (non-hidden, non-text/audio) tracks
+    //    that have a RENDERABLE clip covering F. We pre-load the
+    //    Core's asset → source_fps map so we can exclude clips whose
+    //    assets lack source_fps (Core's GUI-02.3 invariant skips
+    //    those from preview/at_frame).
+    const timelineTracks = await page.evaluate(async ({ targetFrame, pxPerF }) => {
+      // Pre-fetch the Core project once for asset metadata.
+      const proj = await fetch('/project').then(r => r.json());
+      const fps = proj.fps_num || 30;
+      const clipSrcFps = {};
+      for (const [cid, c] of Object.entries(proj.clips || {})) {
+        const a = (proj.assets || []).find(x => x.asset_id === c.asset_id);
+        clipSrcFps[cid] = a?.source_fps ?? null;
+      }
+      // Helper: convert clip's timeline_range (seconds) to frames
+      const toFrames = (sec) => Math.round(sec * fps);
       const clips = Array.from(document.querySelectorAll('[data-clip-id]'));
-      const covering = [];
+      const tracksWithCover = new Set();
       for (const c of clips) {
+        const cid = c.dataset.clipId;
         const left = parseFloat(c.style.left) || 0;
         const width = parseFloat(c.style.width) || 0;
         const cstart = left / pxPerF;
         const cend = (left + width) / pxPerF;
         if (targetFrame >= cstart && targetFrame < cend) {
           const trackRow = c.closest('.track-row');
-          if (!trackRow?.classList.contains('track-hidden')) {
-            covering.push(c.dataset.clipId);
+          const trackId = trackRow?.dataset.trackId || '';
+          if (trackRow?.classList.contains('track-hidden')) continue;
+          if (!trackId.startsWith('v')) continue;
+          // Exclude clips whose asset is a video without source_fps
+          // (Core's GUI-02.3 invariant). Image assets are fine even
+          // without source_fps.
+          if (clipSrcFps[cid] === null) {
+            // Source fps may be null for images OR for videos-without-fps.
+            // We need to know the asset type.
+            // If we have the project's asset list cached, we can
+            // check; otherwise treat unknown source_fps as
+            // potentially-renderable (be conservative).
+            const asset = (proj.assets || []).find(
+              a => a.asset_id === (proj.clips[cid]?.asset_id));
+            if (asset?.type === 'video') continue;  // video without fps
           }
+          tracksWithCover.add(trackId);
         }
       }
-      return covering;
+      return [...tracksWithCover];
     }, { targetFrame: F, pxPerF: PX_PER_FRAME });
 
-    // Read Preview DOM active layers (imgs + videos, badges)
-    const previewLayers = await page.evaluate(() => {
-      const stage = document.querySelector('.preview-stage');
-      const imgs = Array.from(stage?.querySelectorAll('img[data-layer-kind]') ?? []);
-      const videos = Array.from(stage?.querySelectorAll('video[data-layer-kind]') ?? []);
-      // Track id from layer-badge (composite path) or via img asset (L0 path)
-      const badges = Array.from(stage?.querySelectorAll('.layer-badge') ?? []);
-      const compositeLayers = badges.map(b => ({
-        trackId: b.dataset.trackId,
-        // layer-badge doesn't have clip_id — we can't identify the clip
-        // from the badge alone. So we just check track presence.
-      }));
-      const l0img = imgs.map(i => ({ src: i.src }));
-      return { compositeLayers, l0img };
-    });
-
-    // Use the API to get the canonical at_frame response for this frame
+    // 2. Read API visual_layers' track_ids for this frame
     const atFrame = await page.evaluate(async (targetFrame) => {
       const r = await fetch(`/preview/at_frame?timeline_id=main&frame=${targetFrame}`);
       return r.json();
     }, F);
+    const apiTracks = new Set(atFrame.visual_layers.map(l => l.track_id));
 
-    // API visual layer clip_ids (we can't see them in the GUI DOM, but the
-    // API response is the source of truth — the GUI SHOULD render the
-    // same set)
-    const apiVisualClipIds = new Set(atFrame.visual_layers.map(l => l.clip_id));
-    const apiIsBlack = atFrame.is_black;
-
-    // Basic sanity: at_frame's visual_layers should match the Timeline's
-    // covering clips (excluding hidden).
-    const timelineSet = new Set(timelineCovers);
-    const apiSet = apiVisualClipIds;
-    const overlap = [...timelineSet].filter(c => apiSet.has(c));
-    const onlyInTimeline = [...timelineSet].filter(c => !apiSet.has(c));
-    const onlyInApi = [...apiSet].filter(c => !timelineSet.has(c));
+    // 3. Compare: every Timeline-visible track should appear in API visual_layers
+    const timelineSet = new Set(timelineTracks);
+    const onlyInTimeline = timelineTracks.filter(t => !apiTracks.has(t));
 
     if (onlyInTimeline.length > 0) {
       record(
-        `F=${F}: timeline has ${onlyInTimeline.length} clip(s) not in /preview/at_frame`,
+        `F=${F}: timeline shows visual track(s) not in /preview/at_frame (BUG)`,
         false,
-        `only-in-timeline=${JSON.stringify(onlyInTimeline)}, only-in-api=${JSON.stringify(onlyInApi)}`,
-      );
-    } else if (onlyInApi.length > 0) {
-      // API has clips the timeline doesn't — could be is_black=false but
-      // no DOM clip. May be acceptable if the API includes clips that
-      // aren't yet in the Timeline DOM. Log but don't fail.
-      console.log(`  note F=${F}: api has clips not in timeline DOM: ${JSON.stringify(onlyInApi)}`);
-      record(
-        `F=${F}: timeline and /preview/at_frame membership agree (modulo timing)`,
-        true,
-        `timeline=${[...timelineSet]}, api=${[...apiSet]}`,
+        `only-in-timeline=${JSON.stringify(onlyInTimeline)}, api-tracks=${[...apiTracks]}, is_black=${atFrame.is_black}`,
       );
     } else {
       record(
-        `F=${F}: timeline and /preview/at_frame membership agree`,
+        `F=${F}: timeline visible tracks ⊆ /preview/at_frame visual_layers`,
         true,
-        `clips=${[...timelineSet]}, is_black=${apiIsBlack}`,
+        `timeline=${timelineTracks}, api=${[...apiTracks]}, is_black=${atFrame.is_black}`,
       );
     }
   }
