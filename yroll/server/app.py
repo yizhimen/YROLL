@@ -151,10 +151,22 @@ class SplitReq(BaseModel):
 
 
 class AddClipReq(BaseModel):
+    """GUI-03R6: frame-native add-clip. Mirrors MoveReq's rejection of
+    legacy seconds fields. Body keys are integer frames.
+
+    Timeline frame math is sequence-fps; source frames are
+    asset-fps (the GUI converts via asset.source_fps). The Core's
+    add_clip_frame() converts to seconds at the storage boundary.
+
+    `model_config["extra"] = "allow"` lets the model accept a body
+    that contains legacy seconds fields; the handler then inspects
+    `__pydantic_extra__` to detect and reject them with a clear 400
+    "no longer accepted" message."""
+    model_config = {"extra": "allow"}
     asset_id: str
-    source_start: float
-    source_end: float
-    timeline_start: float
+    timeline_start_frame: int | None = None
+    source_start_frame: int | None = None
+    source_end_frame: int | None = None
     # GUI-03R-Micro v2: track_id is typed str | None. None means
     # "no explicit target" — Core's TrackAllocator picks the
     # minimum suitable non-overlapping track. A string value is an
@@ -522,18 +534,61 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
         return st.core.versions()
 
     @app.post("/clips")
-    def add_clip(req: AddClipReq, timeline_id: str = "", sessionId: str = "", baseRevision: int = None):
+    def add_clip(req: AddClipReq,
+                 timeline_id: str = "", sessionId: str = "", baseRevision: int = None):
+        # GUI-03R6: reject any legacy seconds fields FIRST so a
+        # mixed legacy/frame body gets a clear "no longer accepted"
+        # error rather than the generic "frame fields required".
+        # Mirrors MoveReq at /clips/{id}/move. We inspect
+        # `__pydantic_extra__` (model_config={"extra": "allow"})
+        # because model_fields_set only shows DECLARED fields.
+        extra = getattr(req, "__pydantic_extra__", None) or {}
+        for legacy in ("source_start", "source_end", "timeline_start"):
+            if legacy in extra:
+                raise HTTPException(
+                    400,
+                    f"GUI-03R6: '{legacy}' (seconds) is no longer accepted; "
+                    f"use '{legacy}_frame' (integer frames)")
+        # All three frame fields must be present and non-null.
+        if (req.timeline_start_frame is None
+                or req.source_start_frame is None
+                or req.source_end_frame is None):
+            raise HTTPException(
+                400,
+                "GUI-03R6: timeline_start_frame, source_start_frame, "
+                "source_end_frame are all required (integer frames)")
+        # Negative-frame bounds (parity with /move).
+        if req.timeline_start_frame < 0:
+            raise HTTPException(
+                400,
+                f"add_clip: timeline_start_frame={req.timeline_start_frame} < 0")
+        if req.source_start_frame < 0 or req.source_end_frame < 0:
+            raise HTTPException(
+                400,
+                f"add_clip: source range [{req.source_start_frame},"
+                f"{req.source_end_frame}] has negative frame")
+        if req.source_end_frame <= req.source_start_frame:
+            raise HTTPException(
+                400,
+                f"add_clip: source_end_frame={req.source_end_frame} "
+                f"<= source_start_frame={req.source_start_frame}")
         # GUI-03E-2A: timeline_id is required on the public HTTP path.
         def _do():
             if sessionId:
                 require_edit_right(st.core, sessionId)
-            # GUI-03R-Micro v2: track_id is already str | None; pass
-            # through to Core as-is. Core's add_clip accepts None
-            # and lets TrackAllocator pick the minimum non-
-            # overlapping track. Explicit string values are
-            # validated for overlap there.
-            return st.cmd.add_clip(timeline_id=(timeline_id or None),
-                                   **req.model_dump())
+            # GUI-03R6: route to add_clip_frame so the Core does the
+            # frame→seconds conversion at the storage boundary. We
+            # never convert back to seconds before the mutation —
+            # the GUI request payload is canonical in frames.
+            return st.cmd.add_clip_frame(
+                asset_id=req.asset_id,
+                src_start_frame=req.source_start_frame,
+                src_end_frame=req.source_end_frame,
+                timeline_start_frame=req.timeline_start_frame,
+                track_id=req.track_id,
+                why=req.why,
+                timeline_id=(timeline_id or None),
+            )
         return guard(_check_rev(baseRevision, _do))
 
     @app.post("/clips/add_image")
@@ -688,6 +743,35 @@ def create_app(project_path: str | Path, who: Actor = Actor.HUMAN) -> FastAPI:
                     locked: bool = True, why: str = ""):
         return guard(lambda: st.cmd.set_track_locked(
             track_id, locked, why=why, timeline_id=(timeline_id or None)))
+
+    # ---------- R6-D: canonical sibling read API ----------
+    # Returns every clip on the named track in frame intervals so the
+    # GUI's cross-track re-clamp uses Core state (not DOM-derived
+    # `style.left` / CSS pixels). DOM is reserved for hit-testing only.
+    @app.get("/tracks/{track_id}/clips")
+    def get_track_clips(track_id: str, timeline_id: str = ""):
+        tl_id = timeline_id or st.core.project.active_timeline_id
+        if tl_id is None:
+            raise HTTPException(404, "no active timeline")
+        tl = next((t for t in st.core.project.timelines if t.timeline_id == tl_id), None)
+        if tl is None:
+            raise HTTPException(404, f"timeline {tl_id!r} 不存在")
+        if not any(t.track_id == track_id for t in tl.tracks):
+            raise HTTPException(404, f"track {track_id!r} 不存在 in timeline {tl_id!r}")
+        fps_num, fps_den = (st.core.project.fps_num or 30), (st.core.project.fps_den or 1)
+        proj = st.core.project
+        out = []
+        for tid in (t.clip_ids for t in tl.tracks if t.track_id == track_id):
+            for cid in tid:
+                c = proj.clips.get(cid)
+                if c is None or c.timeline_id != tl_id:
+                    continue
+                out.append({
+                    "clip_id": cid,
+                    "start_frame": round(c.timeline_range.start * fps_num / fps_den),
+                    "end_frame":   round(c.timeline_range.end   * fps_num / fps_den),
+                })
+        return {"track_id": track_id, "timeline_id": tl_id, "clips": out}
 
     @app.post("/tracks/{track_id}/hide")
     def track_hide(track_id: str, timeline_id: str = "",

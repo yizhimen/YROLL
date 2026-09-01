@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, Clip, Project } from "./api";
-import { sessionStore } from "./session";
+import { sessionStore, useProjectSession, canMutate } from "./session";
+import { GateRejection } from "./api";
 import { useProjectSequence } from "./sequence";
 import { useCoreKeymap } from "./keymap";
 import {
+  clipFramesFromSec,
   frameToRulerSeconds,
   framesToTimecode,
   pxPerFrame,
   roundHalfAwayFromZero,
+  secondsToFramesEdit,
   type Rational,
 } from "./frames";
 import { fitContentEndSec, playbackDurationSec }
   from "./fit-content";
+import { computeBringPlan, type BringOpts } from "./bring-clip";
 import Timeline from "./components/Timeline";
 import TimelineSwitcher from "./components/TimelineSwitcher";
 import NewTimelineDialog from "./components/NewTimelineDialog";
@@ -58,6 +62,34 @@ function eventToKeyCombo(e: KeyboardEvent): string {
 // from the keymap, we fall back to a plain Chinese description
 // (no fake numbers / no fake step sizes). This guarantees the
 // Help dialog never invents shortcut semantics.
+// R6-E: translate GateRejection (machine-readable kind + raw server
+// detail) into a localized Chinese recovery prompt. The user must
+// NEVER see raw server text from a normal UI gesture (drag/drop/+).
+// The recovery prompt is one consistent phrase regardless of which
+// specific server-side condition triggered it (no session, expired
+// lease, lost race during pointerdown). The badge in the top bar
+// flips to the appropriate recovery affordance ("获取编辑权" /
+// "刷新") based on the same GateRejection.kind.
+function localizeGateRejection(e: GateRejection): string {
+  switch (e.kind) {
+    case "no_session":
+    case "lease_rejected":
+      // The lease was free / lost / expired while the gesture was
+      // in flight. The badge flips to the "获取编辑权" affordance.
+      return "编辑权已失效 — 点击右上角「获取编辑权」后重试";
+    case "no_revision":
+      // baseRevision wasn't injected (very rare — only if a mutation
+      // skipped mutate()/gated()). The badge flips to "刷新".
+      return "版本已过期 — 点击右上角「刷新」后重试";
+    case "revision_conflict":
+      // Another writer beat us between our last /ui/status poll
+      // and this mutation. The badge flips to "刷新".
+      return "版本冲突 — 另一位写入者已修改项目，请刷新";
+    default:
+      return "操作被服务器拒绝 — 刷新或重新获取编辑权";
+  }
+}
+
 type KMAction = {
   name: string;
   key: string;
@@ -130,6 +162,18 @@ const helpKeyLabel = (
 
 export default function App() {
   const [project, setProject] = useState<Project | null>(null);
+  // R6-E: canEdit is the UX-level gate derived from sessionStore.
+  // Server Mutation Gate is authoritative; this prop is a UX hint
+  // that prevents the user from initiating gestures the server
+  // would reject (drop on track, +/⧉ buttons, drag pointerdown).
+  // The single source of truth is sessionStore.canMutate(s); we
+  // subscribe so canEdit updates as EditorState transitions
+  // (CONNECTING → EDIT/OBSERVE → EDIT). A pointerdown initiated in
+  // EDIT may find itself in OBSERVE at pointerup if the lease
+  // expired mid-drag — the server's 403 then flips the badge and
+  // surfaces a localized status (see `run` below).
+  const session = useProjectSession();
+  const canEdit = canMutate(session);
   // GUI-03E-3: activeTimelineId is the GUI's single source of truth
   // for Timeline context. Switcher is fully controlled by this
   // state. We initialize from the project's `active_timeline_id`
@@ -630,8 +674,33 @@ export default function App() {
           const dur = c.timeline_range.end - c.timeline_range.start;
           run(() => api.addSubtitle(c.context?.text ?? "", playheadFrame, playheadFrame + dur, "GUI 粘贴字幕"), "已粘贴");
         } else {
-          run(() => api.addClip(c.asset_id, c.source_range.start, c.source_range.end,
-            playheadFrame, c.track_id, "GUI 粘贴"), "已粘贴到播放头");
+          // R6-B: paste uses frames, not seconds. c.source_range is
+          // legacy-seconds; convert via secondsToFramesEdit. The
+          // asset's source_fps is the right fps for source frames.
+          const seqFps = project?.sequence?.fps ?? { num: 30, den: 1 };
+          run(async () => {
+            const newClip = await api.addClip(c.asset_id,
+              secondsToFramesEdit(c.source_range.start, seqFps),
+              secondsToFramesEdit(c.source_range.end, seqFps),
+              playheadFrame, c.track_id, "GUI 粘贴");
+            // R6-C follow-up: paste IS a seek (the new clip is
+            // the visible result); bring into view after the
+            // mutation succeeds. We pass the canonical frame
+            // range from the mutation response — NOT a lookup
+            // against the React `project` closure, which is stale
+            // until the next render (after `refresh()`).
+            bringClipIntoView({
+              clipId: newClip.clip_id,
+              rangeFrames: {
+                startFrame: secondsToFramesEdit(
+                  newClip.timeline_range.start, seqFps),
+                endFrame: secondsToFramesEdit(
+                  newClip.timeline_range.end, seqFps),
+              },
+              seek: true,
+            });
+            return newClip;
+          }, "已粘贴到播放头");
         }
       } else if (ctrl && (e.key === "d" || e.key === "D")) {
         if (!clip) return;
@@ -641,8 +710,34 @@ export default function App() {
           run(() => api.addSubtitle(clip.context?.text ?? "", clip.timeline_range.end,
             clip.timeline_range.end + dur, "GUI 复制字幕"), "已复制");
         } else {
-          run(() => api.addClip(clip.asset_id, clip.source_range.start, clip.source_range.end,
-            clip.timeline_range.end, clip.track_id, "GUI 复制"), "已复制到原 clip 之后");
+          // R6-B: duplicate (Ctrl+D) uses frames for source range and
+          // the destination frame. timeline_range.end is in seconds
+          // (legacy storage); convert via secondsToFramesEdit. The
+          // destination is "after the original clip" so the new
+          // clip lands at exactly clip.timeline_range.end in frames.
+          const seqFps = project?.sequence?.fps ?? { num: 30, den: 1 };
+          const destFrame = secondsToFramesEdit(clip.timeline_range.end, seqFps);
+          run(async () => {
+            const newClip = await api.addClip(clip.asset_id,
+              secondsToFramesEdit(clip.source_range.start, seqFps),
+              secondsToFramesEdit(clip.source_range.end, seqFps),
+              destFrame, clip.track_id, "GUI 复制");
+            // R6-C follow-up: see paste comment above. We use
+            // the canonical frame range from the mutation
+            // response so the helper does not depend on the
+            // stale React project closure.
+            bringClipIntoView({
+              clipId: newClip.clip_id,
+              rangeFrames: {
+                startFrame: secondsToFramesEdit(
+                  newClip.timeline_range.start, seqFps),
+                endFrame: secondsToFramesEdit(
+                  newClip.timeline_range.end, seqFps),
+              },
+              seek: true,
+            });
+            return newClip;
+          }, "已复制到原 clip 之后");
         }
       } else if (ctrl && (e.key === "a" || e.key === "A")) {
         e.preventDefault();
@@ -764,13 +859,98 @@ export default function App() {
   // authoritative /snap call + commit happens in ClipBlock's pointerup
   // handler via onMoveCommit. App.tsx tracks the preview for any
   // overlay rendering that depends on the in-flight position.
-  const run = async (fn: () => Promise<unknown>, ok: string) => {
+  // R6-E: GateRejection (raised by api.gated() when the server
+  // Mutation Gate refuses a write) is converted to a localized
+  // status string before reaching the user. The raw server detail
+  // ("sessionId required for mutations (call /lease/acquire first)")
+  // is intentionally NEVER shown — the user should always see a
+  // Chinese recovery prompt instead. The raw detail still appears
+  // in the EditLease popover for debugging (gateMessage there is
+  // the server's literal text).).
+  // R6-C: optional third arg is the post-mutation bring-into-view
+  // hint. Only add/move/paste/duplicate paths set seek:true. The
+  // invariant: a successful mutation must leave the affected clip
+  // VISIBLE (in the timeline viewport) and SELECTED. If the
+  // mutation throws, bringClipIntoView is NOT called and the
+  // selected set is unchanged (the user sees their previous state).
+  //
+  // R6-C follow-up: BringOpts is now imported from `./bring-clip`.
+  // The wrapper here is a thin adapter — the planning logic lives
+  // in `computeBringPlan` (pure function, fully tested). See that
+  // file for the rationale on why the helper cannot read the React
+  // `project` closure.
+  const run = async (
+    fn: () => Promise<unknown>,
+    ok: string,
+    bring?: BringOpts,
+  ) => {
     try {
       await fn();
       await refresh();
+      if (bring) bringClipIntoView(bring);
       setStatus({ ok: true, text: ok });
-    } catch (e) {
-      setStatus({ ok: false, text: String(e) });
+    } catch (e: any) {
+      // Localize GateRejection — never expose raw server detail.
+      if (e instanceof GateRejection) {
+        setStatus({ ok: false, text: localizeGateRejection(e) });
+      } else {
+        setStatus({ ok: false, text: String(e) });
+      }
+    }
+  };
+
+  // R6-C: bring-into-view wrapper. After a successful mutation,
+  // 1) select the clip (visual cue);
+  // 2) optionally seek the playhead (default false — non-seek
+  //    mutations like volume/speed/mute must NOT jump the playhead);
+  // 3) ensure the clip's pixel range falls inside the timeline
+  //    viewport via the Timeline's own .timeline-content scrollLeft
+  //    (not element.scrollIntoView which can fight autoscroll).
+  //
+  // R6-C follow-up (stale-closure fix): the helper MUST NOT depend
+  // on the React project closure. `refresh()` schedules a state
+  // update via `setProject`, but React has not re-rendered by the
+  // time `bringClipIntoView` runs — the closure's `project` still
+  // reflects the PRE-mutation state. For an `addImageClip` /
+  // `addClip` / paste / duplicate the new clip is not in the stale
+  // `project.clips`, so the old version silently no-op'd.
+  //
+  // Each call site supplies `opts.rangeFrames` from the mutation
+  // response or the move intent. The pure planner
+  // (`./bring-clip.ts`) turns it into a plan; this wrapper only
+  // applies the plan and stays out of the closure-staleness trap.
+  //
+  // canMutate() guard: no-ops when the lease was lost during a
+  // long drag, so a rejected mutation never produces a
+  // "successful bring" after a failure.
+  const bringClipIntoView = (opts: BringOpts) => {
+    if (!canMutate(sessionStore.get())) return;
+    const seqFps = project?.sequence?.fps ?? { num: 30, den: 1 };
+    // Measure the DOM at call time. We tolerate `clipEl === null`
+    // (post-refresh, pre-render) — the planner falls back to
+    // rangeFrames for the scroll computation in that case. The
+    // project state read for `seqFps` is a project invariant that
+    // does not change between mutations, so a closure value is
+    // safe; `pxPerSec` is the user-controlled zoom, also stable
+    // across a single mutation flow.
+    const contentEl = document.querySelector(".timeline-content") as HTMLElement | null;
+    const clipEl = document.querySelector(
+      `[data-clip-id="${CSS.escape(opts.clipId)}"]`) as HTMLElement | null;
+    const plan = computeBringPlan(opts, {
+      pxPerSec,
+      seqFps,
+      contentEl,
+      clipEl,
+    });
+    // Apply the plan. setSelected / setSelectedSet / setPlayheadFrame
+    // are batched into the next render; scrollLeft is a synchronous
+    // DOM write (the Timeline's own scroll container, NOT
+    // element.scrollIntoView which fights autoscroll).
+    setSelected(plan.selectClipId);
+    setSelectedSet(new Set([plan.selectClipId]));
+    if (plan.setPlayheadFrame !== null) setPlayheadFrame(plan.setPlayheadFrame);
+    if (plan.scrollLeft !== null && contentEl) {
+      contentEl.scrollLeft = plan.scrollLeft;
     }
   };
 
@@ -835,7 +1015,7 @@ export default function App() {
         <span>{project.name}</span>
         {/* GUI-03R: EditLease (Project-level) lives in the header as
             a compact badge; controls revealed on click. */}
-        <EditLease />
+        <EditLease canEdit={canEdit} />
         {project.intent?.goal && <span className="goal">目标：{project.intent.goal}</span>}
         <span style={{ flex: 1 }} />
         <span style={{ position: "relative" }}>
@@ -1046,8 +1226,13 @@ export default function App() {
         onAddSubtitle={() => {
           // 优先编辑已有字幕（如果 playheadFrame 在某字幕 clip 上），否则新建
           const selClip = project.clips[selected ?? ""];
-          if (selClip && activeTimelineTracks.find((t) => t.track_id === selClip.track_id)?.kind === "text"
-              && playheadFrame >= selClip.timeline_range.start && playheadFrame < selClip.timeline_range.end) {
+          // R6-A: selClip.timeline_range is seconds; playheadFrame is
+          // frames. Convert at the boundary via clipFramesFromSec.
+          const selClipFrames = selClip ? clipFramesFromSec(
+            selClip, project?.sequence?.fps ?? { num: 30, den: 1 }) : null;
+          if (selClip && selClipFrames
+              && activeTimelineTracks.find((t) => t.track_id === selClip.track_id)?.kind === "text"
+              && playheadFrame >= selClipFrames.startFrame && playheadFrame < selClipFrames.endFrame) {
             setSubtitleEdit({
               clipId: selClip.clip_id,
               text: selClip.context?.text ?? "",
@@ -1082,6 +1267,13 @@ export default function App() {
         <div className="asset-pane" style={{ width: assetW }}>
           <AssetPanel project={project} activeTimelineId={activeTimelineId}
             playheadFrame={playheadFrame} onChanged={refresh}
+            // R6-E: client-side UX gate. App derives canEdit from
+            // session.editorState === "EDIT" (single source of truth
+            // = sessionStore.canMutate). Server Mutation Gate stays
+            // authoritative — this prop is a UX hint that prevents
+            // the user from initiating gestures the server would
+            // reject.
+            canEdit={canEdit}
             onStatus={(ok, text) => setStatus({ ok, text })}
             onAssetDragStart={(_assetId, kind) => {
               // Timeline's drop-zone label needs the asset kind.
@@ -1231,9 +1423,16 @@ export default function App() {
                 onClick={() => {
                   // 目标 = 播放头所在的主视频轨 clip（框的就是眼前这段）
                   const vtrack = activeTimelineTracks.find((t) => t.kind === "video");
+                  // R6-A: c.timeline_range is seconds; playheadFrame is
+                  // frames. Convert at the boundary via clipFramesFromSec.
+                  const seqFps = project?.sequence?.fps ?? { num: 30, den: 1 };
                   const target = vtrack?.clip_ids
                     .map((id) => project.clips[id])
-                    .find((c) => c && playheadFrame >= c.timeline_range.start && playheadFrame <= c.timeline_range.end);
+                    .find((c) => {
+                      if (!c) return false;
+                      const f = clipFramesFromSec(c, seqFps);
+                      return playheadFrame >= f.startFrame && playheadFrame <= f.endFrame;
+                    });
                   if (!target) {
                     setStatus({ ok: false, text: "播放头下没有视频 clip" });
                     return;
@@ -1637,6 +1836,11 @@ export default function App() {
         // Timeline can label the "below-tracks" drop zone correctly
         // (V/A/T). The Timeline never reads from a global drag state.
         draggingAssetKind={draggingAssetKind}
+        // R6-E: forward the canEdit flag so Timeline's drop targets
+        // and the ClipBlock pointerdown gate stay in sync with the
+        // App's derived EditorState. Server Mutation Gate remains
+        // authoritative; this is a UX-only early-out.
+        canEdit={canEdit}
         // GUI-03R4-R4: marquee selection callbacks.
         onMarqueeSelect={onMarqueeSelect}
         onMarqueeCancel={onMarqueeCancel}
@@ -1714,20 +1918,58 @@ export default function App() {
             const DEFAULT_IMG_DUR_SEC = 5;
             const durFrames = Math.round(
               DEFAULT_IMG_DUR_SEC * fps.num / fps.den);
-            run(() => api.addImageClip(assetId, t, durFrames,
-                trackId, "GUI 拖入图片"),
-              `${a.path.split(/[\/]/).pop()} 已放到 F${t}（${durFrames}f）`);
+            run(async () => {
+              const newClip = await api.addImageClip(assetId, t, durFrames,
+                trackId, "GUI 拖入图片");
+              // R6-C follow-up: drop IS a seek — the new clip is
+              // the visible result, the user wants to see it. We
+              // use the canonical frame range from the mutation
+              // response so the helper does not depend on the
+              // stale React project closure.
+              bringClipIntoView({
+                clipId: newClip.clip_id,
+                rangeFrames: {
+                  startFrame: secondsToFramesEdit(
+                    newClip.timeline_range.start, fps),
+                  endFrame: secondsToFramesEdit(
+                    newClip.timeline_range.end, fps),
+                },
+                seek: true,
+              });
+              return newClip;
+            }, `${a.path.split(/[\/]/).pop()} 已放到 F${t}（${durFrames}f）`);
             return;
           }
-          // video / audio → /clips (seconds-based)
+          // video / audio → /clips (frame-native since R6-B)
+          // R6-B: t is integer TimelineFrame (sequence fps); dur
+          // is asset.identity.duration_sec (legacy seconds storage);
+          // convert dur to frames via secondsToFramesEdit. The clip
+          // must land at frame t (NOT t seconds).
           const dur = a.identity.duration_sec;
           if (!dur) {
             setStatus({ ok: false, text: "该素材无时长，不能上时间轴" });
             return;
           }
-          run(() => api.addClip(assetId, 0, dur, t, trackId,
-              "GUI 拖入时间轴"),
-            `${a.path.split(/[\/]/).pop()} 已放到 ${t.toFixed(1)}s（${dur.toFixed(1)}s）`);
+          const fps = seq.fps;
+          const durFrame = secondsToFramesEdit(dur, fps);
+          run(async () => {
+            const newClip = await api.addClip(assetId, 0, durFrame, t, trackId,
+              "GUI 拖入时间轴");
+            // R6-C follow-up: see image drop block for
+            // rationale. Canonical frame range from the mutation
+            // response — not the stale React project closure.
+            bringClipIntoView({
+              clipId: newClip.clip_id,
+              rangeFrames: {
+                startFrame: secondsToFramesEdit(
+                  newClip.timeline_range.start, fps),
+                endFrame: secondsToFramesEdit(
+                  newClip.timeline_range.end, fps),
+              },
+              seek: true,
+            });
+            return newClip;
+          }, `${a.path.split(/[\/]/).pop()} 已放到 F${t}（${durFrame}f）`);
         }}
         // GUI-03R3-W-C: drop onto the "新建轨道" zone below all
         // visible tracks. The Timeline resolved pointer geometry
@@ -1754,12 +1996,16 @@ export default function App() {
               await api.addImageClip(assetId, t, durFrames, newTrackId,
                 "GUI 新建轨道+拖入");
             } else if (a.type === "audio" || a.type === "video") {
+              // R6-B: dur is legacy seconds; convert via
+              // secondsToFramesEdit so the resulting clip lands at
+              // frame t (NOT t seconds).
               const dur = a.identity.duration_sec;
               if (!dur) {
                 setStatus({ ok: false, text: "该素材无时长，不能上时间轴" });
                 return;
               }
-              await api.addClip(assetId, 0, dur, t, newTrackId,
+              const durFrame = secondsToFramesEdit(dur, seq.fps);
+              await api.addClip(assetId, 0, durFrame, t, newTrackId,
                 "GUI 新建轨道+拖入");
             } else {
               // subtitle / text drop-below-tracks is out of v0.1 scope.

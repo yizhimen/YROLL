@@ -62,8 +62,8 @@ def _seed_three_clips(client) -> list[str]:
     for i in range(3):
         r = client.post("/clips", json={
             "asset_id": "a1",
-            "source_start": 0.0, "source_end": 1.0,
-            "timeline_start": float(i * 2),
+            "source_start_frame": 0, "source_end_frame": 30,
+            "timeline_start_frame": i * 60,  # R6-B: frames, not seconds
             "track_id": "v1",
         })
         assert r.status_code == 200, r.text

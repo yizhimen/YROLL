@@ -80,8 +80,8 @@ def ml_client(tmp_path: Path):
     for aid, tid in [("a1", "v1"), ("a2", "v2"), ("a3", "v3")]:
         r = c.post("/clips", json={
             "asset_id": aid,
-            "source_start": 0.0, "source_end": 10.0,
-            "timeline_start": 10.0,
+            "source_start_frame": 0, "source_end_frame": 300,
+            "timeline_start_frame": 300,
             "track_id": tid,
         })
         assert r.status_code == 200, r.text

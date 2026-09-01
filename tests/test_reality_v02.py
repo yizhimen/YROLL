@@ -178,8 +178,8 @@ def test_F_human_then_agent(tmp_path: Path):
     # Agent now commits a mutation using the new session id
     r = raw.post(
         f"/clips?sessionId={agent_sid}&baseRevision={cur_rev}",
-        json={"asset_id": "a1", "source_start": 0, "source_end": 5,
-              "timeline_start": 0, "track_id": "v1", "why": "Agent via handoff"})
+        json={"asset_id": "a1", "source_start_frame": 0, "source_end_frame": 150,
+              "timeline_start_frame": 0, "track_id": "v1", "why": "Agent via handoff"})
     assert r.status_code == 200, r.text
     # Note: create_app opens the project from disk, so core and the app's
     # ProjectCore are distinct Python objects. The app saves to disk and

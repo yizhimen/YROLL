@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api, Project } from "../api";
+import { secondsToFramesEdit } from "../frames";
 
 interface Props {
   project: Project;
@@ -18,6 +19,12 @@ interface Props {
    *  label ("新建视频轨" / "新建音频轨" / "新建字幕轨"). */
   onAssetDragStart?: (assetId: string, kind: string) => void;
   onAssetDragEnd?: () => void;
+  /** R6-E: client-side UX gate. When false (CONNECTING / OBSERVE),
+   *  the "+" / "⧉" buttons are disabled and the asset row refuses to
+   *  start a drag. The server Mutation Gate remains authoritative;
+   *  this prop is purely a UX hint that prevents the user from
+   *  initiating a gesture that the server will reject. */
+  canEdit?: boolean;
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -28,7 +35,7 @@ function baseName(p: string) {
   return p.split(/[\\/]/).pop() || p;
 }
 
-export default function AssetPanel({ project, activeTimelineId, playheadFrame, onChanged, onStatus, onPreview, onAssetDragStart, onAssetDragEnd }: Props) {
+export default function AssetPanel({ project, activeTimelineId, playheadFrame, onChanged, onStatus, onPreview, onAssetDragStart, onAssetDragEnd, canEdit = true }: Props) {
   const [filter, setFilter] = useState("");
   const importFiles = async (files: FileList) => {
     try {
@@ -92,19 +99,44 @@ export default function AssetPanel({ project, activeTimelineId, playheadFrame, o
         await api.addImageClip(assetId, tlStart, durFrames, explicitTrackId,
           mode === "overlay" ? "素材库加入（叠加轨）" : "素材库加入");
       } else {
+        // R6-B: /clips is frame-native. The asset's identity.duration_sec
+        // is in SECONDS (legacy model storage) — convert via the
+        // one-way secondsToFramesEdit helper. Use the asset's
+        // source_fps when available; fall back to sequence fps.
         const dur = asset.identity.duration_sec;
         if (!dur) {
           onStatus(false, "该素材无时长，不能上时间轴");
           return;
         }
-        await api.addClip(assetId, 0, dur, tlStart, explicitTrackId,
+        const seqFps = project.sequence?.fps ?? { num: 30, den: 1 };
+        // asset.source_fps is a Rational if set; we approximate by
+        // assuming seq fps for now (asset.source_fps is wired in the
+        // /clip/{idim timim map but not always present at the asset
+        // boundary in the panel). Falls back to seq fps.
+        const srcFpsNum = (asset as { source_fps?: { num: number; den: number } })
+          .source_fps?.num ?? seqFps.num;
+        const srcFpsDen = (asset as { source_fps?: { num: number; den: number } })
+          .source_fps?.den ?? seqFps.den;
+        const durFrame = secondsToFramesEdit(
+          dur, { num: srcFpsNum, den: srcFpsDen });
+        await api.addClip(assetId, 0, durFrame, tlStart, explicitTrackId,
           mode === "overlay" ? "素材库加入（叠加轨）" : "素材库加入");
       }
       await onChanged();
       onStatus(true,
         `${baseName(asset.path)} 已加入（Core allocator 选轨）`);
     } catch (e) {
-      onStatus(false, `添加失败：${e}`);
+      // R6-E: lease can expire between the click and the server
+      // response. Surface a localized recovery hint instead of the
+      // raw "sessionId required for mutations" detail.
+      const msg = String(e);
+      const isLeaseLost = msg.includes("sessionId required")
+        || msg.includes("session not ready")
+        || msg.includes("OBSERVE")
+        || msg.includes("lease");
+      onStatus(false, isLeaseLost
+        ? "编辑权已失效 — 请在右上角重新获取编辑权"
+        : `添加失败：${msg}`);
     }
   };
 
@@ -142,8 +174,16 @@ export default function AssetPanel({ project, activeTimelineId, playheadFrame, o
           .map((a) => (
           <div key={a.asset_id} className="asset-item" title={`${a.path}
 点击预览 · 拖到时间轴`}
-               draggable
+               draggable={canEdit}
                onDragStart={(e) => {
+                 if (!canEdit) {
+                   // R6-E: refuse to start a drag when the GUI is not
+                   // in EDIT. The dragstart event is the first chance
+                   // we get to cancel; e.preventDefault() prevents the
+                   // browser from showing the drag image.
+                   e.preventDefault();
+                   return;
+                 }
                  e.dataTransfer.setData("text/yroll-asset", a.asset_id);
                  e.dataTransfer.effectAllowed = "copy";
                  onAssetDragStart?.(a.asset_id, a.type);
@@ -158,12 +198,14 @@ export default function AssetPanel({ project, activeTimelineId, playheadFrame, o
               {a.identity.duration_sec ? `${a.identity.duration_sec.toFixed(1)}s` : ""}
               {a.identity.width ? ` ${a.identity.width}×${a.identity.height}` : ""}
             </span>
-            <button className="asset-add" title="加到时间轴末尾"
+            <button className="asset-add" title={canEdit ? "加到时间轴末尾" : "编辑权未就绪"}
+                    disabled={!canEdit}
                     onClick={() => addToTimeline(a.asset_id, "matched")}>
               ＋
             </button>
             {(a.type === "video" || a.type === "image") && (
-              <button className="asset-add" title="新建叠加轨（PiP/B-roll）"
+              <button className="asset-add" title={canEdit ? "新建叠加轨（PiP/B-roll）" : "编辑权未就绪"}
+                      disabled={!canEdit}
                       onClick={() => addToTimeline(a.asset_id, "overlay")}>
                 ⧉
               </button>

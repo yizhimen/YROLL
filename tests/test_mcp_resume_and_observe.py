@@ -53,7 +53,7 @@ def test_human_edit_and_agent_observe_coexist(backend):
 
     # Human writes (one more clip on a fresh slot)
     seed_clip(url, session_id=human_sid, base_revision=None,
-              timeline_start=20.0)
+              timeline_start_frame=600)
     rev1 = operations_count(url)
     assert rev1 == rev0 + 1, "human's write should advance revision"
 

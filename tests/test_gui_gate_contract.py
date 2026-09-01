@@ -161,8 +161,8 @@ def test_ui_status_shape_matches_session_store(client):
 def test_ui_status_reports_conflict_against_client_revision(client):
     sid = client.post("/lease/acquire?actor=human&mode=edit").json()["sessionId"]
     client.post(f"/clips?sessionId={sid}&baseRevision=0", json={
-        "asset_id": "nope", "source_start": 0, "source_end": 1,
-        "timeline_start": 0, "track_id": "V1", "why": "probe",
+        "asset_id": "nope", "source_start_frame": 0, "source_end_frame": 30,
+        "timeline_start_frame": 0, "track_id": "V1", "why": "probe",
     })
     current = client.get("/ui/status").json()["base_revision"]
     stale = client.get(f"/ui/status?client_known_revision={current + 5}").json()

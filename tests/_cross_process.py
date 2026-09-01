@@ -82,10 +82,13 @@ def content(resp: dict):
 
 
 def seed_clip(url: str, *, session_id: str, base_revision: int = None,
-              asset_id: str = "a1", timeline_start: float = 0.0,
-              track_id: str = "V1", source_start: float = 0.0,
-              source_end: float = 10.0, why: str = "seed") -> str:
+              asset_id: str = "a1", timeline_start_frame: int = 0,
+              track_id: str = "V1", source_start_frame: int = 0,
+              source_end_frame: int = 300, why: str = "seed") -> str:
     """Add a clip via /clips, return the clip_id.
+
+    R6-B: all time fields are integer frames. The legacy `*_frame`
+    suffix is preserved as the canonical wire format.
 
     If `base_revision` is None, reads the live revision from /operations
     first (the safer default when the caller doesn't know how many ops
@@ -97,8 +100,10 @@ def seed_clip(url: str, *, session_id: str, base_revision: int = None,
             base_revision = len(json.loads(r.read()))
     qs = urlparse.urlencode({"sessionId": session_id, "baseRevision": base_revision})
     data = json.dumps({
-        "asset_id": asset_id, "source_start": source_start,
-        "source_end": source_end, "timeline_start": timeline_start,
+        "asset_id": asset_id,
+        "source_start_frame": source_start_frame,
+        "source_end_frame": source_end_frame,
+        "timeline_start_frame": timeline_start_frame,
         "track_id": track_id, "why": why,
     }).encode()
     req = urlrequest.Request(url + f"/clips?{qs}", data=data, method="POST",

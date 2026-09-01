@@ -103,6 +103,11 @@ interface Props {
   onTrackMute?: (trackId: string, muted: boolean) => void;
   onTrackLock?: (trackId: string, locked: boolean) => void;
   onTrackHide?: (trackId: string, hidden: boolean) => void;
+  /** R6-E: client-side UX gate. When false (CONNECTING / OBSERVE),
+   *  the track-content row's onDrop is a no-op (no parent handler
+   *  fires). Same for the "新建轨道" drop zone. The server Mutation
+   *  Gate remains authoritative; this prop is a hint. */
+  canEdit?: boolean;
   onAssetDrop?: (assetId: string, trackId: string, timelineStartFrame: number) => void;
   /** GUI-03R3-W-C: drop onto the "新建轨道" zone below all visible
    *  tracks. The GUI resolves pointer geometry to a structural
@@ -263,7 +268,7 @@ export default function Timeline({
   highlightRel = false,
   onContentRef,
   onHeaderWidthDelta,
-  onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onTrackMute, onTrackLock, onTrackHide, onAssetDrop, onAssetDropNewTrack,
+  onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onTrackMute, onTrackLock, onTrackHide, canEdit = true, onAssetDrop, onAssetDropNewTrack,
   onMarqueeSelect,
   onMarqueeCancel,
   onCloseGap,
@@ -965,6 +970,11 @@ export default function Timeline({
                   if (!assetId) return;
                   e.preventDefault();
                   (e.currentTarget as HTMLElement).classList.remove("drag-over");
+                  // R6-E: refuse drops while not in EDIT. The parent
+                  // handler would surface a server 403; better UX is
+                  // to no-op the drop and let the EditLease badge
+                  // signal the cause.
+                  if (!canEdit) return;
                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                   // track-content rect.left is the ContentViewport's x=0 edge.
                   const frame = Math.max(0, pixelToPlayheadFrame(
@@ -1023,6 +1033,11 @@ export default function Timeline({
                                sel.timeline_range.start < clip.timeline_range.end;
                       })}
                       siblings={siblings}
+                      // R6-E: forward the parent's canEdit to each clip.
+                      // ClipBlock's onPointerDown returns early when
+                      // !canEdit, so a drag-in-progress cannot commit
+                      // through the gate.
+                      canEdit={canEdit}
                       onSelect={onSelect}
                       onDragMove={onDragMove}
                       onMoveCommit={onMoveCommit}
@@ -1059,6 +1074,8 @@ export default function Timeline({
                 if (!assetId) return;
                 e.preventDefault();
                 (e.currentTarget as HTMLElement).classList.remove("drag-over");
+                // R6-E: see onAssetDrop gate above.
+                if (!canEdit) return;
                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                 // Drop x in ContentViewport coords → frame.
                 const frame = Math.max(0, pixelToPlayheadFrame(

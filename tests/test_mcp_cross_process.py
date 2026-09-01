@@ -145,7 +145,7 @@ def test_stale_base_revision_returns_409_for_mcp_path(backend):
 
     # Bump revision legitimately (add another clip on a different
     # timeline slot to avoid V1 overlap detection).
-    seed_clip(url, session_id=sid, base_revision=None, timeline_start=20.0)
+    seed_clip(url, session_id=sid, base_revision=None, timeline_start_frame=600)
     assert operations_count(url) == ops_before + 1
 
     # Now try a trim with a STALE baseRevision
@@ -202,7 +202,7 @@ def test_no_silent_overwrite_on_mcp_conflict(backend):
     clip_id = seed_clip(url, session_id=sid, base_revision=0)
     ops_before = operations_count(url)
     # Bump revision so the MCP's base_revision=0 is now stale
-    seed_clip(url, session_id=sid, base_revision=None, timeline_start=20.0)
+    seed_clip(url, session_id=sid, base_revision=None, timeline_start_frame=600)
 
     # Try to trim with stale revision
     for i in range(3):

@@ -56,6 +56,39 @@ export function secondsToFrames(seconds: number, fps: Rational): number {
 }
 
 // ---------------------------------------------------------------------------
+// R6-A + R6-B: helpers for the legacy-storage → Frame-domain boundary.
+// ---------------------------------------------------------------------------
+//
+// The Core persists `clip.timeline_range.start/end` in **seconds**
+// (the legacy model storage). The GUI's edit code works in frames.
+// These helpers are the ONE sanctioned way to cross that boundary
+// in the read direction. They use roundHalfAwayFromZero (NOT
+// Math.round) so the rounding policy matches every other edit-coord
+// operation in the GUI.
+
+/** One-way boundary helper. Convert a single seconds value to
+ *  integer frames. Use this ONLY at the storage→edit boundary
+ *  (e.g. when reading from /project). Never use this to convert a
+ *  user-intended frame back to seconds before a mutation. */
+export function secondsToFramesEdit(seconds: number, fps: Rational): number {
+  return roundHalfAwayFromZero(seconds * fps.num / fps.den);
+}
+
+/** One-way boundary helper. Convert a clip's legacy-seconds
+ *  timeline_range into a pair of integer frame values. Pair with
+ *  `playheadFrame` (integer frames) for the half-open
+ *  `start <= frame < end` membership check. */
+export function clipFramesFromSec(
+  clip: { timeline_range: { start: number; end: number } },
+  fps: Rational,
+): { startFrame: number; endFrame: number } {
+  return {
+    startFrame: secondsToFramesEdit(clip.timeline_range.start, fps),
+    endFrame: secondsToFramesEdit(clip.timeline_range.end, fps),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Frame ↔ Pixel (zoom model)
 // ---------------------------------------------------------------------------
 

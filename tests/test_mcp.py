@@ -149,12 +149,14 @@ def test_yroll_trim_writes_via_http_and_logs_with_who_ai(mcp, backend):
         with urlrequest.urlopen(req, timeout=5) as r:
             return r.status, _json.loads(r.read())
 
-    # Seed: use the MCP's already-acquired session to add a clip
+    # Seed: use the MCP's already-acquired session to add a clip.
+    # R6-B: /clips is frame-native; use *_frame keys.
     sid = mcp.state["sessionId"]
     qs = urlparse.urlencode({"sessionId": sid, "baseRevision": 0})
     _, body = http_post(f"/clips?{qs}", {
-        "asset_id": "a1", "source_start": 0, "source_end": 10,
-        "timeline_start": 0, "track_id": "V1", "why": "seed",
+        "asset_id": "a1",
+        "source_start_frame": 0, "source_end_frame": 300,
+        "timeline_start_frame": 0, "track_id": "V1", "why": "seed",
     })
     clip_id = body.get("clip", {}).get("clip_id") or body.get("clip_id")
     assert clip_id, f"no clip_id in add response: {body}"

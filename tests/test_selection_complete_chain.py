@@ -68,8 +68,8 @@ def _seed_three_v1_clips(client) -> list[str]:
     for i in range(3):
         r = client.post("/clips", json={
             "asset_id": "a1",
-            "source_start": 0.0, "source_end": 1.0,
-            "timeline_start": float(i * 2),
+            "source_start_frame": 0, "source_end_frame": 30,
+            "timeline_start_frame": i * 60,  # R6-B: frames
             "track_id": "v1",
         })
         assert r.status_code == 200, r.text
@@ -132,8 +132,8 @@ def test_selection_delete_triggers_track_cleanup(chain_client):
     # Add one clip to v_solo.
     rc = chain_client.post("/clips", json={
         "asset_id": "a1",
-        "source_start": 0.0, "source_end": 1.0,
-        "timeline_start": 100.0,
+        "source_start_frame": 0, "source_end_frame": 30,
+        "timeline_start_frame": 3000,
         "track_id": "v_solo",
     })
     assert rc.status_code == 200, rc.text
@@ -167,8 +167,8 @@ def test_undo_restores_selection_delete_and_track(chain_client):
     })
     rc = chain_client.post("/clips", json={
         "asset_id": "a1",
-        "source_start": 0.0, "source_end": 1.0,
-        "timeline_start": 200.0,
+        "source_start_frame": 0, "source_end_frame": 30,
+        "timeline_start_frame": 6000,
         "track_id": "v_undo",
     })
     cid = rc.json()["clip_id"]

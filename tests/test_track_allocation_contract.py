@@ -110,9 +110,9 @@ def test_add_clip_accepts_track_id_null(authed_client):
     """Video path: same automatic-placement contract."""
     r = authed_client.post("/clips", json={
         "asset_id": "a1",
-        "source_start": 0.0,
-        "source_end": 5.0,
-        "timeline_start": 0.0,
+        "source_start_frame": 0,
+        "source_end_frame": 150,
+        "timeline_start_frame": 0,
         "track_id": None,
     })
     assert r.status_code == 200, r.text
@@ -149,15 +149,15 @@ def test_null_allocator_picks_non_overlapping_track(authed_client):
     track_id=null. The allocator must NOT pick v1 (overlap)."""
     r1 = authed_client.post("/clips", json={
         "asset_id": "a1",
-        "source_start": 0.0, "source_end": 5.0,
-        "timeline_start": 0.0,
+        "source_start_frame": 0, "source_end_frame": 150,
+        "timeline_start_frame": 0,
         "track_id": "v1",
     })
     assert r1.status_code == 200
     r2 = authed_client.post("/clips", json={
         "asset_id": "a1",
-        "source_start": 0.0, "source_end": 5.0,
-        "timeline_start": 0.0,
+        "source_start_frame": 0, "source_end_frame": 150,
+        "timeline_start_frame": 0,
         "track_id": None,
     })
     assert r2.status_code == 200, r2.text
@@ -173,15 +173,15 @@ def test_explicit_overlap_returns_400(authed_client):
     with Core's 400."""
     r1 = authed_client.post("/clips", json={
         "asset_id": "a1",
-        "source_start": 0.0, "source_end": 5.0,
-        "timeline_start": 0.0,
+        "source_start_frame": 0, "source_end_frame": 150,
+        "timeline_start_frame": 0,
         "track_id": "v1",
     })
     assert r1.status_code == 200
     r2 = authed_client.post("/clips", json={
         "asset_id": "a1",
-        "source_start": 0.0, "source_end": 3.0,
-        "timeline_start": 2.0,
+        "source_start_frame": 0, "source_end_frame": 90,
+        "timeline_start_frame": 60,
         "track_id": "v1",
     })
     assert r2.status_code == 400, (

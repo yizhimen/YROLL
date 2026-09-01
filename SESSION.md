@@ -1,5 +1,51 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
+## 当前状态（2026-09-01 GUI-03R6 Runtime Editing Audit + R6-A..R6-E 修复完成 ✅ + R6-E canEdit wiring 完成 ✅）
+
+**最新事件（2026-09-01 10:16）**：resumed e6b5613e session 撞到第二个 `path` property bug（同一 Read tool_use schema 问题），但 R6-A..R6-E 五项修复实际已全部落盘并通过测试，无需重做。
+
+**R6 完成度（pytest + vitest 全部绿）**：
+| 项 | 实现 | pytest | vitest |
+|---|---|---|---|
+| **R6-A** | Track clips endpoint (api.trackClips + /tracks/v1/clips) — Core state 取代 DOM 像素 | `test_r6_track_clips_endpoint.py` 6/6 ✅ | — |
+| **R6-B** | ensureReady() gate before every mutation (frame-native /clips) | `test_r6_session_readiness_gating.py` 4/4 ✅ + `test_r6_addclip_frame_contract.py` 9/9 ✅ | — |
+| **R6-C** | bringClipIntoView helper + run() bring arg | — | `App.run.test.ts` 4/4 ✅ |
+| **R6-D** | ClipBlock 跨轨 re-clamp 改用 api.trackClips，不读 style.left/width | — | `ClipBlock.collision.test.ts` 2/2 ✅ |
+| **R6-E** | canEdit prop 全链路：App → EditLease/AssetPanel/Timeline/ClipBlock | — | `AssetPanel.disabled.test.tsx` 4/4 ✅ + `EditLease.badge.test.tsx` 5/5 ✅ |
+
+**Regression（确认无 NEW 失败）**：
+- vitest：**330 passed + 2 skipped**（23 files）
+- pytest：**735 passed + 1 skipped**（唯一 failing `test_no_orphan_empty_tracks_in_projects_dir` 是 pre-existing — `git stash` 已确认在 R6 改动之前就红，原因是 on-disk `_sanlihe-r5-manual` 有 a1/a2/a3/t2 空轨，不属于 R6 范围）
+- tsc：**0 NEW errors**（2 个 pre-existing Timeline.drag.test.ts 不变）
+
+**R6 文件改动清单**：
+- `yroll/server/app.py` — `/tracks/{id}/clips` endpoint（R6-A）；`/clips` frame-native（R6-B）
+- `gui/src/api.ts` — `api.trackClips(tid)` + `canEdit` 类型 + `ensureReady()`
+- `gui/src/App.tsx` — `canEdit = canMutate(session)`；`run(fn, ok, bring?)` 三参；`bringClipIntoView(clipId, opts)` helper
+- `gui/src/components/AssetPanel.tsx` — `canEdit` prop；`draggable={canEdit}` + dragstart guard；`+` / `⧉` `disabled={!canEdit}` + tooltip
+- `gui/src/components/ClipBlock.tsx` — `canEdit` prop；pointerdown gate（line 240）；up() gate（line 681）
+- `gui/src/components/Timeline.tsx` — `canEdit` prop；drop-zone / track drop guard（line 977 + 1078）；forward to ClipBlock
+- `gui/src/components/EditLease.tsx` — `canEdit` prop + 内部 fallback `s.editorState === "EDIT"`
+- 新测试：`tests/test_r6_*.py` (3 files, 19 tests)、`gui/src/App.run.test.ts` (4)、`gui/src/components/AssetPanel.disabled.test.tsx` (4)、`gui/src/components/EditLease.badge.test.tsx` (5)、`gui/src/components/ClipBlock.collision.test.ts` (2)
+
+**未触碰**（per R6 plan）：Publish Metadata / Timeline-local Revision / Keyframes / opacity controls / AI features（per audit §"Do NOT implement"）
+
+---
+
+## 历史：崩溃修复（2026-09-01 09:27）
+
+Claude Code 2.1.177 resume e6b5613e session 报 `The "path" property must be of type string, got object` 错误。本机诊断定位为 `e6b5613e-8eec-4420-b89a-1591c0fb2c89.jsonl` 第 533 行的 `Read` tool_use 把 offset/limit 错塞进 `input.file_path`（object 而非 string），schema 校验失败。
+
+**已修复**（字节级精确 patch，仅修改 L533，详见 `D:\cc\SESSION.md` 顶部）：
+- 修复前 SHA256：`24675f4565e6c10add1bc3a19e4e549920635fbd955dc5227f53f859d059a9b4`
+- 修复后 SHA256：`76f2bfa392065e4221976023effc711d39cda0fae9c3bd71d248e5ad39163947`
+- 大小：1,375,611 → 1,375,630 bytes（+19），行数 555 → 555（不变）
+- 原始备份：`e6b5613e-...jsonl.bak-20260901-092632`（**永久保留**）
+
+**第二次同 bug（10:16）**：resumed session 后又撞到同一 schema 错误，但因为前一次修复已经让后续 tool call（包括 Update App.tsx 写 61 行）成功落盘，R6-C 实现实际完整**。崩溃仅打断了后续 Read 操作，不影响代码状态。无需重做。
+
+---
+
 ## 当前状态（2026-08-31 GUI-03R ✅ + GUI-03R-Micro ✅ + GUI-03R-Micro v2 ✅ + GUI-03R2 ✅ + GUI-03R3-1E ✅ + GUI-03R3-2 ✅ + GUI-03R3-W-A ✅ + GUI-03R3-W-B ✅ + GUI-03R3-W-C ✅ + GUI-03R3-W-C Runtime Verification ✅ + GUI-03R3-W-D ✅ + GUI-03R4 NLE Editing Surface (R4-1..R4-7; 7 commits) + **GUI-03R4 HUV** ✅ + **GUI-03R4.1 Human Editing Reliability** ✅ + **GUI-03R5 NLE Interaction & Viewer Stabilization** ✅ (B1–B5 all green; 297 vitest + 695 pytest pass; 0 NEW tsc errors) + **R5 manual pass IN PROGRESS** ⏳ on http://127.0.0.1:5180/ (canonical clean fixture PROTECTED via working copy）
 
 ### GUI-03R4 HUV (Human Usability Validation) — ✅ PASSED via R4.1

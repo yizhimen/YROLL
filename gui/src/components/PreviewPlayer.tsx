@@ -17,7 +17,7 @@
 //     onTimeUpdate handler is only for end-of-clip detection (an
 //     orthogonal event), never for state derivation.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, Project } from "../api";
 import {
   activeLayerAt,
@@ -45,6 +45,7 @@ import { useProjectSequence } from "../sequence";
 import {
   splitLayersForPiP, badgeColorForKind, defaultPiPStyle,
 } from "../composite-multilayer";
+import { clipFramesFromSec, type Rational } from "../frames";
 
 export type AspectRatio = "16:9" | "9:16" | "1:1" | "4:3" | "3:4";
 
@@ -205,16 +206,26 @@ export default function PreviewPlayer({
   // Find the clip covering the current playheadFrame (TimelineFrame
   // integer). The find is over the project's clip list — no time
   // math beyond the half-open interval check.
+  //
+  // R6-A: /project returns `timeline_range.start/end` in SECONDS
+  // (legacy model storage). The half-open membership check uses
+  // playheadFrame (integer FRAMES). We must convert at the
+  // boundary — comparing the two units directly returns 0 hits
+  // for any clip that doesn't start at frame 0. clipFramesFromSec
+  // is the ONE sanctioned helper for this boundary (rounds via
+  // roundHalfAwayFromZero, not Math.round). `seqFps` is declared
+  // above (line ~102).
   const vtrack = (project.timelines?.find(
     (tl) => tl.timeline_id === project.active_timeline_id,
   ) ?? project.timelines?.[0])?.tracks.find((t) => t.kind === "video");
   const clips = (vtrack?.clip_ids ?? [])
     .map((id) => project.clips[id])
     .filter(Boolean)
-    .sort((a, b) => a.timeline_range.start - b.timeline_range.start);
+    .map((c) => ({ clip: c, ...clipFramesFromSec(c, seqFps) }))
+    .sort((a, b) => a.startFrame - b.startFrame);
   const clip = clips.find(
-    (c) => playheadFrame >= c.timeline_range.start && playheadFrame < c.timeline_range.end,
-  ) ?? null;
+    (cf) => playheadFrame >= cf.startFrame && playheadFrame < cf.endFrame,
+  )?.clip ?? null;
   const asset = clip
     ? project.assets.find((a) => a.asset_id === clip.asset_id)
     : null;
@@ -354,8 +365,13 @@ export default function PreviewPlayer({
     .filter((t) => t.kind === "audio" && !t.muted)
     .flatMap((t) => t.clip_ids)
     .map((id) => project.clips[id]) ?? [])
-    .filter((c) => c && !c.context?.muted
-      && playheadFrame >= c.timeline_range.start && playheadFrame < c.timeline_range.end)
+    .filter((c) => {
+      if (!c || c.context?.muted) return false;
+      // R6-A: c.timeline_range is seconds; playheadFrame is frames.
+      // Convert at the boundary via clipFramesFromSec.
+      const f = clipFramesFromSec(c, seqFps);
+      return playheadFrame >= f.startFrame && playheadFrame < f.endFrame;
+    })
     : [];
 
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());

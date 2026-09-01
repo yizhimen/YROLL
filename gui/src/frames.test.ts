@@ -563,7 +563,7 @@ describe("GUI-03R-Micro: addClip auto-placement (video/audio)", () => {
       expect(targetCall).toBeDefined();
       const body = JSON.parse(targetCall!.init?.body as string);
       expect(body.track_id).toBeNull();
-      expect(body.timeline_start).toBe(0);
+      expect(body.timeline_start_frame).toBe(0);
     } finally {
       globalThis.fetch = orig;
     }
@@ -584,7 +584,7 @@ describe("GUI-03R-Micro: addClip auto-placement (video/audio)", () => {
       const targetCall = calls.find((c) => /\/clips(\?|$)/.test(c.url));
       const body = JSON.parse(targetCall!.init?.body as string);
       expect(body.track_id).toBe("a1");
-      expect(body.timeline_start).toBe(5);
+      expect(body.timeline_start_frame).toBe(5);
     } finally {
       globalThis.fetch = orig;
     }
@@ -624,9 +624,70 @@ describe("GUI-03R-Micro: explicit-drop overlap is left to Core", () => {
       const targetCall = calls.find((c) => /\/clips(\?|$)/.test(c.url));
       const body = JSON.parse(targetCall!.init?.body as string);
       // The drop frame 5 was passed verbatim — no local mutation.
-      expect(body.timeline_start).toBe(5);
+      expect(body.timeline_start_frame).toBe(5);
     } finally {
       globalThis.fetch = orig;
     }
+  });
+});
+
+// =========================================================================
+// GUI-03R6-A: regression tests for clipFramesFromSec + secondsToFramesEdit.
+// The audit repro: a clip with timeline_range={start:13.8, end:16.8}
+// (seconds) at playheadFrame=499 was was wrongly classified as "in gap".
+// After clipFramesFromSec, 13.8*30=414 and 16.8*30=504, so playhead 499
+// IS within [414, 504) → clip found.
+// =========================================================================
+
+import { clipFramesFromSec, secondsToFramesEdit } from "./frames";
+
+describe("R6-A: secondsToFramesEdit boundary helper", () => {
+  it("converts 13.8 sec @ 30fps to 414 frames", () => {
+    expect(secondsToFramesEdit(13.8, { num: 30, den: 1 })).toBe(414);
+  });
+
+  it("converts 16.8 sec @ 30fps to 504 frames", () => {
+    expect(secondsToFramesEdit(16.8, { num: 30, den: 1 })).toBe(504);
+  });
+
+  it("rounds half away from zero (NOT Math.round)", () => {
+    expect(secondsToFramesEdit(0.5, { num: 30, den: 1 })).toBe(15);
+    expect(secondsToFramesEdit(0.55, { num: 30, den: 1 })).toBe(17);
+    expect(secondsToFramesEdit(-0.5, { num: 30, den: 1 })).toBe(-15);
+  });
+
+  it("returns 0 for 0 seconds", () => {
+    expect(secondsToFramesEdit(0, { num: 30, den: 1 })).toBe(0);
+  });
+});
+
+describe("R6-A: clipFramesFromSec returns {startFrame, endFrame}", () => {
+  it("converts a Sanlihe image clip correctly", () => {
+    // c039a7b on Sanlihe: timeline_range = {start: 13.8, end: 16.8}
+    const clip = { timeline_range: { start: 13.8, end: 16.8 } };
+    const f = clipFramesFromSec(clip, { num: 30, den: 1 });
+    expect(f.startFrame).toBe(414);
+    expect(f.endFrame).toBe(504);
+  });
+
+  it("audit repro: playhead 499 IS within [414, 504) after conversion", () => {
+    // The audit's bug: at playheadFrame=499 (frame domain), comparing
+    // against seconds {13.8, 16.8} returned false → "in gap".
+    // After clipFramesFromSec, the half-open membership is correct.
+    const clip = { timeline_range: { start: 13.8, end: 16.8 } };
+    const f = clipFramesFromSec(clip, { num: 30, den: 1 });
+    expect(499 >= f.startFrame && 499 < f.endFrame).toBe(true);
+  });
+
+  it("playhead at 504 (==endFrame) is OUTSIDE the half-open interval", () => {
+    const clip = { timeline_range: { start: 13.8, end: 16.8 } };
+    const f = clipFramesFromSec(clip, { num: 30, den: 1 });
+    expect(504 >= f.startFrame && 504 < f.endFrame).toBe(false);
+  });
+
+  it("playhead at 413 is OUTSIDE (just before)", () => {
+    const clip = { timeline_range: { start: 13.8, end: 16.8 } };
+    const f = clipFramesFromSec(clip, { num: 30, den: 1 });
+    expect(413 >= f.startFrame && 413 < f.endFrame).toBe(false);
   });
 });

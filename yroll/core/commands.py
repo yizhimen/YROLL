@@ -200,14 +200,21 @@ class CommandLayer:
     # ---------- Frame-based API (P0-01) ----------
 
     def add_clip_frame(self, asset_id: str, src_start_frame: int, src_end_frame: int,
-                       timeline_start_frame: int, track_id: str = 'v1', why: str = '') -> 'Clip':
-        """Frame-based add_clip. Internally converts to seconds."""
+                       timeline_start_frame: int, track_id: str | None = None,
+                       why: str = '', timeline_id: str | None = None) -> 'Clip':
+        """Frame-based add_clip. Internally converts to seconds.
+
+        GUI-03R6: track_id accepts None so the Core allocator picks
+        the minimum suitable non-overlapping track — mirrors the
+        seconds-based add_clip signature (str | None = None).
+        timeline_id is forwarded so the GUI's multi-Timeline routing
+        works identically for video insertion."""
         return self.add_clip(
             asset_id,
             self._frame_to_sec(src_start_frame),
             self._frame_to_sec(src_end_frame),
             self._frame_to_sec(timeline_start_frame),
-            track_id, why)
+            track_id=track_id, why=why, timeline_id=timeline_id)
 
     def move_clip_frame(self, clip_id: str, timeline_start_frame: int, why: str = '') -> Operation:
         """Frame-based move_clip."""

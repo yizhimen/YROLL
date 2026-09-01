@@ -9,11 +9,24 @@
 // GUI-01: this component owns no session state. sessionId, polling
 // and localStorage all live in session.ts; here we only render
 // what the store says and offer the recovery actions.
+//
+// R6-E: the App forwards a `canEdit: boolean` derived from
+// sessionStore.canMutate. When canEdit is false, the badge shows
+// a "未就绪 / 重新获取" cue and the recovery buttons surface the
+// matching affordance. The raw server detail is still kept in
+// the popover for debugging.
 import { useState } from "react";
 import { sessionStore, useProjectSession } from "../session";
 
-export default function EditLease() {
+interface Props {
+  /** R6-E: App-derived canMutate(session). Used to ensure the badge
+   *  text agrees with what the rest of the UI is gating against. */
+  canEdit?: boolean;
+}
+
+export default function EditLease({ canEdit: canEditProp }: Props = {}) {
   const s = useProjectSession();
+  const canEdit = canEditProp ?? (s.editorState === "EDIT" && s.sessionId !== null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -53,19 +66,24 @@ export default function EditLease() {
 
   // Compact form: emoji + actor short + revision. Full detail in the
   // popover. The badge is one click; long-form is opt-in.
+  // R6-E: the OBSERVE/空闲/连接中 branches surface a clear "未就绪"
+  // cue when the App reports canEdit === false (so the user knows the
+  // mutation controls elsewhere are disabled for that reason).
   const badgeText = !s.loaded
     ? "⏳ 连接中"
     : conflict
       ? `🔴 冲突 · r${s.revision}`
       : needsLease
-        ? `🟡 无权 · r${s.revision}`
+        ? `🟡 编辑权失效 · r${s.revision}`
         : s.mine
           ? `🟢 我 · r${s.revision}`
           : s.owner === "agent"
             ? `🟡 ${s.agentLabel || "Claude"} · r${s.revision}`
             : s.owner === "observe"
               ? `⚪ 只读 · r${s.revision}`
-              : `⭕ 空闲 · r${s.revision}`;
+              : canEdit
+                ? `🟢 可编辑 · r${s.revision}`
+                : `⭕ 空闲 · r${s.revision}`;
 
   return (
     <span

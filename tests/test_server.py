@@ -35,8 +35,8 @@ def test_full_edit_flow_over_http(authed_client):
 
     # AI 通过 HTTP 加 clip（与 GUI 走同一 Command）
     r = authed_client.post("/clips", json={
-        "asset_id": "a1", "source_start": 0, "source_end": 10,
-        "timeline_start": 0, "why": "AI 初剪",
+        "asset_id": "a1", "source_start_frame": 0, "source_end_frame": 300,
+        "timeline_start_frame": 0, "why": "AI 初剪",
     })
     assert r.status_code == 200
     clip_id = r.json()["clip_id"]
@@ -134,8 +134,8 @@ def test_track_and_transform_api(authed_client):
     r = authed_client.post("/tracks", params={"kind": "video", "track_id": "v2"})
     assert r.status_code == 200
     clip = authed_client.post("/clips", json={
-        "asset_id": "a1", "source_start": 0, "source_end": 5,
-        "timeline_start": 0, "track_id": "v2"}).json()
+        "asset_id": "a1", "source_start_frame": 0, "source_end_frame": 150,
+        "timeline_start_frame": 0, "track_id": "v2"}).json()
     r2 = authed_client.post(f"/clips/{clip['clip_id']}/transform",
                      json={"x": 0.1, "y": 0.1, "scale": 0.5})
     assert r2.status_code == 200

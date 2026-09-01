@@ -85,6 +85,12 @@ interface Props {
   siblings?: Array<{ id: string; start: number; end: number }>;
   isRelated?: boolean;
   onSelect: (clipId: string, viaAiZone: boolean, ctrl?: boolean) => void;
+  /** R6-E: client-side UX gate. When false (CONNECTING / OBSERVE),
+   *  pointerdown is a no-op. The server Mutation Gate remains
+   *  authoritative; this prop is a hint that prevents the user from
+   *  starting a drag gesture that would only be rejected at commit
+   *  time. */
+  canEdit?: boolean;
   /** Pointermove preview. `newTimelineStartFrame` is an INTEGER
    *  TimelineFrame. The parent uses this for visual feedback only;
    *  the authoritative commit happens via onMoveCommit. */
@@ -124,6 +130,7 @@ export default function ClipBlock({
   clip, selected, locked, pxPerFrame, seqFps, sourceFps,
   snapMode = "always", highlightRel = false, isRelated = false,
   siblings = [],
+  canEdit = true,
   onSelect, onDragMove, onMoveCommit, onTrimCommit, onDropOnTrack,
 }: Props) {
   // ---- Trim preview state -------------------------------------------------
@@ -224,6 +231,16 @@ export default function ClipBlock({
   // MOVE drag
   // ---------------------------------------------------------------------
   const onPointerDown = (e: React.PointerEvent) => {
+    // R6-E: refuse to start a drag when the GUI is not in EDIT.
+    // The user's mental model: a click/drag always works when the
+    // badge says 🟢. When it doesn't (CONNECTING / OBSERVE), the
+    // click is still allowed for SELECTION so the user can inspect
+    // the clip, but no drag/trim will fire — those would only be
+    // rejected at commit time.
+    if (!canEdit) {
+      onSelect(clip.clip_id, false, e.ctrlKey || e.metaKey);
+      return;
+    }
     if ((e.target as HTMLElement).classList.contains("ai-zone")) return;
     if ((e.target as HTMLElement).classList.contains("trim-handle")) return;
     onSelect(clip.clip_id, false, e.ctrlKey || e.metaKey);
@@ -465,26 +482,35 @@ if (localSnapTarget !== null) {
       // call api.snap a second time — spec: one authoritative snap.
       // (If snap was already applied on source track and cross-track
       // re-clamp would invalidate it, we keep preSnapFrame.)
+      //
+      // R6-D: hit-testing (document.elementsFromPoint → track row id)
+      // is allowed (DOM = UI hit-test only). Collision geometry now
+      // comes from Core via api.trackClips(tid) — NEVER from
+      // parseFloat(style.left|width). The previous DOM-derived
+      // approach was unreliable across zoom/scroll/race conditions.
       const row = document.elementsFromPoint(ev.clientX, ev.clientY)
         .find((el) => (el as HTMLElement).dataset?.trackId) as HTMLElement | undefined;
       const tid = row?.dataset.trackId;
       if (tid && tid !== clip.track_id) {
-        // Cross-track drop. Re-clamp against the target track's clips.
-        // We read positions from the DOM (.clip elements inside the
-        // target track-row), which is the simplest way to obtain the
-        // target's siblings without restructuring the prop API.
-        const targetRow = document.querySelector(
-          `[data-track-id="${CSS.escape(tid)}"]`);
-        const targetClips = targetRow
-          ? Array.from(targetRow.querySelectorAll('.clip')).map((el) => {
-              const id = (el as HTMLElement).dataset.clipId ?? "";
-              const left = parseFloat((el as HTMLElement).style.left || "0");
-              const widthPx = parseFloat((el as HTMLElement).style.width || "0");
-              const start = roundHalfAwayFromZero(left / Math.max(0.001, pxPerFrame));
-              const end = start + Math.max(0, roundHalfAwayFromZero(widthPx / Math.max(0.001, pxPerFrame)));
-              return { id, start, end };
-            }).filter((r) => r.id !== clip.clip_id)
-          : [];
+        // Cross-track drop. Read target-track sibling geometry from
+        // Core (canonical, frame-native). Falls back to an empty
+        // list if the fetch fails — the Core's authoritative
+        // overlap check will then reject the move if there's a
+        // collision, and run() will surface a localized status
+        // (no state mutation, clip stays visible at its original
+        // position per R6-D clarification).
+        let targetClips: Array<{ id: string; start: number; end: number }> = [];
+        try {
+          const resp = await api.trackClips(tid);
+          targetClips = resp.clips
+            .filter((s) => s.clip_id !== clip.clip_id)
+            .map((s) => ({ id: s.clip_id, start: s.start_frame, end: s.end_frame }));
+        } catch (e) {
+          // Network or 404: leave targetClips empty. Core rejects
+          // overlapping moves on commit; the user will see the
+          // localized "time overlap" error and the clip stays put.
+          console.warn("[YROLL-R6D] api.trackClips failed:", e);
+        }
         // Direction-aware clamp on the target track.
         const targetClamp = (tryStart: number): number => {
           const tryEnd = tryStart + lenFrames;
@@ -647,6 +673,16 @@ if (localSnapTarget !== null) {
   // TRIM drag (no `* clip.speed` anywhere)
   // ---------------------------------------------------------------------
   const onEdgeDown = (e: React.PointerEvent, edge: "left" | "right") => {
+    // R6-E: refuse to start a trim when the GUI is not in EDIT.
+    // Same rationale as onPointerDown: a trim commit is a mutation
+    // that the server Mutation Gate would reject; better UX is to
+    // silently no-op the drag and surface a status hint from the
+    // EditLease badge.
+    if (!canEdit) {
+      e.stopPropagation();
+      onSelect(clip.clip_id, false, e.ctrlKey || e.metaKey);
+      return;
+    }
     e.stopPropagation();
     onSelect(clip.clip_id, false, e.ctrlKey || e.metaKey);
     if (locked) return;  // 轨道锁定：禁裁剪

@@ -360,6 +360,16 @@ export const api = {
       insert_after_track_id: insertAfterTrackId ?? null,
       why: "GUI drop zone",
     }),
+  // R6-D: canonical sibling read API. Returns frame-native intervals
+// for every clip on the track so the GUI's cross-track re-clamp
+// uses Core state (not DOM-derived style.left). GET, not a
+// mutation — does not go through mutate/gated.
+trackClips: (trackId: string, timelineId?: string) =>
+    req<{
+      track_id: string;
+      timeline_id: string;
+      clips: Array<{ clip_id: string; start_frame: number; end_frame: number }>;
+    }>(`/tracks/${trackId}/clips${timelineId ? `?timeline_id=${encodeURIComponent(timelineId)}` : ""}`),
   commit: (note: string) => mutate("POST", `/versions?note=${encodeURIComponent(note)}`),
   // GUI-03D: L1 Timeline Composite Preview. Returns z-ordered
   // visual + audio + subtitle layers at the given timeline frame.
@@ -523,11 +533,23 @@ export const api = {
     return gated<{ asset: Asset; clip: Clip | null; deduped: boolean }>(
       "/assets/import", { method: "POST", body: fd });
   },
-  addClip: (assetId: string, sourceStart: number, sourceEnd: number,
-            timelineStart: number, trackId: string | null, why = "") =>
+  // GUI-03R6: frame-native addClip. Mirrors addImageClip — all three
+// time fields are integer frames. The Core converts to seconds at
+// the storage boundary. The GUI MUST pass frames; passing seconds
+// into these fields is a contract violation that the server rejects.
+addClip: (assetId: string,
+          sourceStartFrame: number,
+          sourceEndFrame: number,
+          timelineStartFrame: number,
+          trackId: string | null,
+          why = "") =>
     mutate<Clip>("POST", "/clips", {
-      asset_id: assetId, source_start: sourceStart, source_end: sourceEnd,
-      timeline_start: timelineStart, track_id: trackId, why,
+      asset_id: assetId,
+      source_start_frame: sourceStartFrame,
+      source_end_frame: sourceEndFrame,
+      timeline_start_frame: timelineStartFrame,
+      track_id: trackId,
+      why,
     }),
   // GUI-03B: image-first-class media. Frame-native coordinates; the
   // server derives source_range = (0, 1/seq_fps) and speed=1.0.

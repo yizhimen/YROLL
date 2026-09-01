@@ -33,8 +33,8 @@ def _seed_clip_with_clips(app):
     app.post("/assets/import", files=files)
     # Add clip at frame 0..150 (5s @ 30fps)
     r = app.post(f"/clips?sessionId={sid}&baseRevision=0", json={
-        "asset_id": "x", "source_start": 0, "source_end": 5,
-        "timeline_start": 0, "track_id": "V1", "why": "seed"})
+        "asset_id": "x", "source_start_frame": 0, "source_end_frame": 150,
+        "timeline_start_frame": 0, "track_id": "V1", "why": "seed"})
     assert r.status_code == 200, r.text
     return sid
 
