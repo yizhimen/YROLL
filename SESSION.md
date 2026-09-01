@@ -1,5 +1,156 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
+## 当前状态（2026-09-01 GUI-03R6.2 Remediation Implementation 完成 ✅ = HEAD c049bcd，4 个修复 + 17 个新测试 + 3 个新 smoke）
+
+**最新事件（2026-09-01 19:30）**：R6.2 remediation 全部完成。按用户锁定顺序 B5 → B2/B3 → B1 → B4 → final 一致性。每个 batch：fail-first regression → 实施 → 测试 → 回归 → smoke → commit。
+
+### 4 个 P0 bug 修复 commits
+
+| Commit | Bug | 修复 |
+|---|---|---|
+| `f018e4a` R6.2-B5 | Drag 视觉飞跳 | `App.tsx` 把 dragPreview frames 错误地直接写入 `timeline_range.start`（秒字段）；`styles.css` 给 `.timeline-pane` 加 `padding-bottom:25px` 防止 statusbar 覆盖 |
+| `00fa50b` R6.2-B2/B3 | L0 fallback 重生 hidden track | `PreviewPlayer.tsx:234` 给 track filter 加 `!t.hidden` |
+| `1a88646` R6.2-B1 | Core 同轨重叠 invariant | `commands.py:split_clip` 加 `_check_no_overlap`（之前只有 add/move/trim 有）；`test_no_overlap_invariant.py` 加 `_sanlihe-r5-manual` 静态护栏 |
+| `1a27ecd` R6.2-B4 | `/preview/at_frame` 契约 | `docs/API-PREVIEW-AT-FRAME.md` 冻结契约：materialized view of plan at frame N；7 个新 pytest pin |
+
+### 17 个新测试
+
+| Suite | Tests |
+|---|---|
+| `tests/test_no_overlap_invariant.py` (新) | 4：static guard + helpers |
+| `tests/test_r6_2_split_clip_overlap.py` (新) | 6：每条 mutation path pin |
+| `tests/test_preview_at_frame_contract.py` (新) | 7：endpoint contract pin |
+| `gui/src/App.displayProject.test.tsx` (新) | 7：frames→seconds 转换 |
+| `gui/src/components/PreviewPlayer.test.tsx` (+3) | hidden-track L0 fallback |
+
+### 3 个新 smoke（real-browser 回归）
+
+| Smoke | Scenario |
+|---|---|
+| `gui/smoke/03r6_2-drag-fly.mjs` (新) | 7 场景：layout + 1/5/10/50px drag invariant + no-spurious-jump |
+| `gui/smoke/03r6_2-hidden-preview.mjs` (新) | 2 场景：V1 hidden→no img；V1 hidden→shown→hidden 往返稳定 |
+| `gui/smoke/03r6_2-identity.mjs` (新) | 10 frames：Timeline DOM membership ↔ `/preview/at_frame` membership 一致 |
+
+### Mutations provenance
+
+- **V1 旧 overlap**：audit 发现时 `_sanlihe-r5-manual` 里有 `c4b3597 [953,1073] ∩ cb82e96 [960,1080]`。provenance 来自之前 session 的 move_clip 调用（具体 ops 在 reset 时丢失）。当前 working copy 已被 reset from canonical，V1 的 11 个 clips 都不重叠。Core 加固后，未来类似 move 会直接 400。
+- **canonical t1/v5/ta... overlaps**：canonical 自带的预存重叠（cbbe06c↔c241bdc 在 t1、c98b82a↔cd21c90 在 v5 等）。Per 用户 "do not silently reorder clips arbitrarily"，不自动修复。Static guard 跳过 CANONICAL_READONLY marker。
+- **test_cross_track_link 修复**：jdz-chaishao V1 有预存 overlap，更新测试选用 cae68f5（无重叠区）。
+
+### 回归
+
+| Suite | Before R6.2 | After R6.2 |
+|---|---|---|
+| pytest | 735 passed + 1 skip + 1 pre-existing FAIL | **752** passed + 1 skip + 1 pre-existing FAIL (+17 new) |
+| vitest | 397 passed + 2 skip | **407** passed + 2 skip (+10 new) |
+| 03r4-acceptance | 8/8 | **8/8** ✓ |
+| 03r6-runtime-editing | 31/31 | **31/31** ✓ |
+| 03r6_1-closure | 8/8 | **8/8** ✓ |
+| 03r6_2-drag-fly | (新) | **7/7** ✓ on fresh state |
+| 03r6_2-hidden-preview | (新) | **2/2** ✓ on fresh state |
+| 03r6_2-identity | (新) | **10/10** ✓ on fresh state |
+
+### Human verification
+
+Per 用户锁定 "Do not declare human verification complete"。所有 smoke 是自动化；human 6-check pass 仍未运行。
+
+### Known limitations
+
+- 03r5-runtime-consistency-fixes 在 mutated state 下失败（state pollution）。在 fresh state 下能 pass — 是已知 fixture fragility，不是 R6.2 regression。
+- canonical fixture 自带 t1/v5/ta... 重叠不在 R6.2 scope。
+- jdz-chaishao fixture 自带 V1 重叠，test_cross_track_link 已改为选 cae68f5。
+
+---
+
+## 当前状态（2026-09-01 GUI-03R6.2 Remediation Plan 完成 ✅ = HEAD 5d7dd2d，READ-ONLY PLAN，无代码改动）
+
+**最新事件（2026-09-01 18:30）**：R6.2 remediation plan READ-ONLY pass 完成。**Plan-only**（per user instruction）。用户批准后才开始 implementation。
+
+### Required execution order（locked by user）
+
+```
+B5 (drag)  →  B2/B3 (hidden preview)  →  B1 (Core overlap)  →  B4 (at_frame contract)  →  final Timeline/Preview consistency
+```
+
+### Plan 概要
+
+| Bug | Plan 第一步 | 关键文件 |
+|---|---|---|
+| **B5** drag fly | `gui/smoke/03r6_2-drag-fly.mjs` 写 **FIRST**（必须 FAIL on HEAD） | `gui/src/styles.css` flex reorder (statusbar); `ClipBlock.tsx` dragLockToken; `App.tsx` onDragMove guard; 4 new vitest |
+| **B2/B3** hidden L0 fallback | `gui/smoke/03r6_2-hidden-preview.mjs` (must FAIL) | `PreviewPlayer.tsx` filter `t.hidden` in L0 (or collapse L0 entirely); 4 new vitest |
+| **B1** Core overlap | 读 `ops/op*.json` 找出产生 overlap 的 op； one-shot move; 加 `tests/test_no_overlap_invariant.py` 静态护栏 + 4 paths × 3 cases = +12 pytest | `yroll/core/commands.py` 加固； 4 个 new pytest files |
+| **B4** at_frame contract | 写 `docs/API-PREVIEW-AT-FRAME.md` frozen contract; 加 `tests/test_preview_at_frame_contract.py` 5 pytest pinning | 仅当 code-read checklist 失败才改 `frame_preview.py` |
+
+### Plan-time discoveries（修正 audit 误读）
+
+- **B4 不是 Core bug**：live curl 验证 `/preview/at_frame?frame=1500` **正确**返回 V3/c450db2 layer。audit 早期观察的 "at_frame empty" 是 **GUI** 的 L0 fallback + stale `usePreviewPlan` cache 现象。Core endpoint 满足 contract。Plan 仍然冻结 contract for future reference。
+- **B5 H2 hypothesis** (snap-to-playhead in pointermove)：audit's local `snap()` only walks `otherRanges`（无 playhead target）。Jump 必然来自其他 code path。Plan 用 dragLockToken 隔离 + instrumentation。
+
+### Open questions（implementation 时用户决定）
+
+1. B5 fix 1: Option A (flex reorder) vs B (padding-bottom) vs C (timeline-pane max-height)。Plan 推荐 A。
+2. B2/B3 fix: remove L0 entirely vs conditional filter。Plan 推荐 conditional filter（preserves legacy `/preview/at_frame`）。
+3. B1 cleanup: `cb82e96` 移到 `cbf21ed` 之后（保持编辑顺序）还是 `c4b3597` 之前（更干净）？需要用户/编辑意图。
+4. B4 contract: plan 的解读 vs 用户的语义意图（如多 layer/单 clip）。
+
+### Document
+
+`docs/GUI-03R6.2-Remediation-Plan.md`（plan-only, 无代码改动）
+
+### STOP gating 保持
+
+不开始 Publish Metadata / Timeline-local Revision / Keyframes / opacity / AI features。不放松 overlap protection。
+
+---
+
+## 当前状态（2026-09-01 GUI-03R6.2 Preview/Timeline Consistency Audit 完成 ✅ = HEAD 5d7dd2d，READ-ONLY，无代码改动）
+
+**最新事件（2026-09-01 17:50）**：R6.2 audit READ-ONLY pass 完成。**5 个 P0 bug 全部确认**（其中 1 个在 Core，4 个在 GUI）。Document: `docs/GUI-03R6.2-Preview-Timeline-Consistency-Audit.md`。
+
+### 5 个 P0 bug 摘要
+
+| # | 症状 | 根因 |
+|---|---|---|
+| **B1** | V1 有 overlapping clips（c4b3597 [953,1073] 与 cb82e96 [960,1080] 重叠） | Core no-overlap invariant 违反 — `cmd.move_clip` 或 load-time migration 放行 |
+| **B2** | Hide V1 不消除 Preview 中的 V1 内容（frame 1000 仍渲染 V1/a55bc2b） | `PreviewPlayer.tsx:224-226` L0-fallback `t.kind === "video"` 不检查 `t.hidden` |
+| **B3** | Preview 内容随 V1 hidden 切换而变化（隐藏=a55bc2b，显示=a10ec6b，两者都是 V1） | 同 B2 |
+| **B4** | "Multiple overlapping clips/layers" 视觉 — `/preview/at_frame` 对 V3 仅返回第一个 clip（c4c290d 正常；c7bf18c/c450db2/c7f9a9a/cf2931e 全部 is_black: true） | `yroll/core/frame_preview.py:composite_preview_at_frame` 疑似只取每轨第一个 clip |
+| **B5** | Clip drag 不可用 — 1px 拖动 → clip 跳到 frame 72（鼠标不动） | (a) `.statusbar` 覆盖 V3 row（.timeline-pane 240px 高 vs .tracks 596px 高）；(b) snap 在 pointermove 内 re-target 到 playhead/其他 clip |
+
+### 关键实测
+
+- `/tracks/v1/clips` → V1 含 c4b3597 [953,1073] + cb82e96 [960,1080]（重叠 113 帧）
+- `/preview/plan` → 正确排除 hidden V1/V2/V5-V10
+- `/preview/at_frame?frame=1000` → `is_black: true`（Core 正确）
+- 浏览器：V1 hidden + frame 1000 → 预览渲染 `<img src="/assets/a55bc2b/file">`（V1 内容泄漏）
+- `PreviewPlayer.tsx:224-226`：`tracks.find((t) => t.kind === "video")` 无 `!t.hidden` 守卫 → V1 是第一个 video track → L0 fallback 永远取 V1
+- 1px drag → clip.style.left 在 66ms 内从 1.68px 跳到 75.6px（frame 1 → frame 72，无鼠标移动）
+- `.statusbar` 在 viewport (1440×900) y=875-900 覆盖 `.timeline-pane` y=635-875 的最后 20px → V3 row top=856-895 完全被覆盖，`document.elementsFromPoint(380, 913)` 返回 `DIV.statusbar`
+
+### Test 详情
+
+| 测试 | 结果 |
+|---|---|
+| 5 frame 切换 (F0→F100→F200→F0) | F0/F100 OK，F1500/F2300/F2500 都空（Core 也有 bug：at_frame 只返回每轨第一个 clip） |
+| V1 hide→show→hide 往返 | 三次结果 = a55bc2b / a10ec6b / a55bc2b（都是 V1 内容） |
+| Timeline identity vs Core | ✅ pxPerF=0.84（默认 25 px/sec @ 30fps）下完全匹配 |
+| pxPerF 实测 | 0.84（不是早期测量的 1.04 — 那是错误的） |
+| 拖动 1/5/10/50px | 全部飞或不动 — V3 row 被 statusbar 拦截 |
+
+### 建议修复顺序（待用户 go-ahead）
+
+1. `PreviewPlayer.tsx:224-226` L0-fallback 加 `!t.hidden` 守卫（单行）
+2. Core V1 overlap 一次性 fix + `cmd.move_clip` 加 overlap 断言
+3. `frame_preview.py` 调查 at_frame 漏 clip bug
+4. Clip drag: styles.css 修 statusbar + ClipBlock snap 调查
+5. P1: drag-on-initial-load auto-scroll
+
+### 已知 pre-existing infrastructure gap（与 R6.2 无关）
+
+- `gui/smoke/static-with-proxy.mjs` 的 proxy allowlist **不包含 `/sequence`**（R6.1 已记录）
+
+---
+
 ## 当前状态（2026-09-01 GUI-03R6.1 Closure 完成 ✅ = HEAD pending — 4 个修复全部实施并通过自动化验证）
 
 **最新事件（2026-09-01 13:30）**：R6.1 closure batch 完成（4 个修复，46 个新 vitest）。用户人工验证待定。
