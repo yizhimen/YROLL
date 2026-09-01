@@ -1,5 +1,50 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
+## 当前状态（2026-09-01 GUI-03R6 Runtime Editing 完成 + R6 closure fix 完成 ✅ = HEAD c9f29a7）
+
+**最新事件（2026-09-01 12:20）**：R6 closure fix committed as **c9f29a7** — PreviewPlayer frame-purity + real GUI bring-into-view smoke. Smoke now 31/31 PASS (was 23/26). R6 release-ready but NOT human-verified.
+
+### R6 closure fix (c9f29a7)
+Audit finding #7 (frame 499 placeholder) fix:
+- **Root cause**: L0 fallback was gated on `sourceFrame !== null && timeMapEntry` — VIDEO-only fields. Image clips return 422 from fetchTimeMap and leave `sourceFrame=null`. L0 fallback was unreachable for images → placeholder always won.
+- **Fix** (`gui/src/components/PreviewPlayer.tsx`): L0 fallback now branches on `asset.type`:
+  - **image** → render `<img>` directly (no sourceFrame needed)
+  - **video** → require sourceFrame+timeMapEntry; show "⏳ 加载中…" placeholder when those are still in flight (NOT "in-gap" — membership DID match)
+  - **neither** → genuine "in-gap" placeholder, now the ONLY case that fires it
+- **Membership comparisons unchanged** at line 226-228 — already used `clipFramesFromSec` (frames↔seconds boundary conversion). Pinned by `tests/test_no_timeline_range_seconds_compare.py`.
+- **New regression test** `gui/src/components/PreviewPlayer.test.tsx` (5 tests): image clip at frame 499 / frame 0 / frame 450 — NO "in-gap" placeholder; frame 1000 (outside clip) — TRUE placeholder; empty timeline — empty placeholder.
+
+Smoke correction (`gui/smoke/03r6-runtime-editing.mjs`):
+- Removed the two external-API viewport expectations (audit said: external mutations don't trigger `bringClipIntoView`)
+- External API kept for **data correctness only**
+- New `[GUI bring-into-view flow]` section: acquire fresh session → write to localStorage → reload → wait for EDIT (badge "🟢 我 · r<N>") → Ctrl+D on existing clip → verify duplicate has `.selected + within viewport`
+- [3] now checks frame 450 + frame 0 in addition to frame 499
+
+### R6 final regression (c9f29a7)
+| Suite | Result |
+|---|---|
+| pytest | 735 passed + 1 skipped + 1 pre-existing failure (`test_no_orphan_empty_tracks_in_projects_dir` — on-disk `_sanlihe-r5-manual` empty tracks a1/a2/a3/t2; confirmed via `git stash` per `SESSION.md`; unrelated R6) |
+| vitest | **351 passed + 2 skipped** (was 346+2; +5 from new `PreviewPlayer.test.tsx`) |
+| tsc | 0 NEW errors (2 pre-existing in `Timeline.drag.test.ts`) |
+| vite build | ✓ `dist/assets/index-D44WwORP.js` (287.21 kB) + `index-DUbL593f.css` (21.20 kB) |
+| R6 browser smoke | **31/31 PASS** against `projects/_sanlihe-r5-manual` |
+
+### Live services (session-end)
+- **Backend**: `python -m yroll.cli.main serve projects/_sanlihe-r5-manual --port 8770` (PID running)
+- **Frontend**: `node gui/smoke/static-with-proxy.mjs 5180 8770` (PID running)
+- **URL**: `http://127.0.0.1:5180/`
+- **Reset working copy**: `node gui/smoke/serve-r5-manual.mjs 8770` (kills current backend, copies canonical, restarts)
+
+### Known pre-existing failures
+1. `tests/test_no_orphan_empty_tracks.py::test_no_orphan_empty_tracks_in_projects_dir` — pre-existing; unrelated to R6
+2. `src/components/Timeline.drag.test.ts` — 2 tests SKIPPED (jsdom lacks real CDP); not a failure
+3. R5 + R6 human manual verification — **still pending**
+
+### Files NOT touched (per audit "Do NOT implement")
+Publish Metadata, Timeline-local Revision, Keyframes, opacity controls, AI features.
+
+---
+
 ## 当前状态（2026-09-01 GUI-03R6 Runtime Editing Audit + R6-A..R6-E 修复完成 ✅ + R6-E canEdit wiring 完成 ✅）
 
 **最新事件（2026-09-01 10:16）**：resumed e6b5613e session 撞到第二个 `path` property bug（同一 Read tool_use schema 问题），但 R6-A..R6-E 五项修复实际已全部落盘并通过测试，无需重做。
