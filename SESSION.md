@@ -1,5 +1,153 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
+## 当前状态（2026-09-02 GUI-04 04-06 Transform v0.1 完成 ✅ = HEAD 见末尾）
+
+**最新事件（2026-09-02 09:26）**：GUI-04 batch 04-06 完成。用户硬约束已遵守：
+- ✅ **Inspector 不是 transform 的 owner**——只是编辑入口 + 显示器（user 明确警告的 anti-pattern 已避开）
+- ✅ **Core 是 sole canonical source**——每次 input 走 `api.setTransform → Mutation Gate → Core → PreviewPlan → Inspector + Preview` 整条链
+- ✅ **无 parallel React state**——Inspector 每次 render 直接读 `clip.transform`；每次 input 触发 `run() → refresh() → previewPlan fetch → 重新渲染`
+- ✅ **Reuse existing API**——`api.setTransform`（已存在）；不动 Core；不动 `setTransform2d`
+- ✅ **保持 pre-existing 失败透明**——pytest 仍 838 + 1 skip + 2 pre-existing FAIL（与之前所有 batch 相同的 2 个，未被 04-06 触发）
+
+### Architectural rule（用户明确警告的 anti-pattern）
+
+```
+正确结构（采用）：
+             ┌──────── Inspector     (display + edit entry only)
+             │
+User input ──┤
+             ↓
+        setTransform
+             ↓
+        Mutation Gate
+             ↓
+            Core
+             ↓
+       PreviewPlan
+          ↙     ↘
+     Inspector  Preview
+
+
+错误结构（避开）：
+Inspector X/Y
+      ↓
+React state       ← PARALLEL state, divergent
+      ↓
+CSS transform
+
+Core transform
+      ↓
+PreviewPlan
+      ↓
+Preview
+```
+
+表面看起来拖动是实时的，但 **refresh 之后又跳回去**。本 batch 明确不引入这个 anti-pattern。
+
+### Numeric contract（plan §8 / req. 7）
+
+| 字段 | 单位 | 范围 | 默认 | 显示 |
+|---|---|---|---|---|
+| x | normalized center offset | -1..1 | 0 | `.toFixed(2)` |
+| y | normalized center offset | -1..1 | 0 | `.toFixed(2)` |
+| scale | 倍率 | 0.1..3 | 1 | `Math.round(s * 100) + "%"` |
+| rotation | 度数 | -180..180 | 0 | `Math.round(r) + "°"` |
+| opacity | 倍率 | 0..1 | 1 | （不直接控制；保留字段） |
+
+### Acceptance A–L 覆盖（plan §8.12）
+
+| 编号 | 场景 | 覆盖 |
+|---|---|---|
+| A | position X | `TestPositionX` (4 tests) |
+| B | position Y | `TestPositionY` (2 tests) |
+| C | scale | `TestScale` (3 tests) |
+| D | rotation | `TestRotation` (3 tests) |
+| E | reset | `TestReset` (2 tests) — includes req 6 的 "unchanged → zero mutation" |
+| F | multi-layer independent | `TestMultiLayerIndependentTransforms::test_v2_transform_independent_of_v1` |
+| G | preview updates | `TestPreviewUpdates::test_clip_transform_surfaces_in_preview_at_frame` |
+| H | inspector ↔ Core equality | `TestInspectorCoreEquality::test_set_then_read_exact_equality` |
+| I | Undo/Redo | `TestUndoRedoExact` (2 tests) |
+| J | unchanged → zero mutation | `TestUnchangedInputZeroMutation` (Inspector 端短路) |
+| K | invalid input rejected | `TestInvalidInputRejected` (2 tests) |
+| L | transform survives refresh | `TestTransformSurvivesRefresh` (2 tests) |
+
+### Regression guards（plan §8.14 / req 14）
+
+| Guard | 位置 | 检测 |
+|---|---|---|
+| 无第二隐藏 transform state | `TestNoSecondHiddenTransformState::test_transform_field_present_in_project` | `/project` 总是包含 `clip.transform` 字段 |
+| 无 track-index PiP scaling | `TestNoTrackIndexPiPBehavior::test_v2_transform_not_shrunk_automatically` + `composite-multilayer.test.ts`（继承自 04-05） | v2 clip 默认 scale 不为 0.30 |
+| 无 DOM-only transform mutation | Inspector 实现——所有改动走 `run() → api.setTransform → refresh()` | 源码层 pin |
+| transform survives refresh | `TestTransformSurvivesRefresh` (2 tests) | 3 次连续 `/preview/plan` fetch 都返回同一值 |
+| transform 不 leak between clips | `TestTransformNoLeakBetweenClips::test_set_clip_a_transform_does_not_affect_clip_b` | clip A 设 transform 后，clip B 仍 default |
+
+### 新增 / 修改资产
+
+| 资产 | 内容 |
+|---|---|
+| `gui/src/clip-transform.ts` (NEW) | `ClipTransform` type, `DEFAULT_TRANSFORM`, `TRANSFORM_BOUNDS`, `readClipTransform(clip)`, `isDefaultTransform(t)`, `clampToBounds`, `formatTransformField`, `validateTransformInput` — 全部 numeric contract + Inspector 辅助函数 |
+| `gui/src/App.tsx` (refactor) | Transform Inspector body：4 个 range sliders（X / Y / scale / rotation）+ Reset button。每行只用 `clip.transform`（无 React state）。pip-drag-box 改用 -1..1 center offset convention。 |
+| `tests/test_transform2d_contract.py` (NEW, 27 tests) | A–L + 5 个 regression guard 全部覆盖 |
+| `gui/smoke/gui-04-06-transform.mjs` (NEW) | Phase A bundle + Inspector DOM 验证；Phase C real-browser regression（无 track-index PiP scale，无 old PiP DOM）；Phase B lease-conditional |
+
+### 回归
+
+| Suite | 04-05 baseline | After 04-06 |
+|---|---|---|
+| pytest | 811 passed + 1 skip + 2 pre-existing FAIL | **838** passed + 1 skip + 2 pre-existing FAIL (+27 new) |
+| vitest | 465 passed + 2 skip | **465** passed + 2 skip (unchanged) |
+| gui-04-01-runtime-routes (browser) | 4/4 | **4/4** ✓ |
+| gui-04-03-undo-redo (browser) | 2/2 | **2/2** ✓ |
+| gui-04-04-drag (browser) | 1/1 | **1/1** ✓ |
+| 03r6_2-identity (browser) | 10/10 | **10/10** ✓ |
+| 03r6_2-drag-fly (browser) | 7/7 | **7/7** ✓ |
+| gui-04-05-preview-layers (browser) | 4/4 | **4/4** ✓ |
+| **gui-04-06-transform (browser, NEW)** | — | **4/4** ✓ (Phase A/C; Phase B 因 dev lease 跳过) |
+| vite build | ✅ | ✅ |
+| tsc | 5 pre-existing errors, no NEW | 5 pre-existing errors, no NEW |
+| Pre-existing 失败 | 2（未触动） | 2（仍是同样 2 个，未被 04-06 触发） |
+
+### 重要设计决策
+
+- **Inspector 是 Core transform 的编辑入口 + 显示器，不是 owner**——user 明确警告的 anti-pattern 已避开。
+- **Reset 必须 zero mutation when transform == default**——`isDefaultTransform()` 短路。如果 Inspector 总是发默认值的 API call，每次 reset 都会有一次 Core op；用户 req 6 明确 "unchanged input → zero mutation"。Inspector 必须用 `isDefaultTransform` 比较后短路。
+- **numeric contract 与 Core `set_transform2d` 一致**——x/y normalized -1..1 center offset，scale 0.1..3，rotation degrees，opacity 0..1。`clip-transform.ts` 的 `TRANSFORM_BOUNDS` 单一来源。
+- **clipr-drag-box 同步改 -1..1 convention**——pixel delta 转 `dx = (ev.clientX - startX) / (rect.width / 2)`。原代码 0..1 top-left 不一致，已已统一。
+- **不动 `setTransform2d`**——用户提到 "Core set_transform / set_transform2d" 两个都存在，但 04-06 仅 wiring 现有 API。我用 `api.setTransform`（直接写 `clip.transform`），因为 `preview-layer.ts` 已经读 `clip.transform` —— 单一字段路径，避免 "second transform representation"（req 1）。
+- **不在范围内**（**未实现**）：
+  - Keyframe / Animation / Ease / Motion path
+  - Crop / Mask / Blend mode
+  - transitions / effects
+  - audio redesign / AI / Publish Metadata / Timeline-local Revision
+
+### Plan §17 GUI-04 Completion Gate 进度（04-06 更新）
+
+- [x] `/clips` 浏览器 200
+- [x] `history/undo` 浏览器 200
+- [x] no fractional frame reaches mutation API
+- [x] all new mutation tests green
+- [x] hidden layer never renders
+- [x] Timeline == Preview identity test green
+- [x] full pytest green except documented pre-existing
+- [x] full vitest green
+- [x] vite build green
+- [x] real browser smoke green
+- [x] Undo/Redo exact
+- [x] drag 1/5/10/50 px + cross-track + collision
+- [x] multi-layer Preview determinism
+- [x] **Transform position/scale/rotation** ← **04-06 完成**
+- [ ] human acceptance（final gate）
+
+### 下一步
+
+等待用户批准 → 进入 **GUI-04 final human acceptance / integration gate**：
+- 真实的 04-04 deferred browser drag acceptance（Phase B/F，由于 dev lease 跳过的部分）
+- 04-05 多层 render acceptance 的完整 5-clip 场景
+- 04-06 real Inspector DOM interaction acceptance（Phase B，因 dev lease 跳过）
+- Manual 6-check pass per R5 process
+
+---
+
 ## 当前状态（2026-09-02 GUI-04 04-05 Preview Layer Model 完成 ✅ = HEAD 827159a）
 
 **最新事件（2026-09-02 08:51）**：GUI-04 batch 04-05 完成。用户硬约束已遵守：

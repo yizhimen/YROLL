@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, Clip, Project } from "./api";
+import {
+  readClipTransform, isDefaultTransform,
+  formatTransformField, validateTransformInput,
+  TRANSFORM_BOUNDS,
+  type ClipTransform,
+} from "./clip-transform";
 import { sessionStore, useProjectSession, canMutate } from "./session";
 import { GateRejection } from "./api";
 import { useProjectSequence } from "./sequence";
@@ -1454,52 +1460,70 @@ export default function App() {
             // purely a GUI-local transport action.
             onTransportReady={(api) => { transportRef.current = api; }}
           />
+          {/* GUI-04 04-06: pip-drag-box uses -1..1 center offset
+              * convention (matches clip-transform.ts). Drag delta in
+              * pixels → delta in -1..1 by dividing by half-canvas.
+              * This is a visual preview only — the actual Core
+              * mutation happens at pointerup via api.setTransform.
+              */}
           {previewVersion > 0 && clip && activeTimelineTracks
             .filter((t) => t.kind === "video").slice(1)
-            .some((t) => t.clip_ids.includes(clip.clip_id)) && (
-            <div
-              className="pip-drag-box"
-              style={{
-                left: `${Number(clip.transform?.x ?? 0.68) * 100}%`,
-                top: `${Number(clip.transform?.y ?? 0.68) * 100}%`,
-                width: `${Number(clip.transform?.scale ?? 0.3) * 100}%`,
-                aspectRatio: "16/9",
-              }}
-              title="拖动调整 PiP 位置"
-              onPointerDown={(e) => {
-                e.preventDefault();
-                const pane = previewRef.current;
-                if (!pane) return;
-                const rect = pane.getBoundingClientRect();
-                const startX = e.clientX;
-                const startY = e.clientY;
-                const origX = Number(clip.transform?.x ?? 0.68);
-                const origY = Number(clip.transform?.y ?? 0.68);
-                const box = e.currentTarget as HTMLElement;
-                const move = (ev: PointerEvent) => {
-                  const nx = Math.min(0.95, Math.max(0, origX + (ev.clientX - startX) / rect.width));
-                  const ny = Math.min(0.95, Math.max(0, origY + (ev.clientY - startY) / rect.height));
-                  box.style.left = `${nx * 100}%`;
-                  box.style.top = `${ny * 100}%`;
-                  box.dataset.nx = String(nx);
-                  box.dataset.ny = String(ny);
-                };
-                const up = () => {
-                  window.removeEventListener("pointermove", move);
-                  window.removeEventListener("pointerup", up);
-                  const nx = Number(box.dataset.nx ?? origX);
-                  const ny = Number(box.dataset.ny ?? origY);
-                  if (Math.abs(nx - origX) > 0.005 || Math.abs(ny - origY) > 0.005) {
-                    run(() => api.setTransform(clip.clip_id,
-                      { x: nx, y: ny, scale: Number(clip.transform?.scale ?? 0.3) },
-                      "GUI 拖 PiP"), "PiP 位置已改（重渲染后生效）");
-                  }
-                };
-                window.addEventListener("pointermove", move);
-                window.addEventListener("pointerup", up);
-              }}
-            />
-          )}
+            .some((t) => t.clip_ids.includes(clip.clip_id)) && (() => {
+              const t = readClipTransform(clip);
+              return (
+                <div
+                  className="pip-drag-box"
+                  style={{
+                    // x/y are -1..1 center offset; CSS translate is
+                    // rendered by preview-layer.ts. For the legacy
+                    // pip-drag-box we approximate via percentage:
+                    //   0  → center  → 50%
+                    //   1  → edge    → 100%
+                    //  -1  → -edge   →   0%
+                    left: `${(t.x + 1) * 50}%`,
+                    top: `${(t.y + 1) * 50}%`,
+                    width: `${t.scale * 100}%`,
+                    aspectRatio: "16/9",
+                  }}
+                  title="拖动调整 PiP 位置"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    const pane = previewRef.current;
+                    if (!pane) return;
+                    const rect = pane.getBoundingClientRect();
+                    const startX = e.clientX;
+                    const startY = e.clientY;
+                    const origX = t.x;
+                    const origY = t.y;
+                    const box = e.currentTarget as HTMLElement;
+                    const move = (ev: PointerEvent) => {
+                      // Convert pixel delta to -1..1 center offset.
+                      const dx = (ev.clientX - startX) / (rect.width / 2);
+                      const dy = (ev.clientY - startY) / (rect.height / 2);
+                      const nx = Math.max(-1, Math.min(1, origX + dx));
+                      const ny = Math.max(-1, Math.min(1, origY + dy));
+                      box.style.left = `${(nx + 1) * 50}%`;
+                      box.style.top = `${(ny + 1) * 50}%`;
+                      box.dataset.nx = String(nx);
+                      box.dataset.ny = String(ny);
+                    };
+                    const up = () => {
+                      window.removeEventListener("pointermove", move);
+                      window.removeEventListener("pointerup", up);
+                      const nx = Number(box.dataset.nx ?? origX);
+                      const ny = Number(box.dataset.ny ?? origY);
+                      if (Math.abs(nx - origX) > 0.005 || Math.abs(ny - origY) > 0.005) {
+                        run(() => api.setTransform(clip.clip_id,
+                          { x: nx, y: ny, scale: t.scale, rotation: t.rotation, opacity: t.opacity },
+                          "GUI 拖 PiP"), "PiP 位置已改（重渲染后生效）");
+                      }
+                    };
+                    window.addEventListener("pointermove", move);
+                    window.addEventListener("pointerup", up);
+                  }}
+                />
+              );
+            })()}
           {renderJob && (
             <div className="render-progress">
               渲染中：{renderJob.step}（{renderJob.done}/{renderJob.total}）
@@ -1702,32 +1726,74 @@ export default function App() {
                 />
                 <span>{clip.speed}x</span>
               </div>
-              {activeTimelineTracks
-                .filter((t) => t.kind === "video").slice(1)
-                .some((t) => t.clip_ids.includes(clip.clip_id)) && (
-                <>
-                  <div className="meta">叠加轨（PiP）位置/尺寸：</div>
-                  {(["x", "y", "scale"] as const).map((key) => {
-                    const def = key === "scale" ? 0.3 : 0.68;
-                    const val = Number(clip.transform?.[key] ?? def);
-                    return (
-                      <div className="row" key={key}>
-                        <label>{{ x: "水平", y: "垂直", scale: "尺寸" }[key]}</label>
-                        <input
-                          type="range" min={0} max={1} step={0.02} value={val}
-                          onChange={(e) =>
-                            run(() => api.setTransform(
-                              clip.clip_id,
-                              { x: 0.68, y: 0.68, scale: 0.3, ...clip.transform, [key]: Number(e.target.value) },
-                              "GUI 调 PiP"), "位置已改（重渲染后生效）")
-                          }
-                        />
-                        <span>{val.toFixed(2)}</span>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
+              {/* GUI-04 04-06: Transform Inspector.
+                  * Core-authoritative: no React state; every value is
+                  * read from clip.transform on each render. On input
+                  * the only action is api.setTransform → Mutation Gate
+                  * → Core → preview invalidation → re-render. The
+                  * Inspector is an edit entry + viewer, NOT the owner
+                  * of transform state.
+                  *
+                  * Numeric contract (clip-transform.ts):
+                  *   x, y ∈ [-1, 1] (normalized center offset)
+                  *   scale ∈ [0.1, 3]   (1 = canvas-fit)
+                  *   rotation ∈ [-180, 180] (degrees)
+                  *   opacity ∈ [0, 1]    (display only, no edit control here)
+                  *
+                  * Reset: compare to default → if equal, zero mutation;
+                  * otherwise one mutation to defaults.
+                  */}
+              <div className="meta">位置/尺寸（2D 变换，x/y ∈ [-1,1] 中心偏移，scale 1.0 = 满画布）：</div>
+              {(() => {
+                const t = readClipTransform(clip);
+                const setOne = (field: keyof ClipTransform, raw: string) => {
+                  const v = validateTransformInput(field, raw);
+                  if (!v.ok) {
+                    setStatus({ ok: false, text: v.error });
+                    return;
+                  }
+                  // Build the new transform with only this field
+                  // changed; Core merges via dict assignment.
+                  const next: Record<string, number> = {
+                    x: t.x, y: t.y, scale: t.scale,
+                    rotation: t.rotation, opacity: t.opacity,
+                  };
+                  next[field as string] = v.value;
+                  run(() => api.setTransform(clip.clip_id, next,
+                    `GUI 调 ${field}`), `${field} 已改（重渲染后生效）`);
+                };
+                return (["x", "y", "scale", "rotation"] as const).map((field) => {
+                  const b = TRANSFORM_BOUNDS[field];
+                  const value = t[field];
+                  return (
+                    <div className="row" key={field}>
+                      <label>{{
+                        x: "水平 X", y: "垂直 Y",
+                        scale: "尺寸", rotation: "旋转",
+                      }[field]}</label>
+                      <input
+                        type="range"
+                        min={b.min} max={b.max} step={b.step}
+                        value={value}
+                        onChange={(e) => setOne(field, e.target.value)}
+                      />
+                      <span>{formatTransformField(field, value)}</span>
+                    </div>
+                  );
+                });
+              })()}
+              <div className="row">
+                <button onClick={() => {
+                  // Reset: compare to default. If equal, zero
+                  // mutation (req 6: unchanged input → zero mutation).
+                  const t = readClipTransform(clip);
+                  if (isDefaultTransform(t)) return;
+                  run(() => api.setTransform(
+                    clip.clip_id,
+                    { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+                    "GUI reset transform"), "已重置 2D 变换");
+                }}>重置</button>
+              </div>
               <div className="row">
                 <button onClick={() => {
                   // R6.1-A: frame-domain intent. See onTrimHead
