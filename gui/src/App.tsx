@@ -2275,17 +2275,33 @@ export default function App() {
           // where the clip lived on the wrong track.
           //
           // GUI-05-A (A4 + L-7): capture the generation at commit
-          // time so the rejection-flash timeout is race-safe. Capture
-          // the attempted frame BEFORE clearing so we can restore it
-          // on rejection.
+          // time so the rejection-flash timeout is race-safe.
+          //
+          // GUI-05-R1 (R1-A + R1-B): visual stability of the SUCCESS
+          // path and use of the canonical pointerup frame.
+          //   R1-A invariant: A → B(preview) → pointerup → while
+          //     mutation pending KEEP B visually → refresh → clear
+          //     preview only after Core state is refreshed → B
+          //     remains visually continuous. No intermediate repaint
+          //     at origin A.
+          //   R1-B invariant: attemptedFrame is the CANONICAL pointerup
+          //     frame (newStartFrame), NOT a local variable mutated
+          //     from inside a setState updater (React anti-pattern:
+          //     StrictMode runs the updater twice; the local var
+          //     may end up stale or null).
           const genAt = dragGenerationRef.current;
-          let attemptedFrame: number | null = null;
-          setDragPreview((p) => {
-            if (!(clipId in p)) return p;
-            attemptedFrame = p[clipId];
-            const { [clipId]: _drop, ...rest } = p;
-            return rest;
-          });
+          const attemptedFrame = newStartFrame;
+
+          // R1-A: keep dragPreview[clipId] at attemptedFrame during
+          // the pending mutation. displayProject reads from
+          // dragPreview when set, so the clip visually stays at B
+          // (the new position) until refresh commits the new Core
+          // state. We must NOT clear synchronously here — the old
+          // code did `setDragPreview((p) => { ... return rest; })`
+          // which made displayProject fall back to Core's old A
+          // position during the await, producing a visible
+          // spring-back (B → A → B).
+          setDragPreview((p) => ({ ...p, [clipId]: attemptedFrame }));
 
           const moveFn = newTrackId
             ? () => api.move(clipId, newStartFrame, "GUI 跨轨拖动", newTrackId)
@@ -2294,22 +2310,29 @@ export default function App() {
 
           const success = await run(moveFn, okMsg);
           if (success) {
-            // success path: dragPreview already cleared, refresh
-            // repaints Core. L-5 invariant: exactly 2 DOM mutations on
-            // style.left during the gesture (B at flash start, A at
-            // refresh commit). No intermediate frame.
+            // R1-A success path: clear dragPreview[clipId] AFTER
+            // refresh. Core is now at the new position (B), so
+            // displayProject continues to render at B after we
+            // remove the preview entry — visually continuous.
+            // We still gate by generation so a newer gesture's
+            // own dragPreview[clipId] entry (if any) is preserved.
+            if (dragGenerationRef.current === genAt) {
+              setDragPreview((p) => {
+                if (!(clipId in p)) return p;
+                const { [clipId]: _, ...rest } = p;
+                return rest;
+              });
+            }
             return;
           }
 
           // REJECTION PATH (A2 + A4 + L-5):
-          // 1) re-apply dragPreview so the clip stays at the
-          //    attempted position visually.
+          // 1) dragPreview[clipId] is already at attemptedFrame
+          //    (we set it above before the await). No need to
+          //    re-apply.
           // 2) apply `.clip.rejected` for --yroll-reject-duration.
           // 3) schedule a race-safe clear that no-ops if a newer
           //    gesture has started since (gen != genAt).
-          setDragPreview((p) =>
-            attemptedFrame != null ? { ...p, [clipId]: attemptedFrame } : p,
-          );
           setDragRejected((p) => ({ ...p, [clipId]: true }));
           const REJECT_MS = 600;
           window.setTimeout(() => {

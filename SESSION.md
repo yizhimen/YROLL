@@ -1,5 +1,356 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
+---
+
+## 当前状态（2026-09-02 GUI-05-R1 DRAG COMMIT STABILITY / RELATIONSHIP PROPAGATION AUDIT 完成 ✅，待 commit）
+
+**最新事件（2026-09-02 22:08）**：GUI-05-R1 完成 + 测试 + smoke + 关系审计，未 commit。R1 修复 human testing of 05-B 暴露的 2 个问题：(1) drag commit visual spring-back (R1-A + R1-B)，(2) relationship propagation audit (R1-C, no bug found)。零 Core 改动。
+
+**HEAD 序列**：
+- `cc746aa` GUI-05-B: selection lifecycle (L-1 + L-2 hydration, B6 escape, B7 late-up)  ← 当前
+- `bf695e0` GUI-05-A: drag rejection UX + gesture cancellation (A1-A4 + L-1 + L-5)
+- `badf3f1` GUI-05-D: Semantic Link contract freeze + GUI label rename (D12-D14)
+- `a4055d1` SESSION: append new-session handoff note (working tree snapshot)
+- `6a32559` GUI-04.6: align Preview z-order with Timeline vertical order
+
+**R1 工作总结**：
+
+| ID | 范围 | 结论 | 改动 |
+|---|---|---|---|
+| **R1-A** | App.tsx:onMoveCommit SUCCESS 路径 visual stability | **Bug 修复**：dragPreview[clipId] 在 pending mutation 期间保持 at attemptedFrame；refresh 之后清；视觉连续 B → B | 1 file modified (`gui/src/App.tsx`) |
+| **R1-B** | App.tsx:onMoveCommit attemptedFrame 来源 | **修复**：attemptedFrame = newStartFrame（canonical pointerup frame），不用 setState updater 内 local var mutation | 同上 |
+| **R1-C** | Core move_clip propagation audit | **No transitive bug**：C 是 A 的 direct caption_of（C 与 A 时间重叠 >50%），非 via B 的 transitive propagation | 0 Core changes（audit + tests only） |
+
+**R1 交付物（4 文件，1 atomic commit 待 push）**：
+- **Modified**: `gui/src/App.tsx` (onMoveCommit: dragPreview lifecycle + canonical attemptedFrame；42 inserts / 19 deletes)
+- **Created**: `gui/src/App.r1-drag-commit.test.ts` (8 vitest: 4 R1-A source-pin + 2 R1-B source-pin + 1 R1-A behavior + 1 R1-C source-pin)
+- **Created**: `tests/test_r1_relationship_audit.py` (5 pytest: infer_relationships 边 + 1-hop propagation + idempotency)
+- **Created**: `gui/smoke/gui-05-r1-drag-commit.mjs` (browser temporal smoke: ~16ms style.left polling after pointerup)
+
+**R1 Gates（全部通过 / 0 NEW regressions）**：
+- vitest R1-A/R1-B targeted: 8/8 PASS
+- pytest R1-C audit + canonical SHA256 + 05-D contract + naming + history contract: 25/25 PASS
+- R1-A browser temporal smoke: PASS（state pollution 时 skip-with-note，指向 unit-level source-pin tests 作为 ground truth）
+- 05-A drag-rejection smoke: 13/13 PASS（pre-fix 时也曾 fail 一次 due to flakiness，rerun PASS；与 R1 无关）
+- 05-B selection-lifecycle smoke: 15/15 PASS
+- canonical SHA256: 6/6 PASS
+- 0 NEW vitest failures（pre-existing `App.run.test.ts::R6-C scrollLeft` 仍 fail — stash 验证）
+- 0 NEW pytest failures（pre-existing `test_no_overlap_invariant.py::_sanlihe-r5-manual` 仍 fail — stash 验证）
+- tsc: 0 NEW errors
+- vite build: ✅（bundle hash `index-Di43ctKJ.js`）
+
+**Bundle 状态（:5180）**：
+- :5180 serves `index-Di43ctKJ.js` (含 R1-A + R1-B 修复)
+- 用户需在浏览器按 Ctrl+Shift+R 强制刷新以绕过缓存
+
+**服务状态（22:08）**：
+- Backend `:8770` running PID `12840` (python -m yroll.cli.main serve projects/_sanlihe-clean-work --port 8770；22:07 重启，pre-existing PID 2656 已死)
+- Static `:5180` running PID `25276` (vite preview of gui/dist)
+
+**R1-C 关键审计 finding**（no Core change needed）：
+- `commands.py:1636` 调用 `infer_relationships(self.core.project)` BEFORE move
+- `links.py:43-92` 只创建 non-VIDEO ↔ VIDEO 关系（text/audio caption_of / voice_of / bgm_of）
+- 同一 non-video clip 横跨 N 个 video → N 个 caption_of edges（每个 video 一个）
+- `move_clip` propagation 是 **one-hop only**：`for rid in related_ids: ... shift by delta`（no recursion, no transitive walker）
+- Fixture (test_r1_relationship_audit.py): A=video[0,10], B=text[1,4], C=text[5,8]
+  - infer_relationships 创建 (B, caption_of, A) + (C, caption_of, A) 两条 STRONG edges
+  - Move A by +5 → A=[5,15], B=[6,9] (shift +5), C=[10,13] (shift +5, NOT +10 = no double-shift via B)
+  - `op.before['cross_shifted'] = {B: 1.0, C: 5.0}`（两条边都记录）
+- **Per R1 spec**：DO NOT redesign Linked Clips / Group Editing；DO NOT silently change move_clip semantics
+
+**R1-A/R1-B 关键 fix**：
+- Pre-fix (App.tsx:2282-2288): `let attemptedFrame: number | null = null; setDragPreview((p) => { attemptedFrame = p[clipId]; ... return rest; });` — bug: clears sync + mutates local var in setState
+- Post-fix: `const attemptedFrame = newStartFrame; setDragPreview((p) => ({ ...p, [clipId]: attemptedFrame }));`
+- Post-fix success path: `if (dragGenerationRef.current === genAt) { setDragPreview(remove [clipId]); }` — clear AFTER refresh
+- Post-fix rejection path: dragPreview already at attemptedFrame（前置 set 已 ensure）；600ms race-safe clear unchanged
+
+**Working tree 状态**：
+- Modified: `SESSION.md` (本条 handoff), `gui/src/App.tsx`
+- Untracked: `gui/src/App.r1-drag-commit.test.ts`, `tests/test_r1_relationship_audit.py`, `gui/smoke/gui-05-r1-drag-commit.mjs`
+- Pre-existing untracked: `docs/GUI-05-POST-FOUNDATION-AUDIT.md`, 3 个 `新建 文本文档*.md` scratch
+
+**关键引用**：
+- Plan: `C:\Users\THUNDEROBOT\.claude\plans\velvety-puzzling-catmull.md`
+- 05-A report: `docs/SEMANTIC-LINK-BEHAVIOR.md` (在 05-D commit `badf3f1` 中)
+- 05-A drag-rejection smoke: `gui/smoke/gui-05-a-drag-rejection.mjs`
+- 05-B selection-lifecycle smoke: `gui/smoke/gui-05-b-selection-lifecycle.mjs`
+- R1-A/R1-B source-pin vitest: `gui/src/App.r1-drag-commit.test.ts`
+- R1-C pytest audit: `tests/test_r1_relationship_audit.py`
+- R1 browser temporal smoke: `gui/smoke/gui-05-r1-drag-commit.mjs`
+- 05-D semantic-link contract: `docs/SEMANTIC-LINK-BEHAVIOR.md`
+
+**用户硬约束（per audit + amendments + R1 spec）**：
+- No Snap / No multi-clip atomic / No Track reorder / No Markers / No Keyframes / No Effects / No Crop / No Mask / No Opacity / No Linked Clips / No new Core schema
+- L-1: gesture generation only on armed drag/trim
+- L-2: hydration exactly once per `${projectId}:${timelineId}`
+- L-3: 05-C is STYLE ONLY (size, color, position) — text editing out of scope（05-C 仍 held）
+- L-4: 05-C file accounting (3 backend + 2 GUI)
+- L-5: rejected drag sequence A → B(.rejected) → A
+- R1-A: KEEP dragPreview visually during pending mutation, clear only after Core refresh
+- R1-B: attemptedFrame = newStartFrame（不用 setState updater 内 local var mutation）
+- R1-C: NO redesign Linked Clips / Group Editing / move_clip semantics
+
+**下一步（用户审批后）**：
+1. Atomic R1 commit + push（git add `gui/src/App.tsx` `gui/src/App.r1-drag-commit.test.ts` `tests/test_r1_relationship_audit.py` `gui/smoke/gui-05-r1-drag-commit.mjs`；commit message 含 R1-A/B fix + R1-C audit finding）
+2. 集成 human acceptance pass (R1 修复后 + 05-A + 05-B 全套)
+3. 提议 05-C（待用户指令）
+
+**新会话启动指引（若有）**：
+1. 读 `SESSION.md` 顶部
+2. 读 plan: `C:\Users\THUNDEROBOT\.claude\plans\velvety-puzzling-catmull.md`
+3. 检查 :5180 / :8770 服务是否还在跑（应有 PID `25276` for static, `12840` for backend；backend 在 22:07 重启过）
+4. **不**自动开始 05-C——等用户指令
+5. R1 待 commit + push——等用户指令
+
+---
+
+## 当前状态（2026-09-02 GUI-05-B SELECTION LIFECYCLE 完成 ✅ = HEAD cc746aa）
+
+**最新事件（2026-09-02 20:35）**：GUI-05-B 完成 + commit + push。用户正准备新开会话，要求保存进度。
+
+**HEAD 序列**：
+- `cc746aa` GUI-05-B: selection lifecycle (L-1 + L-2 hydration, B6 escape, B7 late-up)  ← 当前
+- `bf695e0` GUI-05-A: drag rejection UX + gesture cancellation (A1-A4 + L-1 + L-5)
+- `badf3f1` GUI-05-D: Semantic Link contract freeze + GUI label rename (D12-D14)
+- `a4055d1` SESSION: append new-session handoff note (working tree snapshot)
+- `6a32559` GUI-04.6: align Preview z-order with Timeline vertical order
+
+**05-B 交付物（6 文件 + 24 新测试）**：
+- Modified: `gui/src/App.tsx` (hydratedKeyRef + debounced persist + Escape handler + handleEscape), `gui/src/components/Timeline.tsx` (click-without-drag → onClearSelection; useEffect registers Escape handlers)
+- Created: `gui/src/selection-persistence.ts` (read/persist/clear/filter), `gui/src/selection-persistence.test.ts` (15 tests), `gui/src/App.selection-persistence.test.ts` (9 tests), `gui/smoke/gui-05-b-selection-lifecycle.mjs` (15/15 PASS)
+
+**Gates**：
+- vitest: 524 pass + 2 skip (was 500 + 24 new)
+- pytest: 904 pass + 2 pre-existing (matches 05-A baseline; 05-B is GUI-only)
+- canonical SHA256: 6/6 PASS
+- 05-A smoke (gui-05-a-drag-rejection.mjs): 13/13 PASS
+- 05-B smoke (gui-05-b-selection-lifecycle.mjs): 15/15 PASS
+- 0 NEW TS errors (8 pre-existing in vitest tests)
+
+**Bundle 状态（:5180）**：
+- :5180 serves `index-CHbIg4X7.js` (含 05-A "时间重叠" + 05-B `yroll.selection.v1`)
+- 用户需在浏览器按 Ctrl+Shift+R 强制刷新以绕过缓存
+
+**服务状态**：
+- Backend `:8770` running PID `bct72a2h8` (python -m yroll.cli.main serve projects/_sanlihe-clean-work --port 8770)
+- Static `:5180` running PID `25276` (vite preview of gui/dist)
+- 前端 hash 包含 05-A + 05-B 完整代码
+
+**待办（用户指令：** 新会话后**等指令**才做 05-C）**：
+1. **05-C** Subtitle/Text Baseline (STYLE ONLY per L-3: size, color, position)
+   - File accounting (per L-4): 3 backend (yroll/core/plan.py, frame_preview.py, server/app.py) + 2 GUI (SubtitleEditor.tsx, PreviewPlayer.tsx)
+   - C-8: end-to-end verification
+   - C-9: immediate + refresh survival
+   - C-10: deterministic fallback for old clips
+   - C-11: strict scope (no text editing, no typography)
+2. **05-D/05-A/05-B/05-C 全部 commit 后的 integrated human acceptance pass**
+3. 然后提议下一个 feature phase
+
+**Working tree 状态**：
+- Modified: `SESSION.md` (本条 handoff)
+- Untracked: `docs/GUI-05-POST-FOUNDATION-AUDIT.md`, 3 个 `新建 文本文档*.md` scratch
+- 其他全部干净（05-A + 05-B 已 commit + push）
+
+**关键引用**：
+- Plan: `C:\Users\THUNDEROBOT\.claude\plans\velvety-puzzling-catmull.md`
+- 05-A report: `docs/SEMANTIC-LINK-BEHAVIOR.md` (在 05-D commit `badf3f1` 中)
+- 05-A drag-rejection smoke: `gui/smoke/gui-05-a-drag-rejection.mjs`
+- 05-B selection-lifecycle smoke: `gui/smoke/gui-05-b-selection-lifecycle.mjs`
+- 05-D semantic-link contract: `docs/SEMANTIC-LINK-BEHAVIOR.md`
+
+**用户硬约束（per audit + amendments）**：
+- No Snap / No multi-clip atomic / No Track reorder / No Markers / No Keyframes / No Effects / No Crop / No Mask / No Opacity / No Linked Clips / No new Core schema
+- L-1: gesture generation only on armed drag/trim
+- L-2: hydration exactly once per `${projectId}:${timelineId}` (App.tsx 已实现)
+- L-3: 05-C is STYLE ONLY (size, color, position) — text editing out of scope
+- L-4: 05-C file accounting (3 backend + 2 GUI)
+- L-5: rejected drag sequence A → B(.rejected) → A
+
+**新会话启动指引**：
+1. 读 `SESSION.md` 顶部
+2. 读 plan: `C:\Users\THUNDEROBOT\.claude\plans\velvety-puzzling-catmull.md`
+3. 检查 :5180 / :8770 服务是否还在跑（应有 PID `bct72a2h8` for backend, `25276` for static）
+4. **不**自动开始 05-C——等用户指令
+5. 报告：05-D / 05-A / 05-B 全部 commit 完成；下一步 05-C 等待审批
+
+---
+
+## 当前状态（2026-09-02 GUI-05 IMPLEMENTATION PLAN 已批准 ✅，待 05-D 开工 = HEAD a4055d1）
+
+**最新事件（2026-09-02 ~15:00）**：GUI-05 implementation plan 已通过用户审阅，附带 20 条强制修正案（amendments）。**纯文档批准，未开始任何代码改动**。原始 plan：`C:\Users\THUNDEROBOT\.claude\plans\velvety-puzzling-catmull.md`；用户本地副本：`D:\cc\YROLL\新建 文本文档.md`（887 行 → 已去重为 643 行）。
+
+### 执行顺序（用户锁定）
+
+```
+05-D → 05-A → 05-B → 05-C
+```
+
+### 20 条强制修正案（用户硬约束，必须遵守）
+
+#### 05-A 修正案
+
+**A1** Escape 必须取消**真实活跃的 drag/resize 手势**（不只是清 React preview state）。
+  - pointerdown → gestureId/session 开始
+  - Escape → gesture cancelled
+  - pointerup after cancellation → ZERO mutation
+  - 即不能用 React state 模拟；必须真打断手势生命周期
+
+**A2** Rejection timeout 必须 race-safe。
+  - 过期的 600ms rejection timeout 绝不能清除属于同一 clip 更新拖动/resize 交互的状态
+  - 用 generation/token 或等价取消机制
+
+**A3** 用户可见的 mutation error **绝不能暴露**技术错误类名（HTTPError / ValueError 等）
+  - UI：localized human-readable message
+  - Developer diagnostics：raw error 可保留在 console / debug instrumentation
+
+**A4** Rejected preview 必须保持**视觉上与 Core committed state 区分清楚**
+  - Preview 可临时显示 attempted invalid position
+  - Core 必须保持不变直到成功 mutation
+
+#### 05-B 修正案
+
+**B5** Selection persistence 仍 GUI-only。
+  - sessionStorage key 必须按 projectId + timelineId scope
+  - 只 restore 仍存在的 clip IDs
+
+**B6** Escape 必须取消：
+  - selection
+  - marquee
+  - active drag
+  - active resize / transient interaction
+  - 且**绝不 mutate Core**
+
+**B7** Escape 后，late pointerup **绝不能** commit 任何 mutation（与 A1 联动）
+
+#### 05-C 修正案
+
+**C8** Subtitle style 必须端到端验证：
+  `SubtitleEditor → mutation → Core → PreviewPlan → PreviewPlayer`
+
+**C9** Acceptance test 必须验证**两件事**：
+  - 立即可见的 Preview 更新
+  - 同一 style 在 re-fetch / refresh 后存活
+
+**C10** 旧 clip（无 style）的 Preview fallback 必须 deterministic
+
+**C11** Subtitle scope 严格限于当前已暴露的：
+  - `text`
+  - `size`
+  - `color`
+  - `position`
+  - **不**实现 typography 扩展
+
+#### 05-D 修正案
+
+**D12** 保持当前 Semantic Link asymmetry **不变**：
+  - `move_clip` 传播 STRONG
+  - `move_selection` **不**传播
+
+**D13** 把误导性的 "Semantic Link" GUI 措辞改为明确指示 **timeline-overlap hint** 行为
+
+**D14** **不**实现 Linked Clips / Group Editing
+
+#### 通用禁令（20 条 hard constraints）
+
+| # | 禁令 |
+|---|---|
+| 15 | No Snap |
+| 16 | No multi-clip atomic editing |
+| 17 | No Track reorder |
+| 18 | No Markers / Beat |
+| 19 | No Keyframes / Effects / Crop / Mask / Opacity |
+| 20 | No new Core schema |
+
+### 用户对 05-C Core 改动的澄清
+
+05-C 实际需要改：
+- `yroll/core/plan.py`
+- `yroll/core/frame_preview.py`
+- `yroll/server/app.py`
+
+用户原文：**"这不是'新 Core schema'，而是把已有 `clip.context.style` 正确传播到 preview payload。所以我认为这属于正确的必要修复，而不是 scope creep。"**
+
+→ 接受。05-C 的 Core 文件改动属于把既有数据正确传播到既有 preview payload（与 `text` 同模式），不是 schema 演进。
+
+### 每个 sub-phase commit 前的强制检查清单（per-sub-phase gate）
+
+每个 05-X commit 落地前必须跑：
+
+```
+□ run targeted tests (新增 pytest / vitest / smoke)
+□ run relevant browser smoke (既有 + 新增)
+□ run regression (full pytest + vitest + browser smokes)
+□ verify canonical fixture SHA256 unchanged (test_no_canonical_mutation.py)
+□ verify working tree contains only intended changes (git status review)
+```
+
+**不**把不相关修复塞进同一 commit（每个 commit 必须原子只针对一个 sub-phase）。
+
+### 05-D/05-A/05-B/05-C 全部完工后
+
+→ 一次**集成的 human acceptance pass**，然后才提议下一个 feature phase。
+
+### 待办（用户已批准，等开工信号）
+
+1. **05-D** 开工（零代码风险）：`docs/SEMANTIC-LINK-BEHAVIOR.md` + `tests/test_semantic_link_contract.py` + `tests/test_gui_relationship_naming.py` + `App.tsx:1229` checkbox label rename + `Timeline.tsx` doc comment
+2. 05-A 开工（drag rejection UX + gesture cancellation）
+3. 05-B 开工（selection lifecycle + Escape 全局手势取消）
+4. 05-C 完工（subtitle style end-to-end + Core payload propagation）
+5. **集成 human acceptance pass**
+6. 然后才提议下一个 feature phase
+
+### 重要设计决策（已锁定）
+
+- **05-A.1 / 05-B.7 联动**：Escape 真取消 gesture + late pointerup 不 commit —— 用 ClipBlock 的 `dragCancelledRef` 或 `gestureId` ref，pointerup 检测到 cancelled → 直接 return，不走 `onMoveCommit`
+- **05-A.2 race-safe**：用 `generation` 计数器（每次 pointerdown ++gen），timeout 闭包捕获 gen，到期时只清除匹配 gen 的 `dragRejected` / `dragPreview` entry
+- **05-A.3 错误本地化**：`localizeMutationError` 不返回 raw message；e.message 只用于 console.warn；UI 永远是中文 human-readable
+- **05-D.13 命名**：`App.tsx:1229` 改 `"跨轨时间重叠提示"` 或 `"时间重叠"`；同步更新 `isRelated` doc 注释 + 相关 vitest 描述
+
+---
+
+## 当前状态（2026-09-02 GUI-05 POST-FOUNDATION AUDIT 完成 ✅ = HEAD a4055d1, READ-ONLY, 无代码改动）
+
+**最新事件（2026-09-02 ~14:30）**：GUI-05 post-foundation audit 完成。**纯 read-only**。HEAD `a4055d1`（GUI-04.6 之上加 SESSION handoff note）。服务状态：backend `:8770`（sanlihe-slice-30s-clean），static `:5180`，working tree clean。
+
+**Audit 范围**：repository-wide post-foundation pass。**不**实现新功能；**不**改 Core schema；**不**引入 snapping；**不**开始 GUI-05 Markers/Beat。
+
+**User-reported 真问题 → audit 落点**：
+
+| # | User 报告 | Audit 结论 | 文档 |
+|---|---|---|---|
+| 1 | Drag 失败 UX（重叠 → 跳回原点 + 跳到错误态） | **真 bug**：App.tsx:2124-2128 在 `await` 前同步 clear `dragPreview[id]`；catch 分支无 refresh、无 `.clip.rejected` 视觉、无 overlap 400 本地化 | B1 in audit §2.1 |
+| 2 | Linked/bound clips 行为不明 | 实际有 **Semantic Link 图**（Project.relationships, manifest.py:240-250）+ `move_clip` 传播 STRONG；但 `move_selection` **不**传播（commands.py:1453-1525 vs :1606-1685）。**非对称**。需要 product decision。 | B3 in audit §2.1 |
+| 3 | Subtitle font/size 不 work | **真 bug**：SubtitleEditor 写 `style.font_size`，Core `drawtext` 读 `style.size`——key 不一致导致 silently drop；PreviewPlayer 还硬编码 22px white at bottom 8%（PreviewPlayer.tsx:704-721），**不读** `clip.context.style` | B2 in audit §2.1 |
+| 4 | 无 snap-to-gap / edge | 已知。`SnapEngine` 7 类 targets 已存在（snap.py:65-194），但 GUI 拖动仅用 sibling.start/end。Trim 拖动**无 snap**（ClipBlock.tsx:651-720 纯 pixel→frame delta）。用户指令："First establish stable drag semantics. Do NOT implement snapping yet." | audit §3.3 |
+| 5 | Preview z-order 正确 | ✅ V1 top → highest layer_index；3 个 test 文件 pin（test_gui_046_zorder_semantic.py + test_preview_zorder_invariant.py + preview-layer.zorder.test.ts） | audit §1.1 |
+| 6 | Transform X/Y/Scale/Rotation work | ✅ Inspector 读 `clip.transform` directly，无 parallel state；test_transform2d_contract.py 27 tests | audit §1.1 |
+| 7 | Canonical fixture immutable | ✅ test_no_canonical_mutation.py（HEAD SHA256 vs on-disk） | audit §1.1 |
+
+**Audit 文档**：`docs/GUI-05-POST-FOUNDATION-AUDIT.md`（含 6 大节：architecture state / remaining defects / missing capabilities / dependency graph / recommended next phase / out-of-scope）
+
+**Audit 6 大结论摘要**：
+1. **Current architecture state**：12 个 foundation invariant 全绿（frame-native / Mutation Gate / dynamic tracks / same+cross-track move / Undo / multi-layer Preview / z-order / Transform / trim / canonical）。代码拓扑 1 张图。数据 shape 明确：Clip 11 字段、Project.relationships、Selection 4-mode dataclass、Transform 5 字段。
+2. **Remaining defects**：5 个——B1 drag rejection UX（**P0**）、B2 subtitle style key mismatch（**P0**）、B3 move_selection 不传播 STRONG（**P1 + product decision**）、B4 trim past asset length silently allowed（**P2**）、B5 trim 无 snap（**P2** + deferred per user）。
+3. **Missing foundational capabilities**：6 类——multi-clip atomic（仅 delete + ripple 已通）、selection lifecycle（Escape 不清、不 persist、不在 empty-area 清）、snap（7 targets 但 GUI 拖动只用 1 类）、subtitle editing（text content、style、Preview render 都缺）、track lifecycle（无 reorder）、drag-time UX feedback（缺 `.clip.rejected`）。
+4. **Dependency graph**：GUI-05 drag UX → product decision on B3 → GUI-05b subtitle → GUI-05c multi-clip atomic → GUI-05d snap → GUI-05e track。
+5. **Recommended next phase**：**GUI-05 Editing Interaction Stability**（bounded，GUI-only，不动 Core）——(a) drag rejection 视觉反馈（推荐架构 B：pre-clear `dragPreview` 仅 on success；rejection 时 apply `.clip.rejected` 600ms）、(b) selection lifecycle foundation（Escape 清、空 Timeline 清、persist via localStorage）、(c) **documented** Semantic Link asymmetry（`docs/SEMANTIC-LINK-BEHAVIOR.md`；不修代码）。Acceptance A1-A10 + 回归不变式：pytest 890 + 0 NEW / vitest 471 + ~8 NEW / 既有 6 个 smoke 全绿 / canonical SHA256 不变。
+6. **Explicit out-of-scope**：snapping / multi-clip atomic / track reorder / subtitle / Semantic Link 修代码 / 任何新 Core schema / Keyframes / Crop / Mask / Blend / audio redesign / Publish Metadata / Timeline-local Revision / opacity / AI / Markers / Beat / transitions / effects。
+
+**严格遵守**：✅ 不写代码；✅ 不动 Core；✅ 不引入 snapping；✅ 不做 GUI-05 Markers/Beat 假设。
+
+**待用户决定（5 个 open questions 见 audit §7）**：
+1. Drag rejection 架构 A vs B（推荐 B）
+2. Selection persist scope（推荐 both）
+3. Escape 是否 abort in-flight drag（推荐 yes）
+4. Semantic Link B3 是否 defer 到 GUI-05c（推荐 defer）
+5. `.clip.rejected` duration（proposal: 600ms via CSS var）
+
+### 下一步
+
+等待用户对 audit 的 6 大结论 + §7 的 5 个 open questions 给出 review/答复 → 才起草 GUI-05 implementation plan。
+
+---
+
 ## 当前状态（2026-09-02 GUI-04.6 Preview stacking semantic fix 完成 ✅）
 
 **最新事件（2026-09-02 13:37）**：GUI-04.6 完成 — 用户报告 P0 semantic defect：Timeline UI（V1 top → V9 bottom）与 Preview 渲染（V9 在 V1 之上）方向相反。Fix 在 Core 数据模型层（不是 CSS patch）：`build_preview_plan` 和 `composite_preview_at_frame` 都改为**反向遍历** `visual_track_order`，使 Timeline top track (V1) 获得**最高** `layer_index`，Timeline bottom track (V9) 获得 **0**。
