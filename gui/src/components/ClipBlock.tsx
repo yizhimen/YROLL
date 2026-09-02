@@ -127,6 +127,13 @@ interface Props {
     srcStartFrame: number | null,
     srcEndFrame: number | null,
   ) => void;
+  // R1-R3 fix: called when a drag ends WITHOUT producing a mutation
+  // (willMutate=false — drag clamped to 0 frames). App's dragPreview
+  // for this clip must be cleared so the visual doesn't drift out of
+  // sync with Core (e.g., preview stays at last pointermove position
+  // forever, making it look like the move succeeded when Core is
+  // unchanged).
+  onDragClear?: (clipId: string) => void;
   onDropOnTrack?: (clipId: string, trackId: string) => void;
   // GUI-05-A (A4): parent's current view of whether THIS clip's
   // last move/trim was rejected by Core. When true, the parent has
@@ -705,7 +712,16 @@ export default function ClipBlock({
       // ZERO mutations when unchanged (req. 9, 10). Otherwise
       // EXACTLY ONE api.move via onMoveCommit (req. 4).
       if (!upLog.willMutate) {
-        // unchanged drag → zero mutations
+        // R1-R3 fix: drag clamped to 0 frames (or no actual change).
+        // The dragPreview was set by onDragMove during pointermove;
+        // since onMoveCommit is NOT called here, the preview would
+        // persist at the last pointermove position. That stale
+        // preview causes the visible clip to drift out of sync
+        // with Core (Core is still at origin, but GUI shows preview
+        // position). Clear dragPreview immediately so the GUI's
+        // rendered position equals Core's position. No mutation,
+        // no rejection timeout.
+        if (onDragClear) onDragClear(clip.clip_id);
         return;
       }
       onMoveCommit(clip.clip_id, committedFrame, hitTrackId ?? undefined);

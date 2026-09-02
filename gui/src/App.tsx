@@ -2248,6 +2248,29 @@ export default function App() {
         }}
         onDragMove={onDragMove}
         dragGhost={dragGhost}
+        // R1-R3 fix: when a drag ends with willMutate=false (drag
+        // clamped to 0 frames — no mutation will be emitted), clear
+        // dragPreview for that clip so the visual doesn't drift out
+        // of sync with Core (the preview was set during pointermove
+        // but never cleared because onMoveCommit is not called for
+        // no-op drags).
+        onDragClear={(clipId) => {
+          setDragPreview((p) => {
+            if (!(clipId in p)) return p;
+            const { [clipId]: _, ...rest } = p;
+            return rest;
+          });
+          setDragGhost((p) => {
+            if (!(clipId in p)) return p;
+            const { [clipId]: _, ...rest } = p;
+            return rest;
+          });
+          setDragClampBoundary((p) => {
+            if (!(clipId in p)) return p;
+            const { [clipId]: _, ...rest } = p;
+            return rest;
+          });
+        }}
         // GUI-05-A (A2 + A4): per-clip `rejected` flag set to the set
         // of clip ids whose last move/trim was rejected. The Timeline
         // applies `.clip.rejected` while the flag is set. Auto-clears
