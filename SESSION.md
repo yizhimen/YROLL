@@ -1,6 +1,141 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-09-02 GUI-04 04-04 Drag Interaction Consolidation 完成 ✅）
+## 当前状态（2026-09-02 GUI-04 04-05 Preview Layer Model 完成 ✅ = HEAD 827159a）
+
+**最新事件（2026-09-02 08:51）**：GUI-04 batch 04-05 完成。用户硬约束已遵守：
+- ✅ **PiP heuristic（V2=30% / V3=20%）完全删除**——composite-multilayer.ts 的 `defaultPiPStyle` 和 `splitLayersForPiP` 被 `preview-layer.ts` 的 transform-based helpers 取代
+- ✅ **Clip.transform 是 sole semantic source**——每个 visual layer 用 `resolveLayerTransform(layer)` 解析，再用 `layerCssTransform()` 转 CSS
+- ✅ **Track identity ≠ visual size**——V1/V2/V3 都是 layer/z-order；没有 track-index 缩放
+- ✅ **Stable z-order**——`zOrderedLayers()` 按 `layer_index` 升序排序；纯 deterministic
+- ✅ **Hidden track excluded**——Core 的 `build_preview_plan` 已经过滤 hidden tracks（plan.py:178, 193）；renderer 不重新添加
+- ✅ **Reuse Core API**——不动 Core 的 `set_transform` / `set_transform2d`；仅消费 `clip.transform`
+- ✅ **保持 pre-existing 失败透明**——pytest 仍 811 + 1 skip + 2 pre-existing FAIL（与 04-01/04-02/04-03/04-04 相同的 2 个，未被 04-05 触发）
+
+### PiP 启发式删除证据
+
+| 删除项 | 旧位置 | 新位置 | 回归测试 |
+|---|---|---|---|
+| `defaultPiPStyle(layerIndexInStack, totalLayers)` — 返回 `scaleW=0.30` for V2 / `scaleW=0.20` for V3 | `gui/src/composite-multilayer.ts:45-68` | **已删除** | `composite-multilayer.test.ts::regression: PiP heuristic (V2=30% / V3=20%) removed` |
+| `splitLayersForPiP(visualLayers)` — 拆分为 bottom + overlays，bottom 占满 canvas | `gui/src/composite-multilayer.ts:73-92` | **已删除** | `composite-multilayer.test.ts::V2 with no explicit transform must NOT collapse 30%` |
+| PreviewPlayer 的 splitLayersForPiP + defaultPiPStyle 调用 | `gui/src/components/PreviewPlayer.tsx:620,709` | `zOrderedLayers` + `resolveLayerTransform` + `layerCssTransform` | `gui-04-05-preview-layers.mjs` Phase C |
+| old DOM attributes: `data-pip-for`, `data-layer-role="pip"` | PreviewPlayer PiP overlay rendering | new: `data-layer-transform-{x,y,scale,rotation,opacity}` | smoke Phase C: 0 old PiP-style elements |
+
+### 新模型：Clip.transform → CSS
+
+```ts
+// defaultTransform() = { x:0, y:0, scale:1, rotation:0, opacity:1 }
+//   ↑ plan §7.4: centered, fit/contain, rotation=0, opacity=1
+
+// resolveLayerTransform(layer) → ResolvedTransform
+//   reads clip.transform; missing fields → defaults
+
+// layerCssTransform(t) → { transform, opacity, zIndex }
+//   applies to layer wrapper div
+
+// zOrderedLayers(plan) → PreviewLayer[]
+//   deterministic order by layer_index ascending
+```
+
+每个 layer 在 PreviewPlayer 的渲染：
+```jsx
+<div className="composite-layer"
+  style={{
+    position: "absolute", inset: 0,
+    width: "100%", height: "100%",
+    transform: cssT.transform,
+    transformOrigin: "50% 50%",
+    opacity: cssT.opacity,
+    zIndex: l.layer_index,
+  }}
+  data-layer-transform-x={tr.x}
+  data-layer-transform-y={tr.y}
+  data-layer-transform-scale={tr.scale}
+  data-layer-transform-rotation={tr.rotation}
+  data-layer-transform-opacity={tr.opacity}>
+  {/* img or video with objectFit:contain */}
+</div>
+```
+
+### Acceptance A–I 覆盖（plan §7.11）
+
+| 编号 | 场景 | 覆盖 |
+|---|---|---|
+| A | one visual layer | `TestOneVisualLayer::test_single_video_clip_produces_one_plan_layer` |
+| B | two visual layers | `TestMultiLayerUpperLower::test_two_layers_have_distinct_z_order` |
+| C | three visual layers | `TestMultiLayerUpperLower::test_three_layers_have_strictly_ascending_z_order` |
+| D | upper/lower combinations | `TestMultiLayerUpperLower::test_upper_lower_combinations` |
+| E | hidden visual layer excluded | `TestHiddenLayerExclusion::test_hidden_track_layer_not_in_plan` + `TestHiddenTrackCoreFilter::test_plan_excludes_hidden_track` |
+| F | same frame repeated render determinism | `TestRepeatedRenderDeterminism` (3 tests) |
+| G | aspect ratios (16:9 / 9:16 / 1:1 / 4:3 / 3:4) | `TestAspectRatiosIndependent::test_aspect_ratio_does_not_change_layer_count`（5 parametrized）|
+| H | transform defaults | `TestTransformDefaults::test_new_clip_has_empty_transform` + `composite-multilayer.test.ts::defaultTransform` |
+| I | no automatic PiP shrinking | `TestNoAutomaticPiPShrinking` (2 regression guards) + `composite-multilayer.test.ts::regression: PiP heuristic removed` (3 tests) + smoke Phase C |
+
+### 新增资产
+
+| 资产 | 内容 |
+|---|---|
+| `gui/src/preview-layer.ts` (NEW) | `defaultTransform()`, `resolveLayerTransform(layer)`, `layerCssTransform(t)`, `zOrderedLayers(source)` |
+| `gui/src/composite-multilayer.ts` (删 PiP, 保留 badge) | `badgeColorForKind()`; `defaultPiPStyle` / `splitLayersForPiP` 完全删除 |
+| `gui/src/components/PreviewPlayer.tsx` (refactor) | 每个 layer 用自己的 `clip.transform`；`composite-layer` class；`data-layer-transform-*` 数据属性（no more `data-pip-for` / `data-layer-role="pip"`）|
+| `gui/src/composite-multilayer.test.ts` (重写, 19 tests) | PiP regression guard + 新 helpers unit tests |
+| `tests/test_preview_layer_model.py` (NEW, 19 tests) | A–I 全部覆盖；pytest 端验证 Core /preview/plan 和 /preview/at_frame |
+| `gui/smoke/gui-04-05-preview-layers.mjs` (NEW) | Phase A: bundle evidence；Phase C: real-browser DOM 扫描确认无 scale(0.30/0.20)、无 data-pip-for / data-layer-role="pip" |
+
+### 回归
+
+| Suite | 04-04 baseline | After 04-05 |
+|---|---|---|
+| pytest | 792 passed + 1 skip + 2 pre-existing FAIL | **811** passed + 1 skip + 2 pre-existing FAIL (+19 new) |
+| vitest | 458 passed + 2 skip | **465** passed + 2 skip (+7 new) |
+| gui-04-01-runtime-routes (browser) | 4/4 | **4/4** ✓ |
+| gui-04-03-undo-redo (browser) | 2/2 | **2/2** ✓ |
+| gui-04-04-drag (browser) | 1/1 | **1/1** ✓ |
+| 03r6_2-identity (browser) | 10/10 | **10/10** ✓ |
+| 03r6_2-drag-fly (browser) | 7/7 | **7/7** ✓ |
+| **gui-04-05-preview-layers (browser, NEW)** | — | **4/4** ✓（Phase A/C 通过；Phase B 因 lease 跳过） |
+| vite build | ✅ | ✅ |
+| tsc | 5 pre-existing errors, no NEW | 5 pre-existing errors, no NEW |
+| Pre-existing 失败 | 2（未触动） | 2（仍是同样 2 个，未被 04-05 触发） |
+
+### 重要设计决策
+
+- **不重新设计 transform 语义**——Core 的 `clip.transform` 已是 sole 字段；GUI 只是消费它。
+- **track-index → identity**——V1/V2/V3 是 layer/z-order，不是 layout preset。Renderer 通过 `data-track-id` 暴露 layer 来源以便审计，但 visual size 完全由 `clip.transform` 决定。
+- **`resolveLayerTransform` 容错**——`clip.transform` 缺失任何字段都用 default；类型错（非数字）也用 default。不会因为 Core 数据损坏导致渲染崩溃。
+- **Hidden track exclusion 在 Core 边界**——`build_preview_plan` 已过滤 hidden tracks（plan.py:178, 193）；renderer 不重新检查，不重新引入。
+- **Smoke bundle evidence**——每次 smoke 都记录 bundle 文件名 + 内容 hash（djb2），所以回归测试能 pin "refactor bundle hash changed"。
+- **不动的事物**：Core / FastAPI / Vite 配置 / frames 模型 / 任何 mutation / drag 路径。04-05 范围只在 PreviewPlayer.tsx 一个文件 + 新增 preview-layer.ts + 测试文件。
+
+### Plan §17 GUI-04 Completion Gate 进度（04-05 更新）
+
+- [x] `/clips` 浏览器 200
+- [x] `history/undo` 浏览器 200
+- [x] no fractional frame reaches mutation API
+- [x] all new mutation tests green
+- [x] hidden layer never renders
+- [x] Timeline == Preview identity test green
+- [x] full pytest green except documented pre-existing
+- [x] full vitest green
+- [x] vite build green
+- [x] real browser smoke green
+- [x] Undo/Redo exact
+- [x] drag 1/5/10/50 px + cross-track + collision
+- [x] **multi-layer Preview determinism** ← **04-05 完成**
+- [ ] Transform position/scale/rotation（→ 04-06）
+- [ ] human acceptance
+
+### 下一步
+
+等待用户批准 → 进入 **04-06 Transform v0.1**（plan §8）：
+- 已有 Core `set_transform` / `set_transform2d` / `api.setTransform2d` —— 优先 wiring 而不是重设计
+- Inspector UI：选中视觉 Clip 后显示 位置 X/Y、缩放 %、旋转 °、重置 button
+- 每次修改：GUI → api.setTransform2d() → Mutation Gate → Core → Revision → PreviewPlan invalidation → Preview
+- 实时表现：X/Y、scale、rotation 必须与 Inspector 数值一致
+- 暂不做：Keyframe / Animation / Ease / Motion path / Crop / Mask / Blend mode
+
+---
+
+## 当前状态（2026-09-02 GUI-04 04-04 Drag Interaction Consolidation 完成 ✅ = HEAD 44fb74f）
 
 **最新事件（2026-09-02 08:20）**：GUI-04 batch 04-04 完成。用户硬约束已遵守：
 - ✅ **不是叠加 guard**——收敛成唯一可证明的数据流
