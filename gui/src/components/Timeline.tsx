@@ -12,7 +12,7 @@
 // Seconds exist only in the server's `clip.timeline_range`. Layout converts
 // seconds → frames → pixels via frames.ts and the project's sequence fps.
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Project } from "../api";
 import { useProjectSequence } from "../sequence";
 import {
@@ -72,6 +72,18 @@ interface Props {
   ) => void;
   /** GUI-03R4-R4: cancel any in-flight marquee (Esc key). */
   onMarqueeCancel?: () => void;
+  // GUI-05-B (B6): empty-area pointer handler. Wired by App — fired
+  // when the user clicks on the empty .timeline-content area (not on
+  // a clip). Clears current selection.
+  onClearSelection?: () => void;
+  // GUI-05-B (B6): register imperative handlers that App's Escape
+  // handler invokes. cancelMarquee cancels any in-flight marquee
+  // rect. The Escape handler in App also invokes cancelActiveDrag
+  // (registered separately via the existing dragCancelledRef prop).
+  onRegisterEscapeHandlers?: (h: {
+    cancelMarquee: () => void;
+    cancelActiveDrag: () => void;
+  }) => void;
   /** GUI-03R4-R5: right-click on a gap → "Close Gap here".
    *  The GUI provides the timeline frame (in seconds) of the empty
    *  range that contains the click point; the Core closes it.
@@ -292,6 +304,8 @@ export default function Timeline({
   onSeek, onSelect, onDragMove, onMoveCommit, onZoomPx, onRangeSelect, onTrimCommit, onTrackMute, onTrackLock, onTrackHide, canEdit = true, onAssetDrop, onAssetDropNewTrack,
   onMarqueeSelect,
   onMarqueeCancel,
+  onClearSelection,
+  onRegisterEscapeHandlers,
   onCloseGap,
   onCloseGapsBatch,
   dragGhost,
@@ -349,6 +363,23 @@ export default function Timeline({
   const [marquee, setMarquee] = useState<
     { startX: number; startY: number; currentX: number; currentY: number;
       additive: boolean } | null>(null);
+  // GUI-05-B (B6): register an Escape handler that App invokes to
+  // cancel any in-flight marquee rect. Wired via useEffect so it
+  // sees the current setMarquee closure.
+  useEffect(() => {
+    if (onRegisterEscapeHandlers) {
+      onRegisterEscapeHandlers({
+        cancelMarquee: () => setMarquee(null),
+        cancelActiveDrag: () => {
+          // Active drag cancellation is already handled via the
+          // dragCancelledRef prop wired in 05-A. App's Escape handler
+          // flips that ref; ClipBlock's pointerup bails out with zero
+          // mutation. This is a no-op for the Timeline side; included
+          // for API completeness.
+        },
+      });
+    }
+  }, [onRegisterEscapeHandlers]);
   const [viewport, setViewport] = useState({ left: 0, width: 1 });
   // GUI-03R5-B4 (Decision 5): track-header right-click context
   // menu. Closed = null. The menu's items are computed when the
@@ -901,6 +932,18 @@ export default function Timeline({
                     // (the actual intersection happens here).
                     setMarquee((m) => {
                       if (m && onMarqueeSelect) {
+                        // GUI-05-B (B6): click-without-drag (i.e., the
+                        // pointer barely moved) is a CLICK on empty
+                        // area, not a marquee. Clear selection instead
+                        // of computing a hit set. We use a 3-pixel
+                        // threshold to distinguish click vs drag.
+                        const dx = m.currentX - m.startX;
+                        const dy = m.currentY - m.startY;
+                        const dragDist = Math.sqrt(dx * dx + dy * dy);
+                        if (dragDist < 3) {
+                          if (onClearSelection) onClearSelection();
+                          return null;
+                        }
                         const hit = computeMarqueeSelection(
                           m, visibleTracks, project, pxPerF, seq.fps);
                         onMarqueeSelect(hit, m.additive);

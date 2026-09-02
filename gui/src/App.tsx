@@ -44,6 +44,14 @@ import ExportPanel from "./components/ExportPanel";
 import ResizeHandle from "./components/ResizeHandle";
 // GUI-05-A (A3): centralized mutation error localization.
 import { localizeGateRejection, localizeMutationError } from "./error-localize";
+// GUI-05-B (L-1 + L-2): selection persistence (sessionStorage,
+// exactly-once hydration per ${projectId}:${timelineId}).
+import {
+  clearPersistedSelection,
+  filterPersistedSelection,
+  persistSelection,
+  readPersistedSelection,
+} from "./selection-persistence";
 
 interface Region { x: number; y: number; w: number; h: number }
 
@@ -361,6 +369,74 @@ export default function App() {
     refresh();
   }, []);
 
+  // GUI-05-B (L-1 + L-2): Selection hydration — exactly once per
+  // ${projectId}:${timelineId}. The hydratedKeyRef guards against
+  // repeated hydration when refresh() replaces the project object.
+  //
+  // Hydration rules:
+  //  - first mount with project loaded → hydrate
+  //  - projectId or timelineId changes → hydrate (new key)
+  //  - project object reference changes for the same key → NO-OP
+  //    (refresh() is allowed to replace project freely; selection
+  //    stays in memory)
+  //
+  // After hydration, future refresh() calls do NOT touch the
+  // in-memory selection.
+  const hydratedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!project) return;
+    const projId = project.project_id;
+    const tlId = activeTimelineId;
+    if (!projId || !tlId) return;
+    const key = `${projId}:${tlId}`;
+    if (hydratedKeyRef.current === key) return;  // already hydrated for this key
+    const persisted = readPersistedSelection(projId, tlId);
+    if (persisted) {
+      // Filter against currently existing clips; missing IDs are
+      // silently dropped (B5: only IDs that still exist are restored).
+      const { selected, selectedSet } = filterPersistedSelection(
+        persisted,
+        Object.keys(project.clips || {}),
+      );
+      setSelected(selected);
+      setSelectedSet(selectedSet);
+    } else {
+      // No persisted selection for this key. If we previously
+      // hydrated a DIFFERENT key, the user switched projects and we
+      // should NOT inherit the in-memory selection.
+      if (hydratedKeyRef.current !== null) {
+        setSelected(null);
+        setSelectedSet(new Set());
+      }
+    }
+    hydratedKeyRef.current = key;
+  }, [project, activeTimelineId]);
+
+  // GUI-05-B: Persist selection on change. Debounced 200ms so we
+  // don't write to sessionStorage on every selection event during
+  // drag/marquee. Selection state stays correct even if persistence
+  // is delayed — the in-memory state is authoritative.
+  const persistTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!project) return;
+    const projId = project.project_id;
+    const tlId = activeTimelineId;
+    if (!projId || !tlId) return;
+    if (persistTimerRef.current !== null) {
+      window.clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = window.setTimeout(() => {
+      persistSelection(projId, tlId, selected, selectedSet);
+      persistTimerRef.current = null;
+    }, 200);
+    return () => {
+      if (persistTimerRef.current !== null) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+    };
+  }, [project, activeTimelineId, selected, selectedSet]);
+
   // GUI-03E-3: New Timeline dialog state.
   const [newTimelineOpen, setNewTimelineOpen] = useState(false);
 
@@ -538,8 +614,43 @@ export default function App() {
     setSelected(first ?? null);
   };
   const onMarqueeCancel = () => {
-    // Currently no-op (the marquee rect is owned by Timeline).
-    // Hook reserved for future "press Esc to clear selection" UX.
+    // GUI-05-B (B6): cancel any in-flight marquee. Marquee state is
+    // owned by Timeline; this callback is fired by the Escape
+    // handler. Timeline clears the rect (no-op for selection — we
+    // don't clear selection here because Escape handler decides).
+  };
+
+  // GUI-05-B (B6): clear selection — used by Escape handler and by
+  // empty-Timeline-area click. Also clears the persisted entry so
+  // the next page load doesn't restore stale selection.
+  const clearSelection = () => {
+    setSelected(null);
+    setSelectedSet(new Set());
+    if (project) {
+      clearPersistedSelection(project.project_id, activeTimelineId);
+    }
+  };
+
+  // GUI-05-B (B6 + A1): Escape handler — atomically cancels marquee,
+  // active drag, transient interaction, AND selection. Never mutates
+  // Core.
+  //
+  // We use a ref-based callback so the Escape handler can invoke the
+  // active ClipBlock's `dragCancelledRef` flag (wired in 05-A).
+  const escapeHandlersRef = useRef<{
+    cancelMarquee?: () => void;
+    cancelActiveDrag?: () => void;
+  }>({});
+  const handleEscape = () => {
+    escapeHandlersRef.current.cancelMarquee?.();
+    escapeHandlersRef.current.cancelActiveDrag?.();
+    // Cancel transient drag state (visual-only; no Core mutation).
+    setDragPreview({});
+    setDragGhost({});
+    setDragClampBoundary({});
+    setDragRejected({});
+    // Clear selection (no Core mutation).
+    clearSelection();
   };
 
   // GUI-03R4-R5: Close Gap (single track) + Batch Close Gaps (visible
@@ -658,6 +769,14 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
+      // GUI-05-B (B6): Escape is honored even with focus in a textarea
+      // (e.g., the SubtitleEditor modal) — the user wants to cancel the
+      // current interaction. We check it BEFORE the input filter.
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleEscape();
+        return;
+      }
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const ctrl = e.ctrlKey || e.metaKey;
       if (ctrl && (e.key === "z" || e.key === "Z")) {
@@ -2091,6 +2210,19 @@ export default function App() {
         // GUI-03R4-R4: marquee selection callbacks.
         onMarqueeSelect={onMarqueeSelect}
         onMarqueeCancel={onMarqueeCancel}
+        // GUI-05-B (B6): empty-area pointer handler clears selection.
+        onClearSelection={clearSelection}
+        // GUI-05-B (B6): register Escape handlers (cancel marquee +
+        // active drag). The Timeline's marquee state is local, so
+        // we expose cancelMarquee. ClipBlock's dragCancelledRef is
+        // already passed via 05-A's dragCancelledRef prop — we wrap it
+        // here for Escape handler.
+        onRegisterEscapeHandlers={(h) => {
+          escapeHandlersRef.current.cancelMarquee = h.cancelMarquee;
+          escapeHandlersRef.current.cancelActiveDrag = () => {
+            dragCancelledRef.current = true;
+          };
+        }}
         // GUI-03R4-R5: gap operations callbacks.
         onCloseGap={onCloseGap}
         onCloseGapsBatch={onCloseGapsBatch}
