@@ -1226,9 +1226,9 @@ export default function App() {
           空轨道
         </label>
         <label style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 3 }}
-               title="高亮所有跨轨关联的 clip（Semantic Link）">
+               title="高亮与当前选中 clip时间重叠的其他 clip（非 Semantic Link 关系图）">
           <input type="checkbox" checked={highlightRel} onChange={(e) => setHighlightRel(e.target.checked)} />
-          高亮关联
+          高亮时间重叠
         </label>
         <button
           disabled={previewVersion === 0}

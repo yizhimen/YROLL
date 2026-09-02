@@ -725,7 +725,8 @@ export default function ClipBlock({
       style={{ left, width, boxShadow: isRelated && highlightRel ? "0 0 0 2px #ffd479" : undefined }}
       data-clip-id={clip.clip_id}
       onPointerDown={onPointerDown}
-      title={isRelated ? "跨轨关联 clip（Semantic Link）" : undefined}
+      // GUI-05-D (D13): tooltip uses timeline-overlap hint wording, NOT "Semantic Link".
+      title={isRelated ? "时间重叠 clip" : undefined}
     >
       <div
         className="trim-handle left"

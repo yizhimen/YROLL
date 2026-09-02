@@ -1048,6 +1048,11 @@ export default function Timeline({
                       sourceFps={undefined}
                       snapMode={snapMode}
                       highlightRel={highlightRel}
+                      // GUI-05-D (D13): `isRelated` is a timeline-overlap hint heuristic,
+                      // NOT the Semantic Link graph. It highlights clips whose
+                      // `timeline_range` overlaps any currently-selected clip's
+                      // `timeline_range` on a different track. It does NOT consult
+      // `project.relationships`. See docs/SEMANTIC-LINK-BEHAVIOR.md §5.1.
                       isRelated={highlightRel && selectedIds.size > 0 && Array.from(selectedIds).some((selId) => {
                         const sel = project.clips[selId];
                         if (!sel || sel.track_id === clip.track_id) return false;
