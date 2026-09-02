@@ -1,6 +1,52 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-09-02 GUI-04 FINAL HUMAN ACCEPTANCE / INTEGRATION GATE 完成 ✅ = HEAD 44fb74f）
+## 当前状态（2026-09-02 GUI-04.5 DEFECT CLOSURE 完成 ✅）
+
+**最新事件（2026-09-02 12:48）**：GUI-04.5 完成 — 全部 6 个 batch（P0-A 规范保真 / P0-B z-order / P0-C 分数帧 / P0-D 跨轨原子性 / P1-E trim / P1-F Transform 检查器）已落地。**44 个新测试 100% 通过**；pytest 总数 882 pass + 1 skip + 2 个文档化 pre-existing failures（与 SESSION 基线完全一致）；vitest 471 pass + 2 skip。无 NEW 失败。
+
+**核心 bug fix（Core 原子性）**：跨轨移动到无效 track_id 时，Core 之前会先把 clip 从源轨道移走再 raise，留下 clip "无家可归"。修复后 target track 存在性检查在源轨道 mutation 之前完成。
+
+**回归（baseline + GUI-04.5）**：
+| Suite | Baseline (GUI-04) | After GUI-04.5 | Delta |
+|---|---|---|---|
+| pytest | 838 pass + 1 skip + 2 pre-existing fail | **882 pass + 1 skip + 2 pre-existing fail** | +44 new |
+| vitest | 465 pass + 2 skip | **471 pass + 2 skip** | +6 new |
+| git status (working tree) | 2 modified files (pollution) | 5 modified + 8 new files (intentional) | clean |
+
+**新增文件（8）**：
+- `tests/test_no_canonical_mutation.py` — P0-A 静态 guard（HEAD vs on-disk SHA256 比较 + working-copy helper 验证）
+- `tests/test_preview_zorder_invariant.py` — P0-B（V1<V2<V3 + 任意轨道 + hidden 排除 + zIndex 显式）
+- `tests/test_drag_fractional_frame_leak.py` — P0-C（first-point source-level fix + Pydantic 拒绝 fractional）
+- `tests/test_cross_track_move_correctness.py` — P0-D（empty/overlap/invalid 三个 acceptance）
+- `tests/test_trim_resize_correctness.py` — P1-E（extend/shorten/slow/fast/reverse + assertIntFrame）
+- `tests/test_transform_inspector_cleanup.py` — P1-F（无 VisualAdjustPanel import；Inspector 唯一）
+- `gui/src/preview-layer.zorder.test.ts` — P0-B vitest（6 测试）
+- `gui/smoke/gui-04-5-trim-resize.mjs` — P1-E 浏览器 regression
+- `docs/GUI-04-POST-STATE-AUDIT-AND-NEXT-PHASE-PLAN.md` — 上一轮 read-only audit + 计划
+
+**修改文件（5）**：
+- `gui/src/App.tsx` — 移除 `VisualAdjustPanel` import + render（Inspector 是 canonical X/Y/Scale/Rotation）
+- `gui/src/components/Timeline.tsx` — sibling range 用 `secondsToFramesEdit`（消除 79.99999999999999 源点）
+- `yroll/core/commands.py` — `move_clip` 在源轨道 mutation 之前验证 target track 存在
+- `gui/smoke/serve-clean-sanlihe.mjs` — 加 SHA256 snapshot + post-exit 验证 + 强化 working-copy
+- `.gitignore` — 添加 `projects/gui-04-*/` 和 `projects/_sanlihe-clean-work/`
+
+**Pre-existing failures 状态**：完全恢复文档基线 — `test_no_orphan_empty_tracks_in_projects_dir` 和 `test_working_copy_sanlihe_r5_manual_is_overlap_free` 仍是 same 2，未被 GUI-04.5 触发。Canonical fixture 完整性通过 `test_no_canonical_mutation.py` 永久保护。
+
+**严格 scope 遵守**：
+- ✅ 没有新功能
+- ✅ 没有 Core model schema 变化
+- ✅ 没有 P2 工作（publish metadata / keyframes / crop / opacity / AI）
+- ✅ 没有引入 snapping（per user "Do not add snapping yet"）
+- ✅ Inspector 是唯一的 transform UI（删除 VisualAdjustPanel 的重复）
+
+### 待用户决定
+
+GUI-04.5 工作树未 commit（5 modified + 8 untracked + 1 audit doc）。待用户 review 后一次性 commit。
+
+---
+
+## 当前状态（2026-09-02 GUI-04 FINAL HUMAN ACCEPTANCE / INTEGRATION GATE 完成 ✅ = HEAD a970f6c）
 
 **最新事件（2026-09-02 10:05）**：GUI-04 final acceptance / integration gate 完成（API-level verification + existing browser smokes 全部通过）。Deferred browser tests (Phase B of 04-04 / 04-05 / 04-06) 由既有 smokes（03r6_2-drag-fly 7/7、gui-04-05-preview-layers 4/4、gui-04-06-transform 4/4、gui-04-03-undo-redo 2/2）覆盖。完整的人类 manual gate 待用户执行。
 

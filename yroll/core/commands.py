@@ -1619,6 +1619,19 @@ class CommandLayer:
             exclude_clip_id=clip_id,
             op_name=f"move_clip({clip_id})")
 
+        # GUI-04.5 P0-D: validate target track EXISTS BEFORE we touch
+        # the source track. The previous order removed the clip from
+        # the source track first, then raised if the target was
+        # missing — leaving the clip orphaned (not in any track). All
+        # structural mutation is now atomic: pre-flight checks first,
+        # structural mutation after.
+        if new_track_id and new_track_id != clip.track_id:
+            new = next(
+                (t for t in tl.tracks if t.track_id == new_track_id), None,
+            )
+            if new is None:
+                raise CommandError(f"track 不存在: {new_track_id}")
+
         # 先推断关系（在旧位置上），再算联动，最后才移动
         infer_relationships(self.core.project)
         related_ids: list[str] = []
@@ -1637,9 +1650,6 @@ class CommandLayer:
             old = next((t for t in tl.tracks if clip_id in t.clip_ids), None)
             if old:
                 old.clip_ids.remove(clip_id)
-            new = next((t for t in tl.tracks if t.track_id == new_track_id), None)
-            if new is None:
-                raise CommandError(f"track 不存在: {new_track_id}")
             new.clip_ids.append(clip_id)
             clip.track_id = new_track_id
 

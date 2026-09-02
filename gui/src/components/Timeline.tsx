@@ -23,6 +23,7 @@ import {
   pixelToPlayheadFrame,
   playheadFrameToPixel,
   pxPerFrame,
+  secondsToFramesEdit,
 } from "../frames";
 import {
   HEADERS_RULER_SPACER_HEIGHT,
@@ -1020,8 +1021,19 @@ export default function Timeline({
                     .map((sid) => {
                       const s = project.clips[sid];
                       if (!s) return null;
-                      const sStart = s.timeline_range.start * seq.fps.num / seq.fps.den;
-                      const sEnd = s.timeline_range.end * seq.fps.num / seq.fps.den;
+                      // GUI-04.5 P0-C: convert at the boundary using the
+                      // canonical secondsToFramesEdit helper so the
+                      // sibling range stays integer-frame. Raw float
+                      // multiplication here leaks 79.99999999999999
+                      // (the lossy round-trip of 80 frames at 30fps
+                      // through the seconds storage domain) into the
+                      // drag pipeline.
+                      const sStart = secondsToFramesEdit(
+                        s.timeline_range.start, seq.fps,
+                      );
+                      const sEnd = secondsToFramesEdit(
+                        s.timeline_range.end, seq.fps,
+                      );
                       return { id: sid, start: sStart, end: sEnd };
                     })
                     .filter(Boolean) as Array<{ id: string; start: number; end: number }>;

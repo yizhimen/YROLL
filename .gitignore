@@ -75,4 +75,6 @@ tsconfig.tsbuildinfo
 # GUI smoke test artifacts (Playwright screenshots + JSON reports)
 gui/smoke-out/
 projects/_sanlihe-r5-manual/
+projects/_sanlihe-clean-work/
+projects/gui-04-*/
 .r6-2-debug/

@@ -13,6 +13,7 @@ import { useCoreKeymap } from "./keymap";
 import {
   clipFramesFromSec,
   frameToRulerSeconds,
+  framesToSeconds,
   framesToTimecode,
   pxPerFrame,
   roundHalfAwayFromZero,
@@ -33,7 +34,11 @@ import AssetPanel from "./components/AssetPanel";
 import OpsPanel from "./components/OpsPanel";
 import PreviewPlayer, { AspectRatio } from "./components/PreviewPlayer";
 import { usePreviewPlanInvalidation } from "./preview-plan";
-import VisualAdjustPanel from "./components/VisualAdjustPanel";
+// GUI-04.5 P1-F: VisualAdjustPanel removed — its transform section
+// duplicated the Inspector's canonical X/Y/Scale/Rotation, and its
+// color/crop/flip/reverse controls have no rendering implementation.
+// The Inspector at the top of the right panel is the canonical
+// transform surface.
 import SubtitleEditor from "./components/SubtitleEditor";
 import ExportPanel from "./components/ExportPanel";
 import ResizeHandle from "./components/ResizeHandle";
@@ -1079,7 +1084,13 @@ export default function App() {
         const dragFrame = dragPreview[id];
         if (dragFrame === undefined) return [id, c];
         const durSec = c.timeline_range.end - c.timeline_range.start;
-        const startSec = dragFrame * seqFpsForDisplay.den / seqFpsForDisplay.num;
+        // GUI-04.5 P0-C: convert at the boundary using the canonical
+        // framesToSeconds helper so the integer-frame contract is
+        // preserved at the seconds-domain crossing. The previous raw
+        // multiplication produced 79.99999999999999 (lossy IEEE 754
+        // round-trip of integer frame 80 through the seconds storage
+        // domain at 30fps).
+        const startSec = framesToSeconds(dragFrame, seqFpsForDisplay);
         return [id, {
           ...c,
           timeline_range: { start: startSec, end: startSec + durSec },
@@ -1893,7 +1904,12 @@ export default function App() {
                 </button>
               </div>
               {clip.asset_id !== "" && (
-                <VisualAdjustPanel clip={clip} run={run} />
+                /* GUI-04.5 P1-F: VisualAdjustPanel removed. The
+                   Inspector above is the canonical transform UI
+                   (X/Y/Scale/Rotation per plan §8 / clip-transform.ts).
+                   Color/flip/crop/reverse controls were unimplemented
+                   at the preview layer and would have silently lied. */
+                null
               )}
               {clip.asset_id === "" && (
                 <div className="subtitle-editor">
