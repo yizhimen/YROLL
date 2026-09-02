@@ -2279,3 +2279,38 @@ yroll serve <project>        # sole owner of ProjectCore + LeaseStore + LeaseEve
 **Canonical mapping（采用）**：Timeline array index 0 = visually highest in Timeline = highest layer_index in Preview。具体：iterate `visual_track_order` 反向，V9 base=0（bottom），V1 base=最高（top）。Fix at Core layer，**不是 CSS z-index patch**。
 
 **Regression 测试更新**：旧测试（test_multilayer_visual_proof、test_preview_zorder_invariant）pins 了错误方向（`<`），需要改为 `>`。
+
+---
+
+## 新会话接手点（2026-09-02 13:42）
+
+**当前 HEAD**：`6a32559 GUI-04.6: align Preview z-order with Timeline vertical order`
+**branch**：main（up to date with origin/main）
+**working tree**：clean
+**canonical fixture** SHA256：`1a5049614aa2a3d5967447bc7ac565b253154f8aeda44c406a9e60169feaa03c`（与 HEAD 一致）
+
+**运行中服务**：
+- Backend `:8770` — `serve-clean-sanlihe.mjs` 后台 task `bve24scpr`，加载最新 Core（plan.py / frame_preview.py 已 fix）
+- Frontend `:5180` — vite 静态 dist + proxy，bundle hash `index-CaUJJWAT.css` + `index-DHthlGPW.js`
+- Browser `:9222` — chromium CDP（用户可见）
+
+**最近 4 个 commits**：
+```
+6a32559 GUI-04.6: align Preview z-order with Timeline vertical order
+7e51324 fix(serve-clean-sanlihe): import createHash from node:crypto, not node:fs
+6008e83 GUI-04.5: close post-acceptance editing defects
+a970f6c [GUI-04 FINAL] Acceptance gate: 23/23 API checks + all browser smokes pass
+```
+
+**当前 pytest baseline**：890 pass + 1 skip + 2 个文档化 pre-existing failures（sanlihe-slice-30s-clean 已有 fixture 状态、`_sanlihe-r5-manual` working copy 有 overlap）。
+**当前 vitest baseline**：471 pass + 2 skip。
+
+**未做**（per user instruction "do not start GUI-05 yet"）：
+- GUI-05 Foundation v0.2 P0 Surface（Markers UI / Beat Model / AI Affected highlight）— 等待 user go-ahead
+- 不引入 snapping / keyframes / opacity controls / crop / blend mode / AI features
+- 不修 human 6-check manual pass（待用户在浏览器执行）
+
+**新会话第一句话**应是：
+1. 读 SESSION.md + MEMORY.md（auto-memory index）
+2. 检查 backend/frontend 是否仍在跑（task `bve24scpr` + 5180 静态服务）
+3. 决定下一步：复跑 GUI-04.5/GUI-04.6 regression / 开始 GUI-05 / 处理 pre-existing failures
