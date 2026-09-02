@@ -128,6 +128,23 @@ interface Props {
     srcEndFrame: number | null,
   ) => void;
   onDropOnTrack?: (clipId: string, trackId: string) => void;
+  // GUI-05-A (A4): parent's current view of whether THIS clip's
+  // last move/trim was rejected by Core. When true, the parent has
+  // applied `.clip.rejected` to indicate the visual distinction
+  // between the rejected preview (kept temporarily) and the
+  // unchanged Core state.
+  rejected?: boolean;
+  // GUI-05-A (A1): App-level ref that Escape handler flips to cancel
+  // the active gesture. ClipBlock reads `dragCancelledRef.current`
+  // at the top of pointerup handlers and bails out with zero
+  // mutation. Wired by 05-B.
+  dragCancelledRef?: React.MutableRefObject<boolean>;
+  // GUI-05-A (A2 + L-1): fired when this ClipBlock actually arms a
+  // real drag/resize mutation gesture (after canEdit / locked checks
+  // pass). NOT on plain click, marquee, hover, focus. App uses this
+  // to bump `dragGenerationRef` so stale 600ms rejection-flash
+  // timeouts cannot affect newer gestures.
+  onGestureArmed?: () => void;
 }
 
 /** GUI-02.4 invariant: the edit-coordinate snap radius is in FRAMES.
@@ -145,6 +162,8 @@ export default function ClipBlock({
   siblings = [],
   canEdit = true,
   onSelect, onDragMove, onMoveCommit, onTrimCommit, onDropOnTrack, onClampBoundary, clampBoundary = false,
+  rejected = false,
+  dragCancelledRef, onGestureArmed,
 }: Props) {
   // ---- Trim preview state -------------------------------------------------
   // Source-frame deltas (integer ClipFrame). The visual preview applies
@@ -303,6 +322,12 @@ export default function ClipBlock({
     if ((e.target as HTMLElement).classList.contains("trim-handle")) return;
     onSelect(clip.clip_id, false, e.ctrlKey || e.metaKey);
     if (locked) return;  // 轨道锁定：禁拖动
+    // GUI-05-A (A2 + L-1): we have now reached the "actual drag gesture
+    // is armed" state — canEdit passed, locked passed, target is not
+    // ai-zone or trim-handle. Notify App so it bumps `dragGenerationRef`
+    // for race-safe 600ms rejection-flash timeouts. NOT bumped for plain
+    // click, marquee, hover, or focus events.
+    if (onGestureArmed) onGestureArmed();
     const startX = e.clientX;
     const origStartFrame = tlStartFrame;
     const lenFrames = tlEndFrame - tlStartFrame;
@@ -497,6 +522,17 @@ export default function ClipBlock({
       window.removeEventListener("pointerup", up);
       autoScroll.dispose();
 
+      // GUI-05-A (A1): real gesture cancellation. If Escape was
+      // pressed during the gesture, bail out with ZERO mutations —
+      // no onMoveCommit call. The clip stays at its current visual
+      // position (which displayProject reads from Core committed
+      // state after the synchronous setDragPreview clear in App).
+      if (dragCancelledRef?.current) {
+        // eslint-disable-next-line no-console
+        console.log("[YROLL-DRAG-CANCELLED]", { clipId: drag.clipId });
+        return;
+      }
+
       // Consume the SINGLE DragState. Re-clamp against the
       // (possibly different) target track's siblings if the pointer
       // landed on a different track-row.
@@ -662,6 +698,10 @@ export default function ClipBlock({
     e.stopPropagation();
     onSelect(clip.clip_id, false, e.ctrlKey || e.metaKey);
     if (locked) return;  // 轨道锁定：禁裁剪
+    // GUI-05-A (A2 + L-1): actual trim gesture is armed — notify App
+    // so it bumps `dragGenerationRef` for race-safe 600ms rejection
+    // timeouts. NOT bumped for plain click, marquee, hover, focus.
+    if (onGestureArmed) onGestureArmed();
     const startX = e.clientX;
     let cur = { dStart: 0, dEnd: 0 };
     // Compute the asset's source-frame bounds at drag start. The
@@ -707,6 +747,13 @@ export default function ClipBlock({
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       setTrimDelta(null);
+      // GUI-05-A (A1): real gesture cancellation. If Escape was
+      // pressed during the trim, bail out with ZERO mutations.
+      if (dragCancelledRef?.current) {
+        // eslint-disable-next-line no-console
+        console.log("[YROLL-TRIM-CANCELLED]", { clipId: clip.clip_id, edge });
+        return;
+      }
       // Commit in SOURCE frames (integer). Convert back to absolute
       // source-frame positions to send as intent.
       if (edge === "left" && Math.abs(cur.dStart) >= MIN_TRIM_DELTA_FRAMES) {
@@ -721,7 +768,7 @@ export default function ClipBlock({
 
   return (
     <div
-      className={`clip ${kindClass} ${selected ? "selected" : ""} ${isRelated && highlightRel ? "related" : ""} ${clampBoundary ? "clamp-boundary" : ""}`}
+      className={`clip ${kindClass} ${selected ? "selected" : ""} ${isRelated && highlightRel ? "related" : ""} ${clampBoundary ? "clamp-boundary" : ""} ${rejected ? "rejected" : ""}`}
       style={{ left, width, boxShadow: isRelated && highlightRel ? "0 0 0 2px #ffd479" : undefined }}
       data-clip-id={clip.clip_id}
       onPointerDown={onPointerDown}

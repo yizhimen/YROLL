@@ -94,6 +94,18 @@ interface Props {
    *  row at `ghostFrame * pxPerFrame`. Visual only — never modifies
    *  the dragged clip's preview position. */
   dragGhost?: Record<string, number | null>;
+  // GUI-05-A (A4): per-clip "rejected" map keyed by clipId. When set,
+  // the corresponding ClipBlock applies `.clip.rejected` class. The
+  // map is owned by App; Timeline only forwards it to ClipBlock.
+  dragRejected?: Record<string, boolean>;
+  // GUI-05-A (A1): App-level ref that Escape flips. ClipBlock reads
+  // it at pointerup to cancel the in-flight gesture with ZERO
+  // mutations.
+  dragCancelledRef?: React.MutableRefObject<boolean>;
+  // GUI-05-A (A2 + L-1): ClipBlock fires this when it actually arms
+  // a real drag/trim gesture (after canEdit / locked pass). App bumps
+  // its gesture generation counter in response.
+  onGestureArmed?: () => void;
   /** Drag-end move commit. Final integer TimelineFrame (post-snap +
    *  post-clamp). If the drag also resolved a vertical-track-drop
    *  target (the pointer ended over a different track-content row),
@@ -285,6 +297,10 @@ export default function Timeline({
   dragGhost,
   onClampBoundary,
   dragClampBoundary,
+  // GUI-05-A: rejected map, dragCancelledRef, onGestureArmed forwarded.
+  dragRejected,
+  dragCancelledRef,
+  onGestureArmed,
   draggingAssetKind = null,
   showEmptyTracks = false,
 }: Props) {
@@ -1071,6 +1087,20 @@ export default function Timeline({
                       clampBoundary={!!dragClampBoundary?.[cid]}
                       onMoveCommit={onMoveCommit}
                       onTrimCommit={onTrimCommit}
+                      // GUI-05-A (A4): rejected map → ClipBlock applies
+                      // `.clip.rejected` class while this clip's last
+                      // move/trim was rejected by Core.
+                      rejected={!!dragRejected?.[cid]}
+                      // GUI-05-A (A1): shared cancellation flag. App's
+                      // Escape handler (wired in 05-B) flips the ref;
+                      // ClipBlock reads it at pointerup to abort the
+                      // gesture with ZERO mutation.
+                      dragCancelledRef={dragCancelledRef}
+                      // GUI-05-A (A2 + L-1): ClipBlock fires this when
+                      // a real drag/trim gesture is armed (after
+                      // canEdit / locked pass). App bumps gesture
+                      // generation counter in response.
+                      onGestureArmed={onGestureArmed}
                     />
                   );
                 })}

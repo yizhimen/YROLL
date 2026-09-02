@@ -42,6 +42,8 @@ import { usePreviewPlanInvalidation } from "./preview-plan";
 import SubtitleEditor from "./components/SubtitleEditor";
 import ExportPanel from "./components/ExportPanel";
 import ResizeHandle from "./components/ResizeHandle";
+// GUI-05-A (A3): centralized mutation error localization.
+import { localizeGateRejection, localizeMutationError } from "./error-localize";
 
 interface Region { x: number; y: number; w: number; h: number }
 
@@ -74,33 +76,9 @@ function eventToKeyCombo(e: KeyboardEvent): string {
 // from the keymap, we fall back to a plain Chinese description
 // (no fake numbers / no fake step sizes). This guarantees the
 // Help dialog never invents shortcut semantics.
-// R6-E: translate GateRejection (machine-readable kind + raw server
-// detail) into a localized Chinese recovery prompt. The user must
-// NEVER see raw server text from a normal UI gesture (drag/drop/+).
-// The recovery prompt is one consistent phrase regardless of which
-// specific server-side condition triggered it (no session, expired
-// lease, lost race during pointerdown). The badge in the top bar
-// flips to the appropriate recovery affordance ("获取编辑权" /
-// "刷新") based on the same GateRejection.kind.
-function localizeGateRejection(e: GateRejection): string {
-  switch (e.kind) {
-    case "no_session":
-    case "lease_rejected":
-      // The lease was free / lost / expired while the gesture was
-      // in flight. The badge flips to the "获取编辑权" affordance.
-      return "编辑权已失效 — 点击右上角「获取编辑权」后重试";
-    case "no_revision":
-      // baseRevision wasn't injected (very rare — only if a mutation
-      // skipped mutate()/gated()). The badge flips to "刷新".
-      return "版本已过期 — 点击右上角「刷新」后重试";
-    case "revision_conflict":
-      // Another writer beat us between our last /ui/status poll
-      // and this mutation. The badge flips to "刷新".
-      return "版本冲突 — 另一位写入者已修改项目，请刷新";
-    default:
-      return "操作被服务器拒绝 — 刷新或重新获取编辑权";
-  }
-}
+//
+// GUI-05-A (A3): `localizeGateRejection` moved to `./error-localize` and
+// re-exported there. App.tsx imports the centralized helper.
 
 type KMAction = {
   name: string;
@@ -911,11 +889,16 @@ export default function App() {
   // mechanism — NOT an ad-hoc fetch per call site.
   const { invalidationVersion, bumpPlanVersion } = usePreviewPlanInvalidation();
 
+  // GUI-05-A: `run()` returns Promise<boolean> — L-7 semantics:
+  //   true  = mutation accepted AND Core state changed (refresh ran).
+  //   false = mutation rejected AND Core state unchanged (no partial
+  //           Core mutation; rejection localized via
+  //           `localizeMutationError`; raw error logged for dev).
   const run = async (
     fn: () => Promise<unknown>,
     ok: string,
     bring?: BringOpts,
-  ) => {
+  ): Promise<boolean> => {
     try {
       await fn();
       await refresh();
@@ -929,13 +912,15 @@ export default function App() {
       bumpPlanVersion();
       if (bring) bringClipIntoView(bring);
       setStatus({ ok: true, text: ok });
+      return true;
     } catch (e: any) {
-      // Localize GateRejection — never expose raw server detail.
-      if (e instanceof GateRejection) {
-        setStatus({ ok: false, text: localizeGateRejection(e) });
-      } else {
-        setStatus({ ok: false, text: String(e) });
-      }
+      // GUI-05-A (A3): developer diagnostics keep raw error; UI
+      // gets a localized Chinese human-readable message. Never
+      // surface `String(e)` to the user.
+      // eslint-disable-next-line no-console
+      console.warn("[YROLL-MUTATION-ERROR]", e);
+      setStatus({ ok: false, text: localizeMutationError(e) });
+      return false;
     }
   };
 
@@ -1010,6 +995,28 @@ export default function App() {
   // The Timeline reads this set to apply a dashed red outline +
   // cursor:not-allowed to the dragged clip. The math is unchanged.
   const [dragClampBoundary, setDragClampBoundary] = useState<Record<string, boolean>>({});
+  // GUI-05-A (A4): per-clip "rejected" flag. Set when a mutation
+  // (move/trim/cross-track) is rejected by Core (overlap 400 / invalid
+  // track / etc). The Timeline applies `.clip.rejected` class while
+  // this flag is set, plus the visual outline + flash animation. The
+  // flag auto-clears after `--yroll-reject-duration` (600ms by CSS var).
+  // While set, `dragPreview[id]` is KEPT (visual shows attempted
+  // position), and `displayProject` continues to read from the
+  // pre-mutation `project` for Core state — so the rejected preview
+  // and Core committed state remain visually distinct.
+  const [dragRejected, setDragRejected] = useState<Record<string, boolean>>({});
+  // GUI-05-A (A2 + L-1): gesture generation counter. Increments ONLY
+  // when a real drag/resize mutation gesture is armed inside ClipBlock
+  // (after canEdit/locked checks pass). NOT on every pointerdown
+  // (plain click, marquee, hover, focus, etc do NOT increment).
+  // The 600ms rejection-flash timeout captures the gen at fire time
+  // and no-ops if the current gen differs (stale-timeout guard).
+  const dragGenerationRef = useRef(0);
+  // Cancel flag flipped by App-level Escape handler (wired in 05-B).
+  // ClipBlock captures this in its pointermove/pointerup closures and
+  // bails out with zero mutation when set. Until 05-B, this stays at
+  // the default (false) and has no effect.
+  const dragCancelledRef = useRef(false);
   // One-shot "已贴边" status text. Per the R6.1-B constraint, status
   // text is secondary — the visual outline + cursor are the primary
   // cues. We show the status ONCE when the boundary is first
@@ -2109,37 +2116,109 @@ export default function App() {
         }}
         onDragMove={onDragMove}
         dragGhost={dragGhost}
-        onMoveCommit={(clipId, newStartFrame, newTrackId) => {
+        // GUI-05-A (A2 + A4): per-clip `rejected` flag set to the set
+        // of clip ids whose last move/trim was rejected. The Timeline
+        // applies `.clip.rejected` while the flag is set. Auto-clears
+        // after `--yroll-reject-duration` via a race-safe timeout.
+        dragRejected={dragRejected}
+        // GUI-05-A (A1): shared MutableRefObject that App's Escape
+        // handler (wired in 05-B) flips. ClipBlock reads it at the
+        // top of pointerup to bail out with ZERO mutation. Passed
+        // directly so the closure can read the current value.
+        dragCancelledRef={dragCancelledRef}
+        // GUI-05-A (A2 + L-1): fired by ClipBlock when a real drag/resize
+        // mutation gesture is actually armed (after canEdit / locked
+        // checks pass). Used to bump the generation counter so stale
+        // 600ms rejection-flash timeouts cannot affect newer gestures.
+        onGestureArmed={() => {
+          dragGenerationRef.current = dragGenerationRef.current + 1;
+          dragCancelledRef.current = false;
+        }}
+        onMoveCommit={async (clipId, newStartFrame, newTrackId) => {
           // GUI-03R: if a vertical-track-drop target was resolved by
           // the drag, perform ONE transactional move (new timeline
           // start frame + target track in a single API). Previously
           // the parent would commit the frame first and then
           // dispatch a separate track move, leaving a brief window
           // where the clip lived on the wrong track.
-          // R6.2-B5: clear dragPreview so displayProject doesn't keep
-          // overriding the clip's timeline_range with the last drag
-          // candidate after the server has accepted the move. Without
-          // this, a second drag would inherit the previous drag's
-          // preview state and amplify the visual jump.
+          //
+          // GUI-05-A (A4 + L-7): capture the generation at commit
+          // time so the rejection-flash timeout is race-safe. Capture
+          // the attempted frame BEFORE clearing so we can restore it
+          // on rejection.
+          const genAt = dragGenerationRef.current;
+          let attemptedFrame: number | null = null;
           setDragPreview((p) => {
-              if (!(clipId in p)) return p;
-              const { [clipId]: _drop, ...rest } = p;
-              return rest;
-            });
-          if (newTrackId) {
-            run(() => api.move(clipId, newStartFrame, "GUI 跨轨拖动",
-                  newTrackId), "已跨轨移动");
+            if (!(clipId in p)) return p;
+            attemptedFrame = p[clipId];
+            const { [clipId]: _drop, ...rest } = p;
+            return rest;
+          });
+
+          const moveFn = newTrackId
+            ? () => api.move(clipId, newStartFrame, "GUI 跨轨拖动", newTrackId)
+            : () => api.move(clipId, newStartFrame, "GUI 拖动");
+          const okMsg = newTrackId ? "已跨轨移动" : "已移动";
+
+          const success = await run(moveFn, okMsg);
+          if (success) {
+            // success path: dragPreview already cleared, refresh
+            // repaints Core. L-5 invariant: exactly 2 DOM mutations on
+            // style.left during the gesture (B at flash start, A at
+            // refresh commit). No intermediate frame.
             return;
           }
-          run(() => api.move(clipId, newStartFrame, "GUI 拖动"),
-              "已移动");
+
+          // REJECTION PATH (A2 + A4 + L-5):
+          // 1) re-apply dragPreview so the clip stays at the
+          //    attempted position visually.
+          // 2) apply `.clip.rejected` for --yroll-reject-duration.
+          // 3) schedule a race-safe clear that no-ops if a newer
+          //    gesture has started since (gen != genAt).
+          setDragPreview((p) =>
+            attemptedFrame != null ? { ...p, [clipId]: attemptedFrame } : p,
+          );
+          setDragRejected((p) => ({ ...p, [clipId]: true }));
+          const REJECT_MS = 600;
+          window.setTimeout(() => {
+            if (dragGenerationRef.current !== genAt) return;
+            setDragRejected((p) => {
+              if (!(clipId in p)) return p;
+              const { [clipId]: _, ...rest } = p;
+              return rest;
+            });
+            setDragPreview((p) => {
+              if (!(clipId in p)) return p;
+              const { [clipId]: _, ...rest } = p;
+              return rest;
+            });
+          }, REJECT_MS);
         }}
         onZoomPx={setPxPerSec}
         onRangeSelect={setSelRange}
         // Trim receives integer SOURCE FRAMES from ClipBlock; api.trim
         // forwards them as-is to the server (which requires frames).
-        onTrimCommit={(clipId, newStartFrame, newEndFrame) =>
-          run(() => api.trim(clipId, newStartFrame ?? undefined, newEndFrame ?? undefined, "GUI 边缘拖拽裁剪"), "已裁剪")}
+        // GUI-05-A (A2 + A4): trim rejection also applies the rejected
+        // flash + race-safe clear. Trim doesn't have a timeline-preview
+        // position to keep, so we only toggle the rejected flag.
+        onTrimCommit={async (clipId, newStartFrame, newEndFrame) => {
+          const genAt = dragGenerationRef.current;
+          const success = await run(
+            () => api.trim(clipId, newStartFrame ?? undefined, newEndFrame ?? undefined, "GUI 边缘拖拽裁剪"),
+            "已裁剪",
+          );
+          if (success) return;
+          setDragRejected((p) => ({ ...p, [clipId]: true }));
+          const REJECT_MS = 600;
+          window.setTimeout(() => {
+            if (dragGenerationRef.current !== genAt) return;
+            setDragRejected((p) => {
+              if (!(clipId in p)) return p;
+              const { [clipId]: _, ...rest } = p;
+              return rest;
+            });
+          }, REJECT_MS);
+        }}
         onAssetDrop={(assetId, trackId, t) => {
           const a = project.assets.find((x) => x.asset_id === assetId);
           if (!a) return;

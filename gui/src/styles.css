@@ -8,6 +8,16 @@ body {
   font-size: 13px;
 }
 
+/* GUI-05-A: rejection-flash duration is controlled by a CSS variable so
+ * it can be tuned per-deployment without changing the JS. 600ms is the
+ * default (per L-5 visual sequence: origin A → attempted B (.rejected)
+ * for ~600ms → origin A). The race-safe timeout in App.tsx uses the
+ * same 600ms to clear `dragRejected` + `dragPreview`. */
+:root {
+  --yroll-reject-duration: 600ms;
+  --yroll-reject-color: #ff5050;
+}
+
 .app { display: flex; flex-direction: column; height: 100vh; }
 
 .topbar {
@@ -404,6 +414,25 @@ body {
 .clip.clamp-boundary .edit-zone {
   /* Subtle: 4% red tint over the existing color. */
   background: rgba(255, 80, 80, 0.04);
+}
+
+/* GUI-05-A (A4 + L-5): rejected preview state. Applied for ~600ms after
+ * a Core 4xx rejection. Visual outline + flash animation; the clip
+ * stays at the attempted preview position (dragPreview kept) while
+ * Core committed state is unchanged. Auto-clears via the race-safe
+ * timeout in App.tsx. */
+.clip.rejected {
+  outline: 2px solid var(--yroll-reject-color);
+  outline-offset: 2px;
+  cursor: not-allowed;
+  animation: yroll-reject-flash var(--yroll-reject-duration) ease-out;
+}
+.clip.rejected .edit-zone {
+  background: rgba(255, 80, 80, 0.08);
+}
+@keyframes yroll-reject-flash {
+  0%   { background: rgba(255, 80, 80, 0.18); }
+  100% { background: rgba(255, 80, 80, 0); }
 }
 .clip .ai-zone {
   height: 33%; background: rgba(0, 0, 0, 0.35);
