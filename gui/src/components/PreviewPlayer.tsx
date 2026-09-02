@@ -44,8 +44,13 @@ import {
 } from "../timemap-cache";
 import { useProjectSequence } from "../sequence";
 import {
-  splitLayersForPiP, badgeColorForKind, defaultPiPStyle,
+  badgeColorForKind,
 } from "../composite-multilayer";
+import {
+  resolveLayerTransform,
+  layerCssTransform,
+  zOrderedLayers,
+} from "../preview-layer";
 import { clipFramesFromSec, type Rational } from "../frames";
 
 export type AspectRatio = "16:9" | "9:16" | "1:1" | "4:3" | "3:4";
@@ -602,121 +607,26 @@ export default function PreviewPlayer({
             <video key={renderedUrl} ref={videoRef} src={renderedUrl}
               controls onTimeUpdate={onTimeUpdate} style={videoStyle} />
           ) : mode === "instant" && composite && !composite.is_black ? (
-            // GUI-03D + GUI-03R5-B3 (Decision 4): render the L1
-            // composite. Visual layers are split into [bottom] +
-            // [overlays]. The BOTTOMMOST layer (lowest layer_index)
-            // fills the canvas — the "main" video. Each layer above
-            // it renders as a Picture-in-Picture overlay (default 30%
-            // V2 / 20% V3+), anchored bottom-right, with a small
-            // track-id badge in the top-left.
-            //
-            // THIS IS PRESENTATION ONLY. The PiP scale / position
-            // is NEVER persisted to clip.transform or any Core data
-            // structure. The eventual persistent model remains
-            // "Layer = media + transform + opacity + visibility +
-            // z-order" — that's a future feature batch.
+            // GUI-04 04-05: render the L1 composite with EACH layer's
+            // own Clip.transform (x, y, scale, rotation, opacity).
+            // NO PiP heuristic. Track identity is z-order, not layout.
+            // Stable z-order via layer_index ascending.
             <div className="composite-stage" style={{ position: "relative", width: "100%", height: "100%" }}>
               {(() => {
-                const { bottom, overlays } = splitLayersForPiP(composite.visual_layers);
+                // composite.visual_layers is already a flat list
+                // ordered by layer_index (Core's build_preview_plan).
+                // We still re-sort defensively to guarantee a stable
+                // z-order regardless of any future Core change.
+                const layers = zOrderedLayers(composite.visual_layers);
                 return (
                   <>
-                    {bottom && (() => {
-                      const l = bottom;
-                      // Full canvas for the bottom layer.
-                      if (l.kind === "image") {
-                        return (
-                          <div key={`bottom:${l.track_id}:${l.clip_id}`}
-                            style={{
-                              position: "absolute", inset: 0,
-                              width: "100%", height: "100%",
-                              zIndex: l.layer_index,
-                            }}>
-                            <img
-                              style={{
-                                position: "absolute", inset: 0,
-                                width: "100%", height: "100%",
-                                objectFit: "contain",
-                              }}
-                              src={`/assets/${l.asset_id}/file`}
-                              alt=""
-                              data-layer-kind={l.kind}
-                            />
-                            <div
-                              className="layer-badge"
-                              style={{
-                                position: "absolute", top: 8, left: 8,
-                                padding: "2px 8px",
-                                background: "rgba(0,0,0,0.65)",
-                                color: badgeColorForKind(l.kind),
-                                fontSize: 11, fontWeight: 600,
-                                borderRadius: 3,
-                                pointerEvents: "none",
-                                zIndex: 9999,
-                              }}
-                              data-track-id={l.track_id}
-                            >
-                              {l.track_id.toUpperCase()}
-                            </div>
-                          </div>
-                        );
-                      }
-                      // video bottom
-                      return (
-                        <div key={`bottom:${l.track_id}:${l.clip_id}`}
-                          style={{
-                            position: "absolute", inset: 0,
-                            width: "100%", height: "100%",
-                            zIndex: l.layer_index,
-                          }}>
-                          <video
-                            style={{
-                              position: "absolute", inset: 0,
-                              width: "100%", height: "100%",
-                              objectFit: "contain",
-                            }}
-                            ref={(el) => {
-                              if (!el) return;
-                              const secs = sourceSecondsAt(l, playheadFrame);
-                              if (Math.abs(el.currentTime - secs) > 0.4) {
-                                el.currentTime = secs;
-                              }
-                            }}
-                            src={`/assets/${l.asset_id}/file`}
-                            data-layer-kind={l.kind}
-                            muted
-                            playsInline
-                          />
-                          <div
-                            className="layer-badge"
-                            style={{
-                              position: "absolute", top: 8, left: 8,
-                              padding: "2px 8px",
-                              background: "rgba(0,0,0,0.65)",
-                              color: badgeColorForKind(l.kind),
-                              fontSize: 11, fontWeight: 600,
-                              borderRadius: 3,
-                              pointerEvents: "none",
-                              zIndex: 9999,
-                            }}
-                            data-track-id={l.track_id}
-                          >
-                            {l.track_id.toUpperCase()}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    {overlays.map(({ layer: l, style }) => {
-                      const piPStyle = defaultPiPStyle(
-                        // We need the layer's position in the stack.
-                        // Recompute via splitLayersForPiP to get the
-                        // index: but simpler — compute inline.
-                        l.layer_index,
-                        overlays.length + 1,
-                      );
-                      const widthPct = `${piPStyle.scaleW * 100}%`;
-                      const heightPct = `${piPStyle.scaleH * 100}%`;
-                      const leftPct = `${piPStyle.leftPct * 100}%`;
-                      const topPct = `${piPStyle.topPct * 100}%`;
+                    {layers.map((l) => {
+                      // Per-layer transform. Defaults applied for
+                      // missing fields (centered, no extra scale, no
+                      // rotation, full opacity). The renderer MUST
+                      // NOT base visual size on track index.
+                      const tr = resolveLayerTransform(l);
+                      const cssT = layerCssTransform(tr);
                       const inner = l.kind === "image" ? (
                         <img
                           style={{
@@ -727,7 +637,7 @@ export default function PreviewPlayer({
                           src={`/assets/${l.asset_id}/file`}
                           alt=""
                           data-layer-kind={l.kind}
-                          data-layer-role="pip"
+                          data-track-id={l.track_id}
                         />
                       ) : (
                         <video
@@ -745,30 +655,39 @@ export default function PreviewPlayer({
                           }}
                           src={`/assets/${l.asset_id}/file`}
                           data-layer-kind={l.kind}
-                          data-layer-role="pip"
+                          data-track-id={l.track_id}
                           muted
                           playsInline
                         />
                       );
                       return (
-                        <div key={`overlay:${l.track_id}:${l.clip_id}`}
+                        <div
+                          key={`layer:${l.track_id}:${l.clip_id}`}
+                          className="composite-layer"
                           style={{
-                            position: "absolute",
-                            left: leftPct, top: topPct,
-                            width: widthPct, height: heightPct,
+                            position: "absolute", inset: 0,
+                            width: "100%", height: "100%",
+                            transform: cssT.transform,
+                            transformOrigin: "50% 50%",
+                            opacity: cssT.opacity,
                             zIndex: l.layer_index,
                           }}
-                          data-pip-for={l.track_id}>
+                          data-layer-transform-x={tr.x}
+                          data-layer-transform-y={tr.y}
+                          data-layer-transform-scale={tr.scale}
+                          data-layer-transform-rotation={tr.rotation}
+                          data-layer-transform-opacity={tr.opacity}
+                        >
                           {inner}
                           <div
                             className="layer-badge"
                             style={{
-                              position: "absolute", top: 4, left: 4,
-                              padding: "1px 6px",
-                              background: "rgba(0,0,0,0.7)",
+                              position: "absolute", top: 8, left: 8,
+                              padding: "2px 8px",
+                              background: "rgba(0,0,0,0.65)",
                               color: badgeColorForKind(l.kind),
-                              fontSize: 10, fontWeight: 600,
-                              borderRadius: 2,
+                              fontSize: 11, fontWeight: 600,
+                              borderRadius: 3,
                               pointerEvents: "none",
                               zIndex: 9999,
                             }}
