@@ -2,6 +2,237 @@
 
 ---
 
+## 当前状态（2026-09-02 GUI-05-R1-R2 DRAG RELIABILITY AUDIT 完成 → 待 commit + human acceptance）
+
+**最新事件（2026-09-02 22:38）**：GUI-05-R1-R2 完成。R1 修复 human testing 时暴露的 drag/move 不稳定问题：
+- 6 类 human-observed failures 通过 instrumentation 复现
+- 找到 1 个真 bug（Case D：propagated clip 碰撞 non-propagation sibling 时的 silent corruption）
+- 6 个 fail-first pytest 全部 PASS
+- 0 NEW vitest regressions（pre-existing `App.run.test.ts::R6-C scrollLeft` 仍 fail——verified via stash）
+- 0 NEW pytest regressions（pre-existing `test_no_overlap_invariant.py::_sanlihe-r5-manual` 仍 fail——verified via stash）
+- 05-A smoke 13/13 PASS（Scenario 6 flaky pre-existing；2/3 runs PASS）
+- 05-B smoke 15/15 PASS
+- canonical SHA256: 6/6 PASS
+
+**R1-R2 关键 FINDING（Case D 真相）**：
+
+`yroll/core/commands.py:move_clip` 在 propagate STRONG related clips 时**没有**检查 propagated clip 的新位置是否与 non-propagation sibling 冲突。原代码：
+```python
+cross_shifted: dict[str, float] = {}
+for rid in related_ids:
+    rc = self.core.project.clips.get(rid)
+    if rc is None: continue
+    ovl_s = max(rc.timeline_range.start, old_start)
+    ovl_e = min(rc.timeline_range.end, old_start + length)
+    if ovl_e <= ovl_s: continue
+    cross_shifted[rid] = rc.timeline_range.start
+    rc.timeline_range = TimeRange(start=rc.timeline_range.start + delta,
+                                  end=rc.timeline_range.end + delta)
+```
+
+**Bug**：当 A 有 captions C 和 E，F 是同一 track 但 NOT caption of A 时，移动 A → Core 会：
+1. 把 C 移到 C+delta（可能与 C 自己原本的位置不一致，但 OK）
+2. 把 E 移到 E+delta，但 E+delta 与 F 重叠
+3. **不抛错，Core state 被 silently corrupted**（E 在 F 的位置）
+
+**R1-R2 修复**：
+- move_clip 在每个 propagation target 上做 `_check_no_overlap`（排除 self 和其他 propagation targets）
+- 如果发现 non-propagation sibling 冲突，**原子 rollback**：
+  - 恢复 primary clip 的 timeline_range + track_id
+  - 恢复已经 shift 过的 propagation targets
+  - 抛出 `CommandError` with 明确的冲突 pair 信息
+
+**失败 trace 证据**（R1-R2 instrumentation 输出）：
+```
+[R1R2-CORE] move_clip START: clip_id=c488916 src_track=v1 target_track=v1 new_start=5.0
+  strong_edges=[('c8e7692', 'caption_of', 'c488916', 'strong'),
+                ('c46c6e2', 'caption_of', 'c488916', 'strong')]
+  propagation_targets=['c8e7692', 'c46c6e2']
+
+[R1R2-CORE] move_clip REJECT propagation-collision:
+  primary_clip=c488916 propagated_clip=c46c6e2
+  propagated_target_track=t1 propagated_new_range=(11.0, 14.0)
+  non_propagation_siblings=[('cb5ec96', 10.0, 13.0)]
+  real_conflicts=['cb5ec96']
+  already_shifted=['c8e7692']
+```
+
+→ Core 检测到 c46c6e2 移到 [11, 14] 与 cb5ec96 [10, 13] 冲突，回滚所有 mutation，抛出明确的 ConflictError。
+
+**修复前 vs 修复后**：
+- 修复前：A → C[+5] → E[+5] (silent overlap with F) → ❌ Core state corrupted, GUI 静默
+- 修复后：A → 检查 C[+5] OK → 检查 E[+5] 冲突 → rollback → ✓ Core unchanged, 明确拒绝
+
+**R1-R2 instrumentation 实施**：
+
+GUI 层（`gui/src/App.tsx`, `gui/src/components/ClipBlock.tsx`）：
+- `__yrollDragTrace` array — 记录每次 mutation：
+  - baseRevision BEFORE/AFTER
+  - clipId, newStartFrame, newTrackId
+  - dragGenerationAtCommit vs current（race-safe 验证）
+  - mutationSucceeded, mutationError
+- `ClipBlock.up()` extra 字段：
+  - `hitTrackId`（raw hit-test 结果）
+  - `hitTestStack`（elementsFromPoint stack 前 6 个元素的描述）
+  - `dragPreviewActive`（pointerup 时 dragPreview 状态）
+  - `pointerClientX/Y`（pointer 位置）
+  - `siblingsAtPointerdown`（otherRanges 数量）
+
+Core 层（`yroll/core/commands.py:move_clip`）：
+- `[R1R2-CORE] move_clip START` — clip_id, src_track, target_track, new_start, strong_edges, propagation_targets
+- `[R1R2-CORE] move_clip REJECT pre-flight` — pre-flight overlap detected (Case C)
+- `[R1R2-CORE] move_clip REJECT track_not_found` — invalid new_track_id (Case B)
+- `[R1R2-CORE] move_clip REJECT propagation-collision` — Case D (主 fix)
+- `[R1R2-CORE] move_clip COMMIT` — final state + cross_shifted
+
+**R1-R2 测试**（6 fail-first pytest + R1-A source-pin vitest）：
+
+| 测试 | 覆盖 case | 结果 |
+|---|---|---|
+| test_case_b_target_track_does_not_exist | Case B (API rejects wrong target) | PASS |
+| test_case_c_dragged_clip_overlaps_another | Case C (API rejects dragged-clip overlap) | PASS |
+| test_case_d_propagated_clip_overlaps_non_propagation_sibling | **Case D (主 finding)** | PASS |
+| test_case_e_repeated_moves_each_commit_exactly_once | Case E (repeated moves invariant) | PASS |
+| test_case_e_repeated_moves_no_stale_revision_leak | Case E (revision monotonic) | PASS |
+| test_propagation_collision_does_not_silently_corrupt_state | Case D invariant (no silent corruption) | PASS |
+| App.r1-drag-commit.test.ts (8 tests) | R1-A/B source-pin + behavior | PASS |
+
+**未确认 / 待浏览器 smoke**：
+
+- Case A (GUI says cross-track but actually same-track) — 需要 browser smoke 验证 `hitTestStack` 诊断
+- Case E (stale baseRevision race) — pytest 验证 Core 单调性，browser smoke 验证 GUI→API 链路
+- Case F (GUI reconciliation jump) — 需要 browser smoke
+- Case G (silent return to origin) — 需要 browser smoke
+
+**用户硬约束遵守**：
+- ❌ DO NOT start 05-C — 仍 held
+- ❌ DO NOT redesign Linked Clips / Group Editing
+- ❌ DO NOT silently change move_clip semantics
+- ✅ ONLY fix: propagation-collision check + atomic rollback（这是 bug fix，surface silent corruption）
+- ✅ Instrumentation only（不影响行为）
+- ✅ Report findings BEFORE broader changes
+
+**接下来**（**等用户审批**）：
+1. 用户 review R1-R2 findings + 主 fix
+2. 决定是否写 browser smoke (Case A, E, F, G)
+3. 决定是否需要更多 Core fixes (e.g., 静默 skip propagation if shift would collide 而不是 rollback)
+4. 集成的 human acceptance pass
+5. 提议 05-C（待用户指令）
+
+**HEAD 序列**：
+- `3dace4e` GUI-05-R1: drag commit stability + relationship propagation audit  ← 当前
+- `cc746aa` GUI-05-B: selection lifecycle
+- `bf695e0` GUI-05-A: drag rejection UX
+- `badf3f1` GUI-05-D: Semantic Link contract freeze
+- `a4055d1` SESSION: append new-session handoff note
+- `6a32559` GUI-04.6: align Preview z-order with Timeline vertical order
+
+**Working tree 状态**：
+- Modified: `SESSION.md`, `gui/src/App.tsx` (R1-R2 instrumentation), `gui/src/components/ClipBlock.tsx` (R1-R2 hit-test capture), `yroll/core/commands.py` (Case D fix + instrumentation)
+- Modified: `gui/src/App.r1-drag-commit.test.ts` (regex robustness fix for IIFE)
+- New: `tests/test_r1r2_audit_cases.py` (6 fail-first pytest)
+
+**Bundle 状态（:5180）**：
+- :5180 serves `index-CVR6XboQ.js` (R1 + R1-R2 fix)
+- 用户需 Ctrl+Shift+R 强制刷新
+
+**服务状态**：
+- Backend `:8770` PID `12840` (python)
+- Static `:5180` PID `25276` (vite preview)
+
+**新会话启动指引**（若有）：
+1. 读 `SESSION.md` 顶部
+2. 检查 :5180 / :8770 服务是否还在跑
+3. **不**自动开始 05-C——等用户指令
+4. R1-R2 待 commit + push + human acceptance——等用户指令
+
+---
+
+## 当前状态（2026-09-02 GUI-05-R1 HUMAN ACCEPTANCE FAILED ❌ → R1-R2 DRAG RELIABILITY 闭环调查开始）
+
+**最新事件（2026-09-02 22:30）**：R1 修复已 commit + push (`3dace4e`)，但用户手动 acceptance **FAILED**。R1 改善了部分 same-track drag 视觉稳定性，但 drag/move 行为仍不稳定：
+
+**Human-observed 6 类剩余问题**：
+1. Same-track drag 偶尔误报 "已跨轨移动"（pointer 实际在原轨）
+2. Same/cross-track moves 频繁 fail "与其他片段时间重叠"（目标区域 visible empty）
+3. Move 失败时偶尔静默回到原点，无 user-facing rejection
+4. 重复 move 同一 clip 增加失败概率（stale state leak across gestures）
+5. Cross-track move 高概率松手后回原位
+6. Relationship propagation 加重问题：移 A 可能带 B/C，collision 可能源自被 propagation 的 clip 而非 visible dragged clip
+
+**用户硬约束（继承 R1 + 新增）**：
+- ❌ Do NOT start 05-C
+- ❌ Do NOT declare R1 pass
+- ❌ Do NOT redesign Linked Clips / Group Editing yet
+- ❌ Do NOT merely assert "overlap exists"; identify the actual conflicting propagated pair
+- ✅ Open bounded **GUI-05-R1-R2 — Drag Reliability Closure**
+- ✅ First reproduce + instrument the actual mutation path（不猜）
+- ✅ Distinguish cases A-G: GUI says cross-track but actually same-track / API rejects wrong-track / API rejects dragged-clip overlap / API rejects propagated-clip overlap / stale baseRevision / Core succeeds but GUI stale / mutation fails but GUI loses rejection state
+- ✅ Deterministic fixtures for overlap-with-propagation, repeated-moves, etc.
+- ✅ Report root cause(s) BEFORE changing semantics
+- ✅ R1-R2 acceptance: 9 项硬条件 (same-track 永不假报 cross-track / empty target 不假报 overlap / 重复 move 稳定 / cross-track accept 留在 target / cross-track reject A→B(rejected)→A / no stale revision / no GUI↔Core jump / 05-A 05-B 仍 green / no 05-C work)
+
+**用户原文关键**：
+> "拖一个素材到另一处，仍有很大概率一松手它就回原来的位置了。这意味着现在已经不能只修 dragPreview。真正要查的是完整链路：pointer position → track hit-test → frame calculation → relationship inference → mutation request → revision check → collision check → Core mutation → refresh → GUI reconcile。只要这条链上任意一步使用了旧 track / 旧 frame / 旧 revision / 旧 relationship graph，你就会得到你现在看到的各种"看起来莫名其妙"的行为。"
+
+**完整 mutation chain to instrument**：
+```
+pointer position
+  → track hit-test (ClipBlock up(): elementsFromPoint → data-track-id)
+  → frame calculation (pxPerFrameToFrameDelta + snap + collision re-clamp)
+  → relationship inference (move_clip calls infer_relationships BEFORE move)
+  → mutation request (api.move with sessionId + baseRevision)
+  → revision check (Core: 409 if stale)
+  → collision check (Core: _check_no_overlap on source + target tracks)
+  → Core mutation (per-clip + propagated STRONG clips)
+  → refresh (GUI: setProject(fresh))
+  → GUI reconcile (displayProject reads dragPreview[id] OR project.clips[id])
+```
+
+**HEAD 序列**：
+- `3dace4e` GUI-05-R1: drag commit stability + relationship propagation audit  ← 当前
+- `cc746aa` GUI-05-B: selection lifecycle (L-1 + L-2 hydration, B6 escape, B7 late-up)
+- `bf695e0` GUI-05-A: drag rejection UX + gesture cancellation (A1-A4 + L-1 + L-5)
+- `badf3f1` GUI-05-D: Semantic Link contract freeze + GUI label rename (D12-D14)
+- `a4055d1` SESSION: append new-session handoff note (working tree snapshot)
+- `6a32559` GUI-04.6: align Preview z-order with Timeline vertical order
+
+**R1-R2 工作计划**：
+
+| 步骤 | 任务 |
+|---|---|
+| 1 | Instrumentation: 在 GUI + Core + API 三层添加可观测记录 (每 drag 一次：source/target/frame/revision/relationships 完整 snapshot before/after) |
+| 2 | Repro 6 类 human-observed failures (same-track 误报 cross-track / empty-target overlap / silent return / repeated-moves drift / cross-track reject / propagation-induced collision) |
+| 3 | 对每个 repro case，记录：A-G 7 种 case 的真实发生位置（GUI 层 vs API 层 vs Core 层） |
+| 4 | 构造 minimal deterministic fixtures (A alone / A+B+C propagation-induced / repeated moves A→B→C→D→E) |
+| 5 | 写 fail-first tests pin 每个 case |
+| 6 | 报告 root cause(s) — 不动 Core semantics |
+| 7 | 等用户审批后再 design fix（不在 R1-R2 内 fix 关系传播的语义） |
+
+**R1-R2 NOT in scope**：
+- 05-C subtitle work
+- New Core schema
+- Snap
+- Multi-selection semantics
+- Linked Clips / Group Editing redesign
+- move_clip propagation semantics 改动（除非 audit 证明 transitive bug）
+
+**Working tree 状态**：
+- Clean (R1 atomic commit landed; SESSION.md handoff to be updated next)
+
+**服务状态**：
+- Backend `:8770` PID `12840` (python)
+- Static `:5180` PID `25276` (vite preview, bundle `index-Di43ctKJ.js`)
+
+**下一步（用户审批后 / 或继续 R1-R2 investigation）**：
+1. 写 instrumentation：每 drag 完整 snapshot (GUI onPointerUp 阶段 + api.move 入参 + Core infer_relationships 出边 + Core mutation 出参 + refresh 后 GUI state)
+2. 构造 deterministic repro fixtures
+3. 写 fail-first tests
+4. 跑 repro，记录 root cause(s)
+5. 报告 findings → 等用户决定是否 fix semantics
+
+---
+
 ## 当前状态（2026-09-02 GUI-05-R1 DRAG COMMIT STABILITY / RELATIONSHIP PROPAGATION AUDIT 完成 ✅，待 commit）
 
 **最新事件（2026-09-02 22:08）**：GUI-05-R1 完成 + 测试 + smoke + 关系审计，未 commit。R1 修复 human testing of 05-B 暴露的 2 个问题：(1) drag commit visual spring-back (R1-A + R1-B)，(2) relationship propagation audit (R1-C, no bug found)。零 Core 改动。

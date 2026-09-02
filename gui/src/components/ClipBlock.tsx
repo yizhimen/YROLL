@@ -544,6 +544,20 @@ export default function ClipBlock({
         .find((el) => (el as HTMLElement).dataset?.trackId) as HTMLElement | undefined;
       const hitTrackId = row?.dataset.trackId ?? null;
 
+      // R1-R2 instrumentation: capture what elementsFromPoint returned
+      // (raw hit-test result). Helps diagnose "same-track drag reports
+      // cross-track" symptom — when hitTrackId differs from originTrackId
+      // but the pointer is visually over the same track.
+      const hitTestStack = document.elementsFromPoint(ev.clientX, ev.clientY)
+        .slice(0, 6)
+        .map((el) => (el as HTMLElement).dataset?.trackId
+          ? `[track=${(el as HTMLElement).dataset?.trackId}]`
+          : `[${(el as HTMLElement).tagName.toLowerCase()}.${(el as HTMLElement).className?.split(' ').slice(0, 2).join('.')}]`)
+        .join(" → ");
+      // Whether dragPreview is currently active (set by onDragMove).
+      const dragPreviewActive = drag.previewFrame !== drag.originFrame
+        || drag.targetTrackId !== drag.originTrackId;
+
       // Cross-track re-clamp: only if pointer hit a different
       // track-row. We do NOT fold scrollLeft into the frame
       // delta (req. 8). The committed frame equals the preview
@@ -647,6 +661,16 @@ export default function ClipBlock({
         originTrackId: drag.originTrackId,
         candidateFrame: drag.candidateFrame,
         previewFrame: drag.previewFrame,
+        // R1-R2: capture the raw hit-test result. If hitTrackId
+        // differs from originTrackId but the pointer is visually on
+        // the same track, this is the "A. GUI says cross-track but
+        // actually same-track" failure mode.
+        hitTrackId,
+        hitTestStack,
+        // R1-R2: was dragPreview active at this moment? If not, the
+        // user is dragging a stale state and the local clamp may
+        // not have any effect.
+        dragPreviewActive,
         targetTrackId: hitTrackId,
         committedTrackId,
         snapFrame,
@@ -660,6 +684,15 @@ export default function ClipBlock({
         willMutate:
           committedFrame !== drag.originFrame
           || committedTrackId !== drag.originTrackId,
+        // R1-R2: pointer coordinates at pointerup. Helps diagnose
+        // "hit-test reports wrong track" by correlating with
+        // elementsFromPoint stack.
+        pointerClientX: ev.clientX,
+        pointerClientY: ev.clientY,
+        // R1-R2: siblings at pointerdown (otherRanges). If project
+        // changed between pointerdown and pointerup, these are
+        // stale and may cause "ghost" collisions.
+        siblingsAtPointerdown: otherRanges.length,
       };
       // eslint-disable-next-line no-console
       console.log("[YROLL-DRAG-UP]", JSON.stringify(upLog));

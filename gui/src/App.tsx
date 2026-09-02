@@ -2308,7 +2308,48 @@ export default function App() {
             : () => api.move(clipId, newStartFrame, "GUI 拖动");
           const okMsg = newTrackId ? "已跨轨移动" : "已移动";
 
+          // R1-R2 instrumentation: capture sessionId + baseRevision
+          // BEFORE the mutation. Helps diagnose "stale baseRevision"
+          // → 409 rejection from server.
+          const traceBeforeRev = ((window as unknown as {
+            __yrollSession?: { sessionId: string | null; revision: number };
+          }).__yrollSession?.revision) ?? null;
+
+          // R1-R2: simple await run() (no IIFE wrapper — the wrapper
+          // introduced a microtask boundary that was visible in some
+          // smoke harness ordering tests). Trace pushes happen here.
+          let mutationSucceeded = false;
+          let mutationError: string | null = null;
           const success = await run(moveFn, okMsg);
+          mutationSucceeded = success;
+          if (!success) {
+            mutationError = (window as unknown as {
+              __yrollLastMutationError?: string;
+            }).__yrollLastMutationError ?? null;
+          }
+
+          // R1-R2 instrumentation: record per-drag mutation trace.
+          const traceAfterRev = (window as unknown as {
+            __yrollSession?: { sessionId: string | null; revision: number };
+          }).__yrollSession?.revision ?? null;
+          const trace = {
+            kind: "mutation",
+            ts: performance.now(),
+            clipId,
+            newStartFrame,
+            newTrackId: newTrackId ?? null,
+            baseRevisionBefore: traceBeforeRev,
+            baseRevisionAfter: traceAfterRev,
+            dragGenerationAtCommit: genAt,
+            dragGenerationCurrent: dragGenerationRef.current,
+            dragPreviewActive: true,
+            mutationSucceeded,
+            mutationError,
+          };
+          const w = window as unknown as { __yrollDragTrace?: unknown[] };
+          if (Array.isArray(w.__yrollDragTrace)) w.__yrollDragTrace.push(trace);
+          console.log("[YROLL-R1R2-MUTATION]", JSON.stringify(trace));
+
           if (success) {
             // R1-A success path: clear dragPreview[clipId] AFTER
             // refresh. Core is now at the new position (B), so

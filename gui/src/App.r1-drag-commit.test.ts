@@ -36,14 +36,28 @@ function stripComments(text: string): string {
  * Extract the body of the onMoveCommit callback wired into <Timeline>.
  * The callback is the async arrow function assigned to
  * `onMoveCommit={async (clipId, newStartFrame, newTrackId) => { ... }}`
- * in App.tsx. This is a heuristic extraction; if App.tsx is refactored
- * this regex must be updated.
+ * in App.tsx. We use a brace-counting approach to find the matching
+ * closing brace of the arrow function body, which handles nested
+ * IIFEs / setTimeouts correctly.
  */
 function extractOnMoveCommitBody(stripped: string): string | null {
-  const m = stripped.match(
-    /onMoveCommit=\{async\s*\(\s*clipId\s*,\s*newStartFrame\s*,\s*newTrackId\s*\)\s*=>\s*\{[\s\S]*?\n\s+\}\s*\}/,
-  );
-  return m ? m[0] : null;
+  // Find the start: "onMoveCommit={async (clipId, newStartFrame, newTrackId) => {"
+  const startRe = /onMoveCommit=\{async\s*\(\s*clipId\s*,\s*newStartFrame\s*,\s*newTrackId\s*\)\s*=>\s*\{/;
+  const startMatch = startRe.exec(stripped);
+  if (!startMatch) return null;
+  const startIdx = startMatch.index + startMatch[0].length;
+  // Brace-count to find the matching closing brace.
+  let depth = 1;
+  let i = startIdx;
+  while (i < stripped.length && depth > 0) {
+    const ch = stripped[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    i++;
+  }
+  if (depth !== 0) return null;
+  // Extract from "onMoveCommit={" to the closing "}".
+  return stripped.slice(startMatch.index, i);
 }
 
 describe("GUI-05-R1 (R1-A) SUCCESS drag must never visually spring back", () => {
@@ -93,8 +107,11 @@ describe("GUI-05-R1 (R1-A) SUCCESS drag must never visually spring back", () => 
     // setDragPreview that removes clipId. After Core refresh updates
     // project to the new position, displayProject falls back to Core
     // — no visual change.
+    // R1-R2: the clear is now also gated by dragGenerationRef.current
+    // === genAt. The clear must still happen for the gesture that
+    // originally committed.
     const successBranchRe =
-      /if\s*\(\s*success\s*\)\s*\{[\s\S]*?setDragPreview\(\s*\(\s*p\s*\)\s*=>\s*\{[\s\S]*?const\s*\{\s*\[clipId\][^}]*\}\s*=\s*p[\s\S]*?return\s+rest\s*;[\s\S]*?\}\s*\)[\s\S]*?\}/;
+      /if\s*\(\s*success\s*\)\s*\{[\s\S]*?dragGenerationRef\.current\s*===\s*genAt[\s\S]*?setDragPreview\(\s*\(\s*p\s*\)\s*=>\s*\{[\s\S]*?const\s*\{\s*\[clipId\][^}]*\}\s*=\s*p[\s\S]*?return\s+rest\s*;[\s\S]*?\}\s*\)/;
     expect(body).toMatch(successBranchRe);
   });
 

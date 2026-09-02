@@ -1614,10 +1614,36 @@ class CommandLayer:
 
         # 重叠检查（如果换轨，检查新轨；否则检查原轨）
         target_track = new_track_id or clip.track_id
-        self._check_no_overlap(
-            target_track, new_timeline_start, new_timeline_start + length,
-            exclude_clip_id=clip_id,
-            op_name=f"move_clip({clip_id})")
+        try:
+            self._check_no_overlap(
+                target_track, new_timeline_start, new_timeline_start + length,
+                exclude_clip_id=clip_id,
+                op_name=f"move_clip({clip_id})")
+        except CommandError as _e:
+            # R1-R2 instrumentation: capture the exact overlap pair
+            # causing the rejection. Helps diagnose "D. API rejects
+            # because the dragged clip itself overlaps another clip"
+            # vs "API rejects because a propagated related clip overlaps
+            # another clip" (the latter has not yet happened at this
+            # pre-flight check; we capture the dragged-clip overlap
+            # specifically).
+            siblings_on_target = [
+                (cid, self.core.project.clips[cid].timeline_range.start,
+                 self.core.project.clips[cid].timeline_range.end)
+                for cid in (
+                    next(
+                        (t.clip_ids for t in tl.tracks
+                         if t.track_id == target_track), []
+                    )
+                ) if cid != clip_id and cid in self.core.project.clips
+            ]
+            print(f"[R1R2-CORE] move_clip REJECT pre-flight: "
+                  f"clip_id={clip_id} src_track={clip.track_id} "
+                  f"target_track={target_track} "
+                  f"new_start={new_timeline_start} new_end={new_timeline_start + length} "
+                  f"siblings_on_target={siblings_on_target} "
+                  f"reason={_e}")
+            raise
 
         # GUI-04.5 P0-D: validate target track EXISTS BEFORE we touch
         # the source track. The previous order removed the clip from
@@ -1630,10 +1656,20 @@ class CommandLayer:
                 (t for t in tl.tracks if t.track_id == new_track_id), None,
             )
             if new is None:
+                print(f"[R1R2-CORE] move_clip REJECT track_not_found: "
+                      f"clip_id={clip_id} requested_target={new_track_id}")
                 raise CommandError(f"track 不存在: {new_track_id}")
 
         # 先推断关系（在旧位置上），再算联动，最后才移动
         infer_relationships(self.core.project)
+        # R1-R2 instrumentation: capture relationship graph immediately
+        # before move, so we can correlate with any propagated-clip
+        # collision downstream.
+        rels_for_trace = [
+            (r.source, r.kind, r.target, r.relation.value)
+            for r in self.core.project.relationships
+            if r.relation.value == "strong"
+        ]
         related_ids: list[str] = []
         for r in self.core.project.relationships:
             if r.relation.value != "strong":
@@ -1642,6 +1678,16 @@ class CommandLayer:
                 related_ids.append(r.target)
             elif r.target == clip_id:
                 related_ids.append(r.source)
+
+        print(f"[R1R2-CORE] move_clip START: clip_id={clip_id} "
+              f"src_track={clip.track_id} target_track={target_track} "
+              f"new_start={new_timeline_start} "
+              f"strong_edges={rels_for_trace} "
+              f"propagation_targets={related_ids}")
+
+        # R1-R2: capture source track_id for rollback if a propagated
+        # clip later collides.
+        src_track_id_at_start = clip.track_id
 
         # 移动主 clip
         clip.timeline_range = TimeRange(
@@ -1654,6 +1700,13 @@ class CommandLayer:
             clip.track_id = new_track_id
 
         cross_shifted: dict[str, float] = {}
+        # R1-R2: pre-compute the set of all propagation targets so we
+        # can exclude them from the per-target overlap check (they are
+        # not "real" siblings — they're being moved together).
+        propagation_target_set = set(related_ids)
+        # R1-R2: track which propagation targets have already been
+        # shifted so we can roll them back if a later target collides.
+        already_shifted: dict[str, tuple[float, float]] = {}
         for rid in related_ids:
             rc = self.core.project.clips.get(rid)
             if rc is None:
@@ -1663,10 +1716,84 @@ class CommandLayer:
             ovl_e = min(rc.timeline_range.end, old_start + length)
             if ovl_e <= ovl_s:
                 continue
+            # R1-R2: check if shifting this related clip would collide
+            # with a NON-propagation sibling. If so, abort the entire
+            # move with rollback.
+            rc_new_start = rc.timeline_range.start + delta
+            rc_new_end = rc.timeline_range.end + delta
+            rc_target_track = rc.track_id
+            # Find overlap conflicts excluding self and excluding all
+            # OTHER propagation targets (they are moving together).
+            conflicts = self._find_overlap(
+                rc_target_track, rc_new_start, rc_new_end,
+                exclude_clip_id=rid,
+            )
+            # Filter out propagation targets that will also be moved
+            # (their new positions are by design non-overlapping with
+            # the current propagation target).
+            real_conflicts = [
+                c for c in conflicts
+                if c not in propagation_target_set
+            ]
+            if real_conflicts:
+                # R1-R2 instrumentation: capture propagation-induced
+                # collision. The user only moved clip A, but the
+                # propagated clip B can't move because it would
+                # overlap C (a NON-propagation sibling). This is case
+                # "D. API rejects because a propagated related clip
+                # overlaps another clip".
+                rc_siblings = [
+                    (cid, self.core.project.clips[cid].timeline_range.start,
+                     self.core.project.clips[cid].timeline_range.end)
+                    for cid in (
+                        next(
+                            (t.clip_ids for t in tl.tracks
+                             if t.track_id == rc_target_track), []
+                        )
+                    ) if cid != rid and cid not in propagation_target_set
+                       and cid in self.core.project.clips
+                ]
+                print(f"[R1R2-CORE] move_clip REJECT propagation-collision: "
+                      f"primary_clip={clip_id} "
+                      f"propagated_clip={rid} "
+                      f"propagated_target_track={rc_target_track} "
+                      f"propagated_new_range=({rc_new_start}, {rc_new_end}) "
+                      f"non_propagation_siblings={rc_siblings} "
+                      f"all_conflicts={conflicts} "
+                      f"real_conflicts={real_conflicts} "
+                      f"already_shifted={list(already_shifted.keys())}")
+                # R1-R2: rollback ALL state mutated by this move.
+                # 1) Restore the primary clip's timeline_range + track.
+                clip.timeline_range = TimeRange(start=old_start, end=old_start + length)
+                if new_track_id and new_track_id != clip.track_id:
+                    new.clip_ids.remove(clip_id)
+                    old = next((t for t in tl.tracks if clip_id in t.clip_ids), None)
+                    if old:
+                        old.clip_ids.append(clip_id)
+                    clip.track_id = src_track_id_at_start
+                # 2) Restore all already-shifted propagation targets
+                # to their pre-move positions.
+                for shifted_rid, (pre_start, pre_end) in already_shifted.items():
+                    srcc = self.core.project.clips.get(shifted_rid)
+                    if srcc is not None:
+                        srcc.timeline_range = TimeRange(start=pre_start, end=pre_end)
+                raise CommandError(
+                    f"propagated_clip({rid}) 与轨道 {rc_target_track} 上现有 clip 时间重叠："
+                    f"{', '.join(real_conflicts[:3])}"
+                    f"。（传播 clip 与目标位置冲突）"
+                )
+            # R1-R2: capture pre-shift position BEFORE applying, so we
+            # can roll back later propagation targets if a later target
+            # collides.
+            already_shifted[rid] = (rc.timeline_range.start, rc.timeline_range.end)
             cross_shifted[rid] = rc.timeline_range.start
             rc.timeline_range = TimeRange(
                 start=rc.timeline_range.start + delta,
                 end=rc.timeline_range.end + delta)
+
+        print(f"[R1R2-CORE] move_clip COMMIT: clip_id={clip_id} "
+              f"new_range=({clip.timeline_range.start}, {clip.timeline_range.end}) "
+              f"cross_shifted={cross_shifted}")
 
         after = {"timeline_range": clip.timeline_range.model_dump(),
                  "track_id": clip.track_id}
