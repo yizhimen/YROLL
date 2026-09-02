@@ -2,6 +2,83 @@
 
 ---
 
+## 当前状态（2026-09-02 GUI-05-R1-R3 SEQUENTIAL SAME-CLIP MOVE CONSISTENCY 调查开始）
+
+**最新事件（2026-09-02 23:00）**：R1-R2 commit `002ddea` 已 push。Human acceptance 复测发现**新 critical failure**：连续 2 次移动同一 clip，第 2 次 reject 后 clip 回到**原始 A 位置**而非**当前 committed B 位置**。
+
+**新观察的失败序列**：
+```
+A → B (success)
+B → C (rejection)
+C → A   ← BUG: should be C(rejected) → B
+```
+
+Expected on rejection:
+```
+B → C(rejected) → B
+```
+
+**用户硬约束（继承 + 新增）**：
+- ❌ Do NOT start 05-C
+- ❌ Do NOT ask for more exploratory manual testing
+- ❌ Do NOT change relationship semantics
+- ❌ Do NOT add Snap / Group Editing
+- ❌ Do NOT perform unrelated refactors
+- ✅ Investigate as deterministic sequential-mutation bug
+- ✅ FIRST reproduce with instrumentation, report state chain BEFORE changing behavior
+- ✅ R1-R2 Case D propagation-collision fix remains required（不 revert）
+
+**Phase scope**：GUI-05-R1-R3 — Sequential Same-Clip Move Consistency
+- Test sequence: A → B → C → D → E (same clip, no page reload)
+- For EACH gesture capture:
+  - POINTERDOWN: clipId, trackId, Core committed start frame, rendered frame, project revision, GUI drag origin, relationship graph version
+  - POINTERUP: pointer target frame, target track, attempted frame, baseRevision sent, dragPreview frame, current rendered frame
+  - MUTATION RESPONSE: HTTP result, server revision before/after, final Core frame, exact rejection reason
+  - GUI RECONCILIATION: frame before refresh, frame returned by refresh, frame after dragPreview clear, rejection origin frame, final displayed frame
+- 8 candidate root causes (stale GUI origin / stale Core position / stale baseRevision / stale refresh response / stale React closure / rejection handler restoring first-gesture origin / propagation changing state / mutation fails because propagated clips collide)
+
+**Critical invariant**:
+- After accepted A→B: Core=B, GUI=B, next pointerdown origin=B, next baseRevision=current
+- If B→C rejected: GUI must do EXACTLY B → C(rejected) → B (never return to A)
+- If B→C succeeds: GUI must remain C after refresh
+
+**Acceptance (R1-R3)**：
+- A→B→C→D→E either all commit OR reject with explicit reason, returning only to immediately previous committed position
+- Never return to older position
+
+**Pre-commit deliverables**：
+1. One reproduced failure trace
+2. Root cause
+3. Exact code path
+4. Regression tests
+5. Browser smoke result
+
+**HEAD 序列**：
+- `002ddea` GUI-05-R1-R2: drag reliability audit + propagation-collision fix (Case D)  ← 当前
+- `3dace4e` GUI-05-R1: drag commit stability + relationship propagation audit (R1-C)
+- `cc746aa` GUI-05-B: selection lifecycle
+- `bf695e0` GUI-05-A: drag rejection UX
+- `badf3f1` GUI-05-D: Semantic Link contract freeze
+
+**服务状态**：
+- Backend `:8770` PID `12840` (python)
+- Static `:5180` PID `25276` (vite preview)
+
+**Working tree 状态**：
+- Clean (R1-R2 已 commit + push)
+- Untracked pre-existing: `docs/GUI-05-POST-FOUNDATION-AUDIT.md`, 3 个 `新建 文本文档*.md`
+
+**下一步（用户已批准 phase，等 R1-R3 investigation 完成）**：
+1. Write browser smoke for sequential moves with full trace capture
+2. Run smoke to reproduce A → B → C → A failure
+3. Analyze trace to identify root cause (8 candidates)
+4. Document findings, identify exact code path
+5. Write regression tests
+6. Report to user BEFORE any fix
+7. (After approval) Implement fix
+
+---
+
 ## 当前状态（2026-09-02 GUI-05-R1-R2 DRAG RELIABILITY AUDIT 完成 → 待 commit + human acceptance）
 
 **最新事件（2026-09-02 22:38）**：GUI-05-R1-R2 完成。R1 修复 human testing 时暴露的 drag/move 不稳定问题：
