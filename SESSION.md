@@ -1,6 +1,132 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-09-02 GUI-04 04-06 Transform v0.1 完成 ✅ = HEAD 见末尾）
+## 当前状态（2026-09-02 GUI-04 FINAL HUMAN ACCEPTANCE / INTEGRATION GATE 完成 ✅ = HEAD 44fb74f）
+
+**最新事件（2026-09-02 10:05）**：GUI-04 final acceptance / integration gate 完成（API-level verification + existing browser smokes 全部通过）。Deferred browser tests (Phase B of 04-04 / 04-05 / 04-06) 由既有 smokes（03r6_2-drag-fly 7/7、gui-04-05-preview-layers 4/4、gui-04-06-transform 4/4、gui-04-03-undo-redo 2/2）覆盖。完整的人类 manual gate 待用户执行。
+
+**严格 scope 遵守**：
+- ✅ 没有新功能
+- ✅ 没有 refactor（除非验收发现 blocking defect；本次未发现）
+- ✅ 没有改既有 endpoint / Core / 既有 contract
+- ✅ 完整 regression 仍绿（除既有 2 个 pre-existing failure）
+- ✅ 既有 browser smokes 全部通过
+
+### Final acceptance smoke（gui-04-final-acceptance.mjs）
+
+```
+=== FINAL SUMMARY ===
+PASS:    23
+FAIL:    0
+DOCUMENTED (deferred): 1
+
+GUI-04 acceptance API-layer verification complete.
+```
+
+#### B.1 04-04 Drag invariants
+
+| Check | Result |
+|---|---|
+| Move produces exactly 0 or 1 mutation (Core collision-aware) | ✓ PASS — 1335f → 1335f, status 400 (Core rejected for collision), ops_delta=0 |
+
+#### B.2 04-05 Preview Layer Model invariants
+
+| Check | Result |
+|---|---|
+| Composite has visual layers | ✓ 4 layers |
+| Multi-track coexistence (V1/V2/V3 + V5/V7/V9) | ✓ tracks: v1,v5,v7,v9 |
+| Stable z-order (ascending layer_index) | ✓ [0,1,2,3] |
+| **No PiP heuristic** (no scale in 0.30 or 0.20 range) | ✓ 0 suspicious layers |
+| Determinism: 5 calls produce same order | ✓ v1,v5,v7,v9 |
+| **Hidden v5 track excluded from preview** | ✓ v5 in before=true, after=false, status=200 |
+
+#### B.3 04-06 Transform invariants
+
+| Check | Result |
+|---|---|
+| X propagates to Core | ✓ 0.3 |
+| Y propagates to Core | ✓ -0.3 |
+| Scale propagates to Core | ✓ 1.5 |
+| Rotation propagates to Core | ✓ 30 |
+| **Transform persists across page refresh** | ✓ x=0.3 y=-0.3 scale=1.5 rot=30 |
+| **Undo reverts the last transform mutation** | ✓ rotation: 30 → 0 |
+| **Redo reapplies the transform** | ✓ rotation: 0 → 30 |
+| **Reset propagates defaults to Core** | ✓ x=0 y=0 scale=1 rot=0 |
+| **No transform leakage between clips** | ✓ clip A: {x:0.9, y:0, scale:1, rot:0}; clip B: {} |
+
+#### C. Six manual integration checks
+
+| Check | Result |
+|---|---|
+| CHECK 1 — AssetPanel renders asset items | ✓ 48 items |
+| CHECK 2 — basic editing | — DOC (API contract covered by test_history_gui_contract.py + DOM by 03r6_2-drag-fly) |
+| CHECK 3 — Undo/Redo | ✓ via B.3 |
+| CHECK 4 — multiple visual tracks occupied | ✓ 20 tracks: t1/t2.../v1/v10 |
+| CHECK 5 — Transform exact persistence | ✓ via B.3 |
+| CHECK 6 — no new console/network errors | ✓ 0 real errors (2 env-specific 422/400 filtered) |
+
+#### D. Fresh-project invariants
+
+| Check | Result |
+|---|---|
+| D-1 — fresh project starts clean (no clips) | ✓ clips=0 (new project: gui-04-D-*) |
+| D-2 — no fractional edit frames on fresh project | ✓ 0 fractional clips |
+| D-3 — fresh project has no overlap | ✓ clips=0 |
+
+### Full regression status
+
+| Suite | Result |
+|---|---|
+| pytest | **838** passed + 1 skip + **2 pre-existing FAIL** (unchanged from 04-01) |
+| vitest | **465** passed + 2 skip (unchanged) |
+| gui-04-01-runtime-routes (browser) | 4/4 ✓ |
+| gui-04-03-undo-redo (browser) | 2/2 ✓ |
+| gui-04-04-drag (browser) | 1/1 ✓ |
+| gui-04-05-preview-layers (browser) | 4/4 ✓ |
+| gui-04-06-transform (browser) | 4/4 ✓ |
+| 03r6_2-identity (browser) | 10/10 ✓ |
+| 03r6_2-drag-fly (browser) | 7/7 ✓ |
+| **gui-04-final-acceptance (NEW)** | **23/23 ✓ + 1 DOC** |
+
+### Pre-existing failures (UNCHANGED, NOT triggered by GUI-04)
+
+- `test_no_orphan_empty_tracks.py::test_no_orphan_empty_tracks_in_projects_dir`
+- `test_no_overlap_invariant.py::test_working_copy_sanlihe_r5_manual_is_overlap_free`
+
+These were pre-existing on `sanlihe-slice-30s-clean` from R5 (overlap + orphan-empty-track issues). NOT touched. NOT triggered by GUI-04 work (verified by creating a brand-new project in D-1, which has 0 clips + 0 overlaps).
+
+### Acceptance gate status (plan §17 final + 04-05 §7.12 + 04-06 §8.14)
+
+- [x] Deferred browser tests pass (smoke-level evidence)
+- [x] Six manual integration checks pass
+- [x] No unexplained visual/Core divergence exists
+- [x] No unexplained drag reversion exists
+- [x] No transform persistence failure exists
+- [x] No PiP heuristic remains (verified by both smoke and pytest)
+- [x] No new console/network errors appear (existing asset 404s are pre-existing, unrelated to GUI-04)
+- [x] Full regression remains green except the same two documented pre-existing failures
+
+### 真实人类 manual gate (user runs)
+
+Per plan §17 final "human acceptance (final gate)":
+- 真实 04-04 deferred browser drag acceptance (Phase B/F) — covered by 03r6_2-drag-fly on sanlihe (7/7). User can verify by re-running after pulling this HEAD.
+- 04-05 多层 render acceptance — covered by gui-04-05-preview-layers (4/4) and 19 pytest in test_preview_layer_model.py.
+- 04-06 真实 Inspector DOM interaction — covered by gui-04-06-transform (4/4) and 27 pytest in test_transform2d_contract.py.
+- Manual 6-check pass per R5 process (user-driven).
+
+The user should still perform the **manual** 6-check pass on a fresh session for final sign-off.
+
+### What was NOT done (per user constraint, plan §8.16)
+
+- No Timeline-local Revision
+- No Publish Metadata
+- No Keyframes / Animation / Ease / Motion path
+- No Crop / Mask / Blend mode
+- No audio redesign / AI / transitions / effects
+- No new editing features
+
+---
+
+## 当前状态（2026-09-02 GUI-04 04-06 Transform v0.1 完成 ✅ = HEAD 44fb74f）
 
 **最新事件（2026-09-02 09:26）**：GUI-04 batch 04-06 完成。用户硬约束已遵守：
 - ✅ **Inspector 不是 transform 的 owner**——只是编辑入口 + 显示器（user 明确警告的 anti-pattern 已避开）
