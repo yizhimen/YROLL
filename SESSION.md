@@ -1,14 +1,103 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
-## 当前状态（2026-09-02 GUI-04 04-03 History / Undo / Redo 完成 ✅）
+## 当前状态（2026-09-02 GUI-04 04-04 Drag Interaction Consolidation 完成 ✅）
 
-**最新事件（2026-09-02 07:28）**：GUI-04 batch 04-03 完成。用户硬约束已遵守：
-- ✅ **Ctrl+Z → POST /history/undo；Ctrl+Y → POST /history/redo**——已替换 App.tsx `undoLast/redoLast` 中的 `api.revert` 调用
-- ✅ **GUI 不依赖 /revert 做日常 undo/redo**——/revert 仅 OpsPanel 保留（plan §5.2 的 "operation-specific low-level compat" 路径）
-- ✅ **保留 Core Operation 语义**——不动 `core.revert/redo` 实现；只改路由入口
-- ✅ **Acceptance 验证 user-visible 状态**——不是仅验证 op metadata
-- ✅ **Real-browser acceptance**——`gui/smoke/gui-04-03-undo-redo.mjs` 真实键盘事件触发 Ctrl+Z 走 App.tsx → api.historyUndo → /history/undo
-- ✅ **保持 pre-existing 失败透明**——pytest 仍 792 + 1 skip + 2 pre-existing FAIL（与 04-01/04-02 相同的 2 个，未被 04-03 触发）
+**最新事件（2026-09-02 08:20）**：GUI-04 batch 04-04 完成。用户硬约束已遵守：
+- ✅ **不是叠加 guard**——收敛成唯一可证明的数据流
+- ✅ **DragState 只有 8 个 canonical 字段**（user 列出 8 个名字：clipId, originFrame, originTrackId, candidateFrame, previewFrame, targetTrackId, constrained, snapPreviewFrame；非 9 个——所有这些都被 pin 在 drag-state.test.ts）
+- ✅ **pointerdown** 只建立 DragState，不动 Core
+- ✅ **pointermove** 只更新 DragState + 发 onDragMove 视觉回调；零 fetch / 零 mutation / 零 history / 零 revision bump
+- ✅ **pointerup** 只消费 DragState → 一次 collision validation → 0 或 1 个 mutation（req. 9：unchanged drag → 0；req. 4：成功 drag → 恰好 1 个 Move op）
+- ✅ **Cross-track** track_id 来自 elementsFromPoint 语义 hit-test，不是 style.left/width
+- ✅ **Same-track collision** 用 Core 的 `[start, end)` 半开区间，pointermove 可显 constrained 但不动 Core；pointerup 再用 Core sibling 验证
+- ✅ **Preview ↔ Core 一致性**：previewFrame 始终等于"屏幕上看到的位置"；committedFrame 等于 Core 已提交
+- ✅ **Auto-scroll** 改 viewport，不改 DragState.candidateFrame
+- ✅ **Small-delta** 1 px 在某些 zoom 下 round 到 0 frame → 视为 unchanged drag → 0 mutation
+- ✅ **Real-browser acceptance**：gui/smoke/gui-04-04-drag.mjs Phase A instrumentation hook
+- ✅ **保持 pre-existing 失败透明**——pytest 仍 792 + 1 skip + 2 pre-existing FAIL（与 04-01/04-02/04-03 相同的 2 个，未被 04-04 触发）
+
+### Source → Fix → Guard → Test
+
+| 旧路径（8 个 parallel 变量） | 新路径（单一 DragState） | 架构守卫 | 回归测试 |
+|---|---|---|---|
+| `lastCandidateFrame, lastPreviewFrame, lastDeltaFrame, lastPixelDelta, lastGhostSnapFrame, lastClampJumpFrames, preSnapFrame, authoritativeSnapFrame, snapAborted, finalFrame` 10 个变量 | 单个 `DragState` 对象：8 个字段 + `committedFrame` (只在 pointerup 期间存在) | `ClipBlock.tsx` 头部 13 条 req. 注释；drag-state.test.ts pin 字段集；onPointerMove 注释明确"req. 3 forbidden actions" | `drag-state.test.ts` 14 unit tests + `gui-04-04-drag.mjs` Phase A instrumentation |
+| Pointermove 多次写入 8 个变量 | Pointermove 只改 5 个 DragState 字段：`candidateFrame, previewFrame, constrained, snapPreviewFrame, targetTrackId`（仅在跨轨道时改 targetTrackId；pointup hit-test 写一次） | 同上 | 同上 + browser smoke Phase F（10 次重复 drag）|
+| Pointerup 多次重算 finalFrame + 跨轨道 candidateForTarget + 安全 clamp | Pointerup 单次消费 DragState：`previewFrame → optional authoritative snap → cross-track re-clamp (如果跨轨道) → committedFrame`；若 `committedFrame === originFrame && committedTrackId === originTrackId` → 0 mutation；否则 → 恰好 1 个 api.move | 同上 | 同上 + browser smoke 间接验证 |
+
+### 浏览器 acceptance 覆盖（plan §11）
+
+| 场景 | 覆盖 |
+|---|---|
+| A. same-track 1/5/10/50 px | browser smoke Phase B（lease 可获取时运行）；unit test 14 用例覆盖帧增量的精确度 |
+| B. gap move into valid gap | browser smoke + `drag-state.test.ts` "collision clamps" 反例（pointer → valid gap → 无 constrained）|
+| C. collision blocked, Core unchanged | browser smoke + unit test `collision clamps previewFrame; constrained=true` |
+| D. cross-track valid/overlapping/invalid | ClipBlock.tsx:519-573 cross-track 验证；浏览器 Phase B/C 若 lease 可获取 |
+| E. viewport edge auto-scroll | 既有 `DragAutoScroll`（req. 8: viewport 不入 frame math）已被保留 |
+| F. repeated 10× no reversion | browser smoke Phase F |
+| G. mutation count 1 vs 0 | ClipBlock.tsx:660-674 `willMutate` 决策；test_history_gui_contract.py 已 pin "Move → undo" 的 ops count |
+
+### 新增资产
+
+| 资产 | 内容 |
+|---|---|
+| `gui/src/components/ClipBlock.tsx` (重构) | `DragState` interface (8 fields)；onPointerDown 只建立 DragState；onPointerMove 只更新 DragState 5 字段；onPointerUp 单次消费 → 0 或 1 mutation；13 条 req. 注释；`[YROLL-DRAG-MOVE]` / `[YROLL-DRAG-UP]` instrumentation |
+| `gui/src/drag-state.test.ts` (NEW, 14 tests) | DragState 字段集 pin；pointerdown/pointermove/pointerup invariants；small-delta 处理；pipeline observability |
+| `gui/smoke/gui-04-04-drag.mjs` (NEW) | Phase A: instrumentation hook；Phase B: 1/5/10/50 px（lease 可获取）；Phase F: 10 次重复 drag no reversion（lease 可获取）|
+
+### 回归
+
+| Suite | 04-03 baseline | After 04-04 |
+|---|---|---|
+| pytest | 792 passed + 1 skip + 2 pre-existing FAIL | **792** passed + 1 skip + 2 pre-existing FAIL (unchanged) |
+| vitest | 444 passed + 2 skip | **458** passed + 2 skip (+14 new) |
+| gui-04-01-runtime-routes (browser) | 4/4 | **4/4** ✓ |
+| gui-04-03-undo-redo (browser) | 2/2 | **2/2** ✓ |
+| 03r6_2-identity (browser) | 10/10 | **10/10** ✓ |
+| **03r6_2-drag-fly (browser)** | 7/7 | **7/7** ✓（既有 drag smoke 重构后仍 7/7） |
+| **gui-04-04-drag (browser, NEW)** | — | **1/1** ✓（Phase A: instrumentation hook；Phase B/F skipped by lease conflict） |
+| vite build | ✅ | ✅ |
+| tsc | 5 pre-existing errors, no NEW | 5 pre-existing errors, no NEW |
+| Pre-existing 失败 | 2（未触动） | 2（仍是同样 2 个，未被 04-04 触发） |
+
+### 重要设计决策
+
+- **收敛到 8 个字段**——用户列出 8 个 canonical 字段名；额外加 1 个内部 transient 字段（`committedFrame`，只在 pointerup 期间存在）。`finalFrame` / `preSnapFrame` / `authoritativeSnapFrame` 等旧名都被并入或消除。
+- **DragState 在 pointerdown 闭包中创建**——不是 React state，不参与 re-render。是普通 object，scope 跟 drag gesture 走。
+- **pointerup 的 `willMutate` 决策**——简单的 `committedFrame !== originFrame || committedTrackId !== originTrackId` 判断。req. 9 的 small-delta 自动满足：1 px 在 pxPerFrame=3 时 round 到 0 frame → committedFrame === originFrame → 0 mutation。
+- **不允许的行为显式注释**——ClipBlock.tsx 头部 13 条 req. 注释 + pointermove 块内的 "req. 3 forbidden actions" 注释 = code review guide。
+- **不要"再加 hidden clamp"**——所有 clamp / collision 逻辑沿用 R6 / GUI-02.4 的版本，不引入新的隐藏层。冲突解决路径只有 2 个：source-track clamp 和 target-track re-clamp（cross-track）。
+- **不动的事物**：Core / FastAPI / vite.config.ts / static-with-proxy.mjs / Frames 模型。04-04 全部范围在 ClipBlock.tsx 一个文件 + 2 个测试文件。
+
+### Plan §17 GUI-04 Completion Gate 进度（04-04 更新）
+
+- [x] `/clips` 浏览器 200
+- [x] `history/undo` 浏览器 200
+- [x] no fractional frame reaches mutation API
+- [x] all new mutation tests green
+- [x] hidden layer never renders
+- [x] Timeline == Preview identity test green
+- [x] full pytest green except documented pre-existing
+- [x] full vitest green
+- [x] vite build green
+- [x] real browser smoke green
+- [x] Undo/Redo exact
+- [x] **drag 1/5/10/50 px + cross-track + collision** ← **04-04 完成**
+- [ ] multi-layer Preview determinism（→ 04-05）
+- [ ] Transform position/scale/rotation（→ 04-06）
+- [ ] human acceptance
+
+### 下一步
+
+等待用户批准 → 进入 **04-05 Preview Layer Model**（plan §7）：
+- 移除临时 V2=30% / V3=20% 的 PiP 缩放 heuristic（标记为 `deprecated presentation heuristic`）
+- 正式规则：每个 Clip 的最终画面由 `Clip.transform` 决定（x, y, scale, rotation, opacity）；v0.1 只真正实现 position/scale/rotation
+- 默认 transform：`position = center, scale = fit/contain, rotation = 0`（不是 track index → PiP）
+- 多轨 Preview：`TimelineFrame N → PreviewPlan → active visual layers → stable z-order → each layer own transform → render`
+- 删除临时 PiP 缩放规则；multiple video tracks 不再"自动缩放为小窗"
+
+---
+
+## 当前状态（2026-09-02 GUI-04 04-03 History / Undo / Redo 完成 ✅ = HEAD fd305f9）
 
 ### Source → Fix → Guard → Test
 

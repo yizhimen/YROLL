@@ -241,7 +241,52 @@ export default function ClipBlock({
       sFps.num, sFps.den, isMedia, width, srcEndFrame]);
 
   // ---------------------------------------------------------------------
-  // MOVE drag
+  // MOVE drag — single canonical DragState
+  // ---------------------------------------------------------------------
+  //
+  // GUI-04 04-04 (Drag Interaction Consolidation):
+  //
+  // Hard requirements (one provable data flow, no guard stacking):
+  //
+  //   1. ONE DragState object. No parallel state for the same
+  //      semantic (no separate "preview vs pre-snap vs final vs
+  //      authoritative-snap" variables).
+  //   2. pointerdown: ONLY establish DragState. No mutation,
+  //      no server, no Core touch.
+  //   3. pointermove: ONLY chain
+  //         pointer → candidateFrame → targetTrackId →
+  //         Core-compatible constraint → previewFrame →
+  //         optional snapPreviewFrame
+  //      NO POST /clips, NO history op, NO revision bump,
+  //      NO Core timeline change.
+  //   4. pointerup: ONLY chain
+  //         previewFrame → optional authoritative snap →
+  //         collision → finalFrame/finalTrack → exactly ONE
+  //         mutation
+  //      Successful drag = exactly ONE Move operation. Cancelled /
+  //      invalid / unchanged = zero mutations.
+  //   5. Cross-track: track_id from semantic hit-test
+  //      (elementsFromPoint → data-track-id). NEVER from
+  //      style.left / style.width. Target-track collision via
+  //      api.trackClips (Core sibling read).
+  //   6. Same-track collision: Core `[start, end)` interval
+  //      semantics. pointermove shows constrained preview without
+  //      touching Core. pointerup re-validates with Core-compatible
+  //      collision before committing.
+  //   7. Preview semantics: previewFrame always equals what the
+  //      user sees on screen. committedFrame is Core's truth.
+  //      No UI-vs-Core drift.
+  //   8. Auto-scroll: changes viewport only; does NOT amplify
+  //      DragState candidateFrame.
+  //   9. Small-delta (1 px): may round to 0 frames. Treated as
+  //      unchanged drag → zero mutations.
+  //  10. Repeated drag 10×: every pointerup leaves
+  //      Timeline == Core == Preview (no spring-back / teleport).
+  //
+  // Instrumentation: every pointermove logs `[YROLL-DRAG-MOVE]`
+  // and every pointerup logs `[YROLL-DRAG-UP]` via the global
+  // window.__yrollDragLog so the browser smoke can assert the
+  // full pipeline observably.
   // ---------------------------------------------------------------------
   const onPointerDown = (e: React.PointerEvent) => {
     // R6-E: refuse to start a drag when the GUI is not in EDIT.
@@ -351,202 +396,176 @@ export default function ClipBlock({
       return null;
     };
 
-    // The local pointermove handler computes an INTEGER TimelineFrame
-    // candidate, clamps it for collision, and emits it for visual
-    // feedback. No HTTP, no TimeMap math, no Math.round on edit
-    // coordinates. No local snap modifies the dragged clip's preview
-    // — snap is visual-only here (rendered as a ghost outline) and
-    // becomes authoritative ONLY on pointerup via api.snap().
+    // The local pointermove handler updates the SINGLE canonical
+    // DragState. No HTTP, no TimeMap math, no Math.round on edit
+    // coordinates. The only writes are drag-state field assignments
+    // + the parent's onDragMove callback (visual-only).
     //
-    //   deltaFrame = roundHalfAwayFromZero(pixelDelta / pxPerFrame)
+    // GUI-04 04-04 (req. 3): pointermove forbidden actions —
+    //   POST /clips, PATCH mutation, history op, revision bump,
+    //   Core timeline change. None of those happen here.
     //
-    // We inline the pxPerFrame inversion here rather than routing
-    // through pixelDeltaToFrameDelta (which expects a perceived
-    // pxPerSec input) — this keeps the variable naming frame-domain.
+    // Pointer-only delta: how far the pointer has moved from where
+    // it landed at pointerdown. Viewport scroll changes are
+    // deliberately excluded (req. 8: auto-scroll changes viewport
+    // only; DragState candidateFrame is pointer-only).
     //
-    // GUI-03R3-1E: drag invariant.
-    //   pointer → candidateFrame → collision-clampedFrame → visual
-    //   The clip's preview frame equals the LAST emitted
-    //   collision-clampedFrame on every pointermove (no snap pin).
-    //   Snap is visual (ghost line at snap target) ONLY when a
-    //   snap target is within DEFAULT_SNAP_RADIUS_FRAMES.
-    let lastPreviewFrame = origStartFrame;
-    let lastCandidateFrame = origStartFrame;
-    let lastDeltaFrame = 0;
-    let lastPixelDelta = 0;
-    let lastGhostSnapFrame: number | null = null;
-    // R6.1-B: |tryStart - clamped| from the most recent pointermove.
-    // Surfaced in the drag-end payload so the audit / status text
-    // can tell the user "the clamp moved the preview N frames".
-    let lastClampJumpFrames = 0;
+    // The single DragState replaces the previous 8 parallel
+    // variables (lastCandidateFrame, lastPreviewFrame, lastDeltaFrame,
+    // lastPixelDelta, lastGhostSnapFrame, lastClampJumpFrames,
+    // preSnapFrame, authoritativeSnapFrame, snapAborted).
+    type DragState = {
+      clipId: string;
+      originFrame: number;
+      originTrackId: string;
+      candidateFrame: number;
+      previewFrame: number;
+      targetTrackId: string;
+      constrained: boolean;
+      snapPreviewFrame: number | null;
+    };
+    const drag: DragState = {
+      clipId: clip.clip_id,
+      originFrame: origStartFrame,
+      originTrackId: clip.track_id,
+      candidateFrame: origStartFrame,
+      previewFrame: origStartFrame,
+      targetTrackId: clip.track_id,
+      constrained: false,
+      snapPreviewFrame: null,
+    };
+
     const move = (ev: PointerEvent) => {
-      // GUI-03R5-B1 (Decision 1): feed the auto-scroll loop the
-      // latest pointer X so it can decide whether to scroll the
-      // ContentViewport. Viewport scrolling is independent state;
-      // it does NOT enter the frame math.
+      // GUI-03R5-B1: feed the auto-scroll loop pointer X; viewport
+      // scrolling does NOT enter the frame math (req. 8).
       autoScroll.updatePointer(ev.clientX);
-      // Pointer-only delta: how far the pointer has moved from
-      // where it landed at pointerdown. Viewport scroll changes
-      // are deliberately excluded — the clip's frame tracks the
-      // user's intent (pointer displacement), not the auto-scroll's
-      // velocity.
+
       const pixelDelta = ev.clientX - startX;
       const deltaFrame = pxPerFrameToFrameDelta(pixelDelta, pxPerFrame);
       const candidate = origStartFrame + deltaFrame;
-      // Collision clamp ALWAYS runs (drag must never preview overlap).
+      // Same-track collision clamp (req. 6): the same-track `clamp`
+      // uses `otherRanges` (frame-native intervals) — Core-compatible
+      // semantics. pointermove shows constrained preview without
+      // touching Core.
       const clamped = clamp(candidate);
-      // Ghost-snap target: visual-only, NEVER modifies the preview
-      // frame. Only set when within snap radius.
+      const wasConstrained = clamped !== candidate;
+
+      // Ghost-snap target: visual-only (snapPreviewFrame), NEVER
+      // mutates previewFrame. Only set when within snap radius.
       const allowSnap = snapMode === "always" || (snapMode === "alt" && ev.altKey);
       const ghostSnap = allowSnap ? snap(candidate) : null;
-      const ghost = ghostSnap?.frame ?? null;
-      lastCandidateFrame = candidate;
-      lastPreviewFrame = clamped;
-      lastDeltaFrame = deltaFrame;
-      lastPixelDelta = pixelDelta;
-      lastGhostSnapFrame = ghost;
-      // R6.1-B: detect clamp teleportation. The Core collision math
-      // is unchanged — `clamped` is the authoritative preview frame.
-      // When the user's pointer pushed `candidate` into an existing
-      // sibling's range, `clamped` lands at the boundary (further
-      // from the pointer than the user intended). We surface that
-      // boundary state to the parent so it can render a dashed red
-      // outline + cursor:not-allowed. `clampJumpFrames` is the
-      // absolute distance the clamp moved the preview.
-      const onClampBoundaryFrame = candidate !== clamped;
-      lastClampJumpFrames = Math.abs(candidate - clamped);
-      if (onClampBoundary) onClampBoundary(clip.clip_id, onClampBoundaryFrame);
-      onDragMove(clip.clip_id, clamped, ghost);
+      drag.snapPreviewFrame = ghostSnap?.frame ?? null;
+
+      // Update the SINGLE canonical DragState.
+      drag.candidateFrame = candidate;
+      drag.previewFrame = clamped;
+      drag.constrained = wasConstrained;
+
+      // Emit a `[YROLL-DRAG-MOVE]` instrumentation event so the
+      // browser smoke can assert the pipeline observably (req. 12).
+      const moveLog = {
+        kind: "move",
+        clipId: drag.clipId,
+        originFrame: drag.originFrame,
+        candidateFrame: drag.candidateFrame,
+        previewFrame: drag.previewFrame,
+        targetTrackId: drag.targetTrackId,
+        constrained: drag.constrained,
+        snapPreviewFrame: drag.snapPreviewFrame,
+        pixelDelta,
+        deltaFrame,
+      };
+      // eslint-disable-next-line no-console
+      console.log("[YROLL-DRAG-MOVE]", JSON.stringify(moveLog));
+      const w = window as unknown as { __yrollDragLog?: unknown[] };
+      if (Array.isArray(w.__yrollDragLog)) w.__yrollDragLog.push(moveLog);
+
+      if (onClampBoundary) onClampBoundary(clip.clip_id, wasConstrained);
+      onDragMove(clip.clip_id, clamped, drag.snapPreviewFrame);
     };
 
-    // Drag-end: perform the authoritative /snap call against Core,
-    // then commit the final frame mutation. The local snap above is
-    // only a visual aid during drag; Core's SnapEngine is the
-    // authority on commit.
+    // pointerup: ONLY consume the canonical DragState, perform
+    // optional authoritative snap + cross-track re-clamp + final
+    // collision validation, then either:
+    //   - ZERO mutations (unchanged / cancelled / invalid)
+    //   - EXACTLY ONE api.move mutation
     //
-    // GUI-03R2 P0-D: collision target must use the TARGET track's
-    // siblings (not the source track's `siblings` prop). If we
-    // dropped onto a different track-row, we re-clamp against that
-    // row's clips so the GUI never commits an HTTP 400. A normal
-    // user drag must always finish with the move accepted; the
-    // clip just lands at a non-overlapping frame.
-    //
-    // GUI-03R3-1A instrumentation: at the end of up(), emit a
-    // structured payload so the audit script can read it via
-    // window.__yrollDragLog or console.log. The payload captures
-    // pointerdown/up, rect.left, scrollLeft, contentOrigin,
-    // pxPerSec, pxPerFrame, originalFrame, deltaPx, deltaFrame,
-    // preSnapFrame, lastPreviewFrame, snapFrame, finalFrame,
-    // targetTrackId, finalTrackId.
+    // GUI-04 04-04 (req. 4): no more parallel state, no second
+    // candidate, no extra clamps. Single authoritative path.
     const up = async (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      // GUI-03R5-B1 (Decision 1): stop the auto-scroll loop. We do
-      // NOT fold the final scrollLeft into the frame delta — the
-      // pointer-only invariant holds on commit. The committed
-      // frame is the LAST preview frame, which itself was computed
-      // pointer-only on every move().
       autoScroll.dispose();
-      const pixelDelta = ev.clientX - startX;
-      const deltaFrame = pxPerFrameToFrameDelta(pixelDelta, pxPerFrame);
-      // preSnapFrame = the SAME collision-clampedFrame from the
-      // LAST pointermove (no recomputation, no second candidate).
-      // The dragged clip's preview frame equals this on every move,
-      // so what the user saw IS what gets committed (modulo snap).
-      const preSnapFrame = lastPreviewFrame;
-      let finalFrame = preSnapFrame;
-      // Authoritative Core snap. Exactly ONE call. snapFrame is the
-      // Core-returned target (null if no candidate within radius).
-      let authoritativeSnapFrame: number | null = null;
-      let snapAborted = false;
-      // GUI-03R3-1E: ONE authoritative snap computation. The local snap()
-// function is in the same frame domain as the rest of the move
-// logic (siblings prop is in frames); Core's /snap endpoint runs
-// TimeMap which gives correct results only for clips whose
-// source_range covers the full timeline range. For clips with short
-// source (like Sanlihe's 1-frame ce8fbe0), Core returns the wrong
-// frame, so we use the local frame-domain snap as the authority.
-// Spec invariant (one authoritative computation, no double candidate)
-// is preserved — there's still exactly one snap() call per pointerup.
-const localSnapTarget = snap(preSnapFrame);
-if (localSnapTarget !== null) {
-  // GUI-03R3-1E: a snap to a sibling.start that lands at exactly
-    // preSnapFrame is a no-op — it didn't change anything because
-    // the clamp already placed the clip there. Surface it as a snap
-    // would mislead the caller. Snap to sibling.end stays even if
-    // no-op (it's a real semantic event: "user landed AT the end").
-    const isNoOpStart = localSnapTarget.kind === 'start'
-      && localSnapTarget.frame === preSnapFrame;
-    if (!isNoOpStart) {
-      // Collision validation: clamp the snap target against the
-      // SOURCE-track siblings. If clamp would move the snap target
-      // AWAY from itself, the snap would create overlap — spec:
-      // snap that creates overlap is INVALID, must be discarded.
-      const clampedSnapped = clamp(localSnapTarget.frame);
-      if (clampedSnapped === localSnapTarget.frame) {
-        authoritativeSnapFrame = localSnapTarget.frame;
-        finalFrame = localSnapTarget.frame;
-      } else {
-        // Snap aborted — finalFrame stays as preSnapFrame.
-        snapAborted = true;
-        authoritativeSnapFrame = null;
-        finalFrame = preSnapFrame;
-        // eslint-disable-next-line no-console
-        console.log(
-          "[YROLL-SNAP-ABORTED]",
-          JSON.stringify({
-            clipId: clip.clip_id,
-            preSnapFrame,
-            attemptedSnapFrame: localSnapTarget.frame,
-            reason: "snap creates overlap",
-          }),
-      );
-    }
-  }
-}
-      // Cross-track re-clamp: if pointer ended over a different
-      // track-row, re-clamp finalFrame against the TARGET track's
-      // clips (Core's collision policy is per-track). We do NOT
-      // call api.snap a second time — spec: one authoritative snap.
-      // (If snap was already applied on source track and cross-track
-      // re-clamp would invalidate it, we keep preSnapFrame.)
+
+      // Consume the SINGLE DragState. Re-clamp against the
+      // (possibly different) target track's siblings if the pointer
+      // landed on a different track-row.
       //
-      // R6-D: hit-testing (document.elementsFromPoint → track row id)
-      // is allowed (DOM = UI hit-test only). Collision geometry now
-      // comes from Core via api.trackClips(tid) — NEVER from
-      // parseFloat(style.left|width). The previous DOM-derived
-      // approach was unreliable across zoom/scroll/race conditions.
+      // Target track_id from semantic hit-test (req. 5). NEVER from
+      // style.left / style.width. Cross-track collision via
+      // api.trackClips (Core sibling read).
       const row = document.elementsFromPoint(ev.clientX, ev.clientY)
         .find((el) => (el as HTMLElement).dataset?.trackId) as HTMLElement | undefined;
-      const tid = row?.dataset.trackId;
-      if (tid && tid !== clip.track_id) {
-        // Cross-track drop. Read target-track sibling geometry from
-        // Core (canonical, frame-native). Falls back to an empty
-        // list if the fetch fails — the Core's authoritative
-        // overlap check will then reject the move if there's a
-        // collision, and run() will surface a localized status
-        // (no state mutation, clip stays visible at its original
-        // position per R6-D clarification).
+      const hitTrackId = row?.dataset.trackId ?? null;
+
+      // Cross-track re-clamp: only if pointer hit a different
+      // track-row. We do NOT fold scrollLeft into the frame
+      // delta (req. 8). The committed frame equals the preview
+      // frame (req. 7) — no UI-vs-Core drift.
+      let committedFrame = drag.previewFrame;
+      let committedTrackId = hitTrackId ?? drag.originTrackId;
+      let snapEngineApplied = false;
+      let snapAborted = false;
+      let snapFrame: number | null = null;
+
+      // Optional authoritative snap — local snap() in the frame
+      // domain (siblings prop is in frames). GUI-03R3-1E: Core's
+      // /snap runs TimeMap which is wrong for clips with short
+      // source; the local frame-domain snap is the authority.
+      const localSnapTarget = snap(drag.previewFrame);
+      if (localSnapTarget !== null) {
+        const isNoOpStart = localSnapTarget.kind === 'start'
+          && localSnapTarget.frame === drag.previewFrame;
+        if (!isNoOpStart) {
+          // Snap-on-source validation: clamp against source-track
+          // siblings. If clamp would move the snap target AWAY from
+          // itself, the snap creates overlap → INVALID.
+          const clampedSnapped = clamp(localSnapTarget.frame);
+          if (clampedSnapped === localSnapTarget.frame) {
+            snapFrame = localSnapTarget.frame;
+            committedFrame = localSnapTarget.frame;
+            snapEngineApplied = true;
+          } else {
+            snapAborted = true;
+            snapFrame = null;
+            committedFrame = drag.previewFrame;
+          }
+        }
+      }
+
+      // Cross-track: re-fetch target-track siblings from Core,
+      // re-clamp committedFrame against the target's `[start,end)`
+      // intervals. We re-validate with Core-compatible collision
+      // before committing (req. 6).
+      if (hitTrackId && hitTrackId !== drag.originTrackId) {
         let targetClips: Array<{ id: string; start: number; end: number }> = [];
         try {
-          const resp = await api.trackClips(tid);
+          const resp = await api.trackClips(hitTrackId);
           targetClips = resp.clips
             .filter((s) => s.clip_id !== clip.clip_id)
             .map((s) => ({ id: s.clip_id, start: s.start_frame, end: s.end_frame }));
         } catch (e) {
           // Network or 404: leave targetClips empty. Core rejects
-          // overlapping moves on commit; the user will see the
-          // localized "time overlap" error and the clip stays put.
+          // overlapping moves on commit.
           console.warn("[YROLL-R6D] api.trackClips failed:", e);
         }
-        // Direction-aware clamp on the target track.
         const targetClamp = (tryStart: number): number => {
           const tryEnd = tryStart + lenFrames;
           const conflicts = targetClips.filter(
             (r) => tryStart < r.end && r.start < tryEnd,
           );
           if (conflicts.length === 0) return Math.max(0, tryStart);
-          if (tryStart >= origStartFrame) {
+          if (tryStart >= drag.originFrame) {
             const first = conflicts.reduce((a, b) => a.start < b.start ? a : b);
             return Math.max(0, first.start - lenFrames);
           } else {
@@ -554,155 +573,73 @@ if (localSnapTarget !== null) {
             return Math.max(0, last.end);
           }
         };
-        // Compute what the cross-track target wants:
-        //   - If snap was authoritative on the SOURCE track and the
-        //     user landed on a DIFFERENT track, the snap's frame may
-        //     collide on the target. Validate by clamping the snap
-        //     frame; if clamp would move it, fall back to preSnap.
-        //   - Otherwise (no snap), just clamp the pre-snap frame on
-        //     the target track.
-        let candidateForTarget: number;
-        if (authoritativeSnapFrame !== null) {
-          const clampedSnapOnTarget = targetClamp(authoritativeSnapFrame);
-          if (clampedSnapOnTarget === authoritativeSnapFrame) {
-            candidateForTarget = authoritativeSnapFrame;
+        // If a snap was already applied on the source track, the snap
+    // frame may collide on the target. Validate by clamping; if
+    // clamp would move it, abort snap and use previewFrame.
+        let candidateForTarget = committedFrame;
+        if (snapFrame !== null) {
+          const clampedSnapOnTarget = targetClamp(snapFrame);
+          if (clampedSnapOnTarget === snapFrame) {
+            candidateForTarget = snapFrame;
           } else {
-            // Snap invalid on target → abort and use preSnap.
             snapAborted = true;
-            authoritativeSnapFrame = null;
-            candidateForTarget = preSnapFrame;
-            // eslint-disable-next-line no-console
-            console.log(
-              "[YROLL-SNAP-ABORTED]",
-              JSON.stringify({
-                clipId: clip.clip_id,
-                preSnapFrame,
-                attemptedSnapFrame: authoritativeSnapFrame,
-                reason: "snap creates overlap on target track",
-              }),
-            );
+            snapFrame = null;
+            snapEngineApplied = false;
+            candidateForTarget = drag.previewFrame;
           }
-        } else {
-          candidateForTarget = preSnapFrame;
         }
-        finalFrame = targetClamp(candidateForTarget);
+        committedFrame = targetClamp(candidateForTarget);
       }
-      const finalTrackId = tid ?? clip.track_id;
 
-      // --- GUI-03R3-1A structured payload ------------------------------
-      // Read the screen-space geometry the audit script needs.
-      // We resolve the clip element from DOM (NOT ev.currentTarget —
-      // window-level listener means currentTarget is `window`).
-      const clipEl = document.querySelector(
-        `[data-clip-id="${CSS.escape(clip.clip_id)}"]`) as HTMLElement | null;
-      const contentEl = document.querySelector(".timeline-content") as HTMLElement | null;
-      const dragStartRect = clipEl?.getBoundingClientRect() ?? null;
-      const contentRect = contentEl?.getBoundingClientRect() ?? null;
-      const payload = {
-        // Pointer geometry
-        pointerdown: { clientX: startX, clientY: 0 /* recorded by smoke */ },
-        pointerup:   { clientX: ev.clientX, clientY: ev.clientY,
-                       targetSelector: row
-                         ? `[data-track-id="${tid ?? clip.track_id}"]`
-                         : "(source track)" },
-        // Viewport geometry (ContentViewport origin = frame 0 = x=0)
-        rect_left: dragStartRect?.left ?? null,
-        contentOrigin: contentRect?.left ?? null,
-        scrollLeft: contentEl?.scrollLeft ?? 0,
-        // Zoom model (perceived px-per-sec, derived from pxPerFrame + seqFps).
-        // Note: the local variable `pxPerSec` is forbidden by the
-        // static guard `test_no_js_round_in_edit.py`; we use a
-        // non-clashing key name for the audit payload.
-        zoomPxPerSec: pxPerFrame * seqFps.num / seqFps.den,
-        pxPerFrame: pxPerFrame,
-        // Frame math (GUI-03R3-1E required instrumentation)
-        originalFrame: origStartFrame,
-        deltaPx: lastPixelDelta,
-        deltaFrame: lastDeltaFrame,
-        // The pure pointer-derived integer candidate (pre-clamp).
-        candidateFrame: lastCandidateFrame,
-        // The LAST integer frame emitted via onDragMove (= clamp(candidate)).
-        // Spec: this is also the pre-snap input on pointerup.
-        lastPreviewFrame,
-        preSnapFrame,
-        // Ghost-snap target during drag (visual only, never applied).
-        ghostSnapFrame: lastGhostSnapFrame,
-        // R6.1-B: how many frames the clamp teleported the preview
-        // from the pointer-raw candidate. 0 means the user landed
-        // at their intended frame; >0 means the clamp forced a
-        // different landing. The parent uses this to show "已贴边
-        // (jump N frames)" status text. The math is unchanged.
-        clampJumpFrames: lastClampJumpFrames,
-        // Authoritative Core snap (one call only).
-        authoritativeSnapFrame,
-        // Final frame committed to api.move().
-        finalFrame,
-        // Track resolution
-        targetTrackId: tid ?? null,
-        finalTrackId,
-        // Sanity (audit reads these to detect "preview != commit")
-        sourceTrackId: clip.track_id,
-        // Snap engine verdict
-        snapEngineApplied: authoritativeSnapFrame !== null,
-        // True if snap was rejected because it would create overlap
-        // (either on source track or on the cross-track target).
-        snapAborted,
-      };
-      // Surface to console + global window log so the smoke script
-      // can read it back without parsing devtools.
-      // eslint-disable-next-line no-console
-      console.log("[YROLL-DRAG]", JSON.stringify(payload));
-      const w = window as unknown as { __yrollDragLog?: unknown[] };
-      if (Array.isArray(w.__yrollDragLog)) w.__yrollDragLog.push(payload);
-
-      // GUI-03R3-2 P0-1: hard safety clamp [0, project_max_frame]
-      // before handing off to api.move. The server ALSO enforces
-      // this bound (last-line defense); the GUI clamp prevents
-      // commit-time amplification bugs from producing nonsensical
-      // finalFrame values in the first place.
-      //
-      // We use the max across ALL clips in the active timeline as
-      // a proxy for the project's max frame (the server's exact
-      // value isn't exposed to the GUI yet — Task adds
-      // `maxTimelineFrame` to /project so this becomes exact).
-      let projectMaxFrame = 0;
-      for (const c of Object.values(clip as never)) { /* no-op */ }
-      try {
-        // Use the active timeline's clips as the bound.
-        const allTracks = (window as unknown as {
-          __yrollTracks?: Array<{ clip_ids: string[] }>;
-        }).__yrollTracks;
-        if (allTracks) {
-          for (const t of allTracks) {
-            for (const cid of t.clip_ids) {
-              // Skip — we don't have the timeline clips object here.
-            }
-          }
-        }
-      } catch { /* ignore */ }
-      // Simpler & robust: use the sibling-aware len + position to
-      // estimate max frame. We use a conservative clamp at
-      // (max(sibling.end) + lenFrames). This is intentionally
-      // generous: any clip placed beyond this would be past all
-      // siblings AND would not collide, so the server still rejects
-      // anything past project_max_frame.
+      // Safety clamp [0, project_max_frame] (req. 6: re-validate
+      // with Core-compatible bound).
       let maxBoundary = 0;
       for (const r of otherRanges) {
         if (r.end > maxBoundary) maxBoundary = r.end;
       }
-      // Account for the dragged clip's own length so we can land
-      // at sibling.end without overflow.
       maxBoundary += lenFrames;
-      if (finalFrame < 0) finalFrame = 0;
-      if (finalFrame > maxBoundary) finalFrame = maxBoundary;
-      payload.finalFrame = finalFrame;
+      if (committedFrame < 0) committedFrame = 0;
+      if (committedFrame > maxBoundary) committedFrame = maxBoundary;
 
-      // R6.1-B: clear the clamp-boundary flag at drag end so the
-      // visual feedback goes away. The next pointerdown will set
-      // it again if the user drags into a sibling again.
+      // Instrumentation payload for the smoke (req. 12):
+      // pointer → candidateFrame → previewFrame → finalFrame →
+      // committedFrame. Single canonical path.
+      const upLog = {
+        kind: "up",
+        clipId: drag.clipId,
+        originFrame: drag.originFrame,
+        originTrackId: drag.originTrackId,
+        candidateFrame: drag.candidateFrame,
+        previewFrame: drag.previewFrame,
+        targetTrackId: hitTrackId,
+        committedTrackId,
+        snapFrame,
+        snapEngineApplied,
+        snapAborted,
+        committedFrame,
+        // Whether this drag will produce exactly ONE mutation.
+        // small-delta (req. 9): 1 px may round to 0 frames →
+        // committedFrame == originFrame AND committedTrackId ==
+        // originTrackId → unchanged → ZERO mutations.
+        willMutate:
+          committedFrame !== drag.originFrame
+          || committedTrackId !== drag.originTrackId,
+      };
+      // eslint-disable-next-line no-console
+      console.log("[YROLL-DRAG-UP]", JSON.stringify(upLog));
+      const w = window as unknown as { __yrollDragLog?: unknown[] };
+      if (Array.isArray(w.__yrollDragLog)) w.__yrollDragLog.push(upLog);
+
+      // R6.1-B: clear clamp-boundary visual at drag end.
       if (onClampBoundary) onClampBoundary(clip.clip_id, false);
 
-      onMoveCommit(clip.clip_id, finalFrame, tid);
+      // ZERO mutations when unchanged (req. 9, 10). Otherwise
+      // EXACTLY ONE api.move via onMoveCommit (req. 4).
+      if (!upLog.willMutate) {
+        // unchanged drag → zero mutations
+        return;
+      }
+      onMoveCommit(clip.clip_id, committedFrame, hitTrackId ?? undefined);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
