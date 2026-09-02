@@ -132,26 +132,44 @@ class TestMultiLayerUpperLower:
         layers = composite["visual_layers"]
         assert len(layers) == 2
         # The two layers have DIFFERENT layer_index (stable z-order).
+        # GUI-04.6: visual_layers is sorted ascending by layer_index
+        # (the renderer iterates in stack REVERSE so the array is
+        # built bottom-to-top); the layer with the SMALLER
+        # layer_index comes first. V1 has the higher layer_index,
+        # so V1 sits at array position [-1].
         assert layers[0]["layer_index"] < layers[1]["layer_index"]
+        # Semantic direction: V1 (Timeline top) MUST have the
+        # higher layer_index than V2.
+        by_track = {l["track_id"]: l["layer_index"] for l in layers}
+        assert by_track["v1"] > by_track["v2"], by_track
 
     def test_three_layers_have_strictly_ascending_z_order(self, authed_client):
+        """visual_layers array is sorted ascending by layer_index
+        (bottom-to-top). GUI-04.6: V1 has the highest
+        layer_index (Timeline top) → array position [-1];
+        V3 has the lowest → array position [0]."""
         self._seed_v1_v2_v3(authed_client)
         composite = authed_client.get("/preview/at_frame?frame=0").json()
         layers = composite["visual_layers"]
         assert len(layers) == 3
-        # Stable z-order: ascending layer_index.
+        # Array order is ascending by layer_index (bottom → top).
         for i in range(len(layers) - 1):
             assert layers[i]["layer_index"] < layers[i + 1]["layer_index"]
+        # Semantic direction: V1 (Timeline top) has the highest
+        # layer_index; V3 (Timeline bottom) the lowest.
+        by_track = {l["track_id"]: l["layer_index"] for l in layers}
+        assert by_track["v1"] > by_track["v2"] > by_track["v3"], by_track
 
     def test_upper_lower_combinations(self, authed_client):
-        """D — pair-wise upper/lower combinations. Each pair must
-        have distinct, stable layer_index."""
+        """D — pair-wise upper/lower combinations (GUI-04.6
+        direction). V1 (Timeline top) has the highest layer_index,
+        V3 (Timeline bottom) the lowest."""
         self._seed_v1_v2_v3(authed_client)
         composite = authed_client.get("/preview/at_frame?frame=0").json()
         tracks = {l["track_id"]: l for l in composite["visual_layers"]}
-        # v1 is bottom, v3 is top.
-        assert tracks["v1"]["layer_index"] < tracks["v2"]["layer_index"]
-        assert tracks["v2"]["layer_index"] < tracks["v3"]["layer_index"]
+        # v1 is Timeline top = highest layer_index, v3 is bottom.
+        assert tracks["v1"]["layer_index"] > tracks["v2"]["layer_index"]
+        assert tracks["v2"]["layer_index"] > tracks["v3"]["layer_index"]
 
 
 # ---------------------------------------------------------------------------

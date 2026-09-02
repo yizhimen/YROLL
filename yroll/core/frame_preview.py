@@ -175,25 +175,28 @@ def composite_preview_at_frame(project: Project, timeline_frame: int,
     GUI-03R4-R1: Hidden tracks are skipped entirely (their layers do
     not appear in the composite). Visual layer_index is assigned in
     visual-stack order (KIND_RANK + numeric suffix) — the same rule
-    used by `build_preview_plan`. This guarantees V_k+1 always renders
-    above V_k regardless of the order tracks appear in tl.tracks.
+    used by `build_preview_plan`.
+
+    GUI-04.6: layer_index INVARIANT.
+      "A visual track appearing higher in the Timeline is a
+       higher visual layer in Preview."
+    Timeline.tsx renders visibleTracks top-to-bottom from the
+    same ascending KIND_RANK + numeric suffix order. Array index
+    0 = top of Timeline (V1 first). Therefore the Preview MUST
+    assign the HIGHEST layer_index to V1 and the LOWEST to V9.
+    Concretely: iterate visual_track_order (ascending) but assign
+    visual_index by REVERSE-iterating — V9 gets base 0 (bottom),
+    V1 gets the highest base (top). This matches plan.py.
     """
     pv = CompositePreview(timeline_frame=timeline_frame, fps=fps)
-    visual_index = 0
     # GUI-03E-2A: resolve target Timeline. None → active (legacy).
     tl = project.get_timeline(timeline_id or project.active_timeline_id)
     if tl is None:
         return pv  # unknown timeline → empty preview
 
-    # GUI-03R4-R1: pre-assign per-frame visual_index so it follows the
-    # visual-stack order (not tl.tracks declaration order). The "active
-    # layer on a track at this frame" can only contribute 0 or 1
-    # layer; pre-computing the base index per track before iteration
-    # is unnecessary because at-most-one-active-clip-per-track means the
-    # base IS the running visual_index for tracks iterated in stack
-    # order. We iterate tl.tracks in stack order (instead of declared
-    # order) so the visual_index assignment matches plan.py's
-    # global_layer_index convention.
+    # GUI-03R4-R1: iterate in visual-stack order (KIND_RANK + numeric
+    # suffix ascending), then REVERSE for visual_index assignment so
+    # V1 gets the highest layer_index (Timeline top = Preview top).
     import re
     _KIND_RANK = {TrackKind.TEXT.value: 0, TrackKind.SUBTITLE.value: 0,
                   TrackKind.VIDEO.value: 1, TrackKind.AUDIO.value: 2}
@@ -203,16 +206,20 @@ def composite_preview_at_frame(project: Project, timeline_frame: int,
         n = int((_NUM.search(t.track_id) or [None, "0"])[1])
         return (_KIND_RANK.get(t.kind.value, 9), n, t.track_id)
 
-    for track in tl.tracks:
-        if track.hidden:
-            # Hidden tracks contribute nothing to the composite.
-            continue
-        # Find the FIRST clip on this track that covers the frame.
-        # We must check every clip (not break early) so that a clip
-        # whose half-open interval ends at the frame is correctly
-        # skipped, and the next clip whose interval starts at the
-        # frame is correctly selected.
-        found = False
+    # Pre-collect VISUAL tracks in stack order (ascending). We assign
+    # visual_index by iterating this list in REVERSE so the first
+    # track in stack order (V1, Timeline top) gets the highest
+    # visual_index (Preview top). TEXT/AUDIO tracks have their own
+    # layer semantics; they don't participate in this stacking
+    # reversal (text is overlay zIndex 9999 in the renderer; audio
+    # doesn't use z-index).
+    visual_stack = sorted(
+        (t for t in tl.tracks
+         if not t.hidden and t.kind in (TrackKind.VIDEO,)),
+        key=_stack_key,
+    )
+    visual_index = 0
+    for track in reversed(visual_stack):
         for cid in track.clip_ids:
             c = project.clips.get(cid)
             if c is None:
@@ -220,36 +227,49 @@ def composite_preview_at_frame(project: Project, timeline_frame: int,
             s, e = _timeline_range_frames(c, fps)
             if not (s <= timeline_frame < e):
                 continue
-            # TEXT/SUBTITLE text tracks have clips with no asset.
-            if track.kind in (TrackKind.TEXT, TrackKind.SUBTITLE):
-                text = c.context.get("text", "") or ""
-                if text:
-                    pv.subtitle_texts.append(text)
-                found = True
-                break
-            # Visual / audio tracks need an asset.
             asset = next((a for a in project.assets
                           if a.asset_id == c.asset_id), None)
             if asset is None:
                 continue
-            if track.kind in (TrackKind.VIDEO,):
-                layer = _build_layer(c, asset, track, timeline_frame, fps,
-                                     visual_index)
-                if layer is not None:
-                    pv.visual_layers.append(layer)
-                    visual_index += 1
-                found = True
+            layer = _build_layer(c, asset, track, timeline_frame, fps,
+                                 visual_index)
+            if layer is not None:
+                pv.visual_layers.append(layer)
+                visual_index += 1
+            break  # at-most-one-active-clip-per-track
+
+    # Text/audio tracks: iterate in tl.tracks declared order. Text
+    # contributes to subtitle_texts (rendered as overlay with zIndex
+    # 9999, not part of visual stacking). Audio is separate.
+    for track in tl.tracks:
+        if track.hidden:
+            continue
+        if track.kind not in (TrackKind.TEXT, TrackKind.SUBTITLE,
+                              TrackKind.AUDIO):
+            continue
+        for cid in track.clip_ids:
+            c = project.clips.get(cid)
+            if c is None:
+                continue
+            s, e = _timeline_range_frames(c, fps)
+            if not (s <= timeline_frame < e):
+                continue
+            if track.kind in (TrackKind.TEXT, TrackKind.SUBTITLE):
+                text = c.context.get("text", "") or ""
+                if text:
+                    pv.subtitle_texts.append(text)
                 break
             if track.kind == TrackKind.AUDIO:
+                asset = next((a for a in project.assets
+                              if a.asset_id == c.asset_id), None)
+                if asset is None:
+                    continue
                 layer = _build_layer(c, asset, track, timeline_frame, fps,
                                      visual_index,
                                      kind_override="audio")
                 if layer is not None:
                     pv.audio_layers.append(layer)
-                found = True
                 break
-        # No clip on this track covers the frame → empty contribution.
-        # Empty tracks naturally produce no layer (correct).
     return pv
 
 

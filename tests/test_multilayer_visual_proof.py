@@ -119,14 +119,21 @@ def test_v1_v2_v3_coexist_at_frame_15(ml_client):
     )
 
 
-# ── Step 2: V2/V3 sit ABOVE V1 ──────────────────────────────────
-def test_v2_v3_above_v1_in_z_order(ml_client):
-    """V2's layer_index > V1's, V3's layer_index > V2's. The
-    composite stacks them: V3 on top, V1 on bottom."""
+# ── Step 2: V1 sits ABOVE V2/V3 (Timeline-higher = Preview-top) ────
+def test_v1_above_v2_v3_in_z_order(ml_client):
+    """GUI-04.6 direction: V1 (Timeline top) has the HIGHEST
+    layer_index; V3 (Timeline bottom) has the LOWEST. The
+    composite stacks V1 on top, V3 on bottom — matching the
+    Timeline's vertical order exactly.
+
+    Invariant: a visual track appearing higher in the Timeline
+    is a higher visual layer in Preview.
+    """
     pv = _at_frame(ml_client, 450)
     by_track = {l["track_id"]: l["layer_index"] for l in pv["visual_layers"]}
-    assert by_track["v1"] < by_track["v2"] < by_track["v3"], (
-        f"layer_index order must be v1 < v2 < v3; got {by_track}"
+    assert by_track["v1"] > by_track["v2"] > by_track["v3"], (
+        f"layer_index order must be v1 > v2 > v3 (Timeline top = "
+        f"Preview top); got {by_track}"
     )
 
 

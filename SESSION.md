@@ -1,5 +1,26 @@
 # YROLL 项目进度（2026-08-29 重启 + GUI-01 完工）
 
+## 当前状态（2026-09-02 GUI-04.6 Preview stacking semantic fix 完成 ✅）
+
+**最新事件（2026-09-02 13:37）**：GUI-04.6 完成 — 用户报告 P0 semantic defect：Timeline UI（V1 top → V9 bottom）与 Preview 渲染（V9 在 V1 之上）方向相反。Fix 在 Core 数据模型层（不是 CSS patch）：`build_preview_plan` 和 `composite_preview_at_frame` 都改为**反向遍历** `visual_track_order`，使 Timeline top track (V1) 获得**最高** `layer_index`，Timeline bottom track (V9) 获得 **0**。
+
+**canonical invariant**：**"A visual track appearing higher in the Timeline is a higher visual layer in Preview."** Timeline.tsx 和 Core 使用同一个 `_track_sort_key(KIND_RANK, numeric_suffix)` 排序，但 Timeline 渲染时 array index 0 = top，Preview 必须让 array index 0 = 最高 layer_index。这是数据模型层的修复，所有消费 `layer_index` 的 surface（plan / at_frame / PreviewPlayer zIndex）自动一致。
+
+**回归**：pytest 890 pass + 1 skip + 2 个文档化 pre-existing failures（与 SESSION 基线一致 + 8 个新测试）；vitest 471 pass + 2 skip；vite build green。canonical fixture SHA256 unchanged。
+
+**修改文件（7）**：
+- `yroll/core/plan.py` — `build_preview_plan` 反向遍历 `visual_track_order`
+- `yroll/core/frame_preview.py` — `composite_preview_at_frame` 反向遍历 visual stack
+- 5 个 test 文件 — 翻转 `<` 为 `>` 反映新方向
+
+**新增文件（2）**：
+- `tests/test_gui_046_zorder_semantic.py` — V1+V2+V9 + V1+V3+V7 occlusion 测试 + source-level 守卫
+- `gui/smoke/gui-04-6-zorder-stacking.mjs` — 浏览器 DOM 渲染 zIndex 验证
+
+**严格 scope 遵守**：✅ 不引入新 transform / z-index / snapping state；✅ 不修改 Timeline UI 或 PreviewPlayer CSS；✅ 单一原子 commit。
+
+---
+
 ## 当前状态（2026-09-02 GUI-04.5 DEFECT CLOSURE 完成 ✅）
 
 **最新事件（2026-09-02 12:48）**：GUI-04.5 完成 — 全部 6 个 batch（P0-A 规范保真 / P0-B z-order / P0-C 分数帧 / P0-D 跨轨原子性 / P1-E trim / P1-F Transform 检查器）已落地。**44 个新测试 100% 通过**；pytest 总数 882 pass + 1 skip + 2 个文档化 pre-existing failures（与 SESSION 基线完全一致）；vitest 471 pass + 2 skip。无 NEW 失败。
@@ -2248,3 +2269,13 @@ yroll serve <project>        # sole owner of ProjectCore + LeaseStore + LeaseEve
 ### 准备开始
 - P0-09 Project Revision (git filter-repo 已加, manual check)
 - P0-01 Frame First (核心)
+
+## 当前状态（2026-09-02 GUI-04.6 Preview stacking semantic fix — in progress）
+
+**发现 P0 semantic defect**：用户 report Timeline 显示 V1 (top) → V9 (bottom)，但 Preview 渲染 V9 在 V1 之上。两个 surface 不一致。
+
+**根因**：Core `build_preview_plan` 按 `_track_sort_key(KIND_RANK, numeric suffix)` 升序排序 visual tracks，**V1 第一个**（suffix 最小）→ layer_index base 最小 → 视觉层最低 → Preview bottom。Timeline.tsx 也是同样的排序，但 DOM 渲染时 array index 0 = top of Timeline。两个 surface 用同一个 sort key，但读法相反。
+
+**Canonical mapping（采用）**：Timeline array index 0 = visually highest in Timeline = highest layer_index in Preview。具体：iterate `visual_track_order` 反向，V9 base=0（bottom），V1 base=最高（top）。Fix at Core layer，**不是 CSS z-index patch**。
+
+**Regression 测试更新**：旧测试（test_multilayer_visual_proof、test_preview_zorder_invariant）pins 了错误方向（`<`），需要改为 `>`。

@@ -169,8 +169,8 @@ def test_video_preview(tmp_path):
 def test_image_video_overlap_composites(tmp_path):
     """An image clip on V1 and a video clip on V2 both covering the
     same timeline frame. Both are returned in the composite, in
-    track-declaration order (V1 before V2). The visual_layers are
-    z-ordered: V1 (lower layer_index) → V2 (higher)."""
+    track-declaration order (V1 before V2). GUI-04.6: V1 (Timeline
+    top) has the HIGHER layer_index → painted last → on top of V2."""
     project_dir, core = _new_image_project(tmp_path, n=1)
     core.project.assets.append(Asset(
         asset_id="vid1", type=AssetType.VIDEO, path="/tmp/v.mp4",
@@ -185,12 +185,16 @@ def test_image_video_overlap_composites(tmp_path):
     pv = composite_preview_at_frame(core.project, 60, FPS_30)  # 2s
     # Both layers present.
     assert len(pv.visual_layers) == 2
-    # Z-order: V1 (image) is lower, V2 (video) is higher.
+    # GUI-04.6 z-order: V1 (image) is HIGHER layer_index, V2 lower.
     img_layer = next(l for l in pv.visual_layers if l.kind == "image")
     vid_layer = next(l for l in pv.visual_layers if l.kind == "video")
     assert img_layer.track_id == "v1"
     assert vid_layer.track_id == "v2"
-    assert img_layer.layer_index < vid_layer.layer_index
+    assert img_layer.layer_index > vid_layer.layer_index, (
+        f"GUI-04.6: V1 (Timeline top) must have HIGHER layer_index "
+        f"than V2; got v1={img_layer.layer_index}, "
+        f"v2={vid_layer.layer_index}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -199,8 +203,16 @@ def test_image_video_overlap_composites(tmp_path):
 
 def test_track_ordering_deterministic(tmp_path):
     """When the same set of clips exists on multiple tracks, the
-    composite returns them in `project.timeline.tracks` order, NOT
-    in some other order (clip_id, asset_id, etc.)."""
+    composite is deterministic. GUI-04.6: visual_layers are
+    iterated in REVERSE stack order so the Timeline-top track
+    (V1) gets the HIGHEST layer_index; the visual_layers array
+    (before renderer sort) therefore contains the Timeline-BOTTOM
+    track first.
+
+    The renderer sorts ascending by layer_index for paint order,
+    so the user-visible stacking is always Timeline-higher-on-top
+    regardless of how the array is built.
+    """
     project_dir, core = _new_image_project(tmp_path, n=2)
     layer = CommandLayer(core, who=Actor.HUMAN)
     # Add to V1, then V2 (created on demand by the allocator).
@@ -208,11 +220,18 @@ def test_track_ordering_deterministic(tmp_path):
     layer.add_image_clip("img2", 0, 30)  # overlaps img1 on V1; goes to V2
     pv = composite_preview_at_frame(core.project, 15, FPS_30)
     track_ids = [l.track_id for l in pv.visual_layers]
-    # V1 was created first; V2 second; composite reflects creation order.
-    assert track_ids == ["v1", "v2"]
-    # Run composite twice — same result.
+    # Two layers; V1 has the higher layer_index (Timeline top),
+    # V2 has the lower. Run twice → identical result.
     pv2 = composite_preview_at_frame(core.project, 15, FPS_30)
-    assert [l.track_id for l in pv2.visual_layers] == ["v1", "v2"]
+    track_ids_2 = [l.track_id for l in pv2.visual_layers]
+    assert sorted(track_ids) == ["v1", "v2"], track_ids
+    assert track_ids == track_ids_2, (
+        f"composite not deterministic: {track_ids} vs {track_ids_2}"
+    )
+    # The V1 layer MUST have a strictly higher layer_index than V2
+    # (GUI-04.6 direction). That is the canonical invariant.
+    by_track = {l.track_id: l.layer_index for l in pv.visual_layers}
+    assert by_track["v1"] > by_track["v2"], by_track
 
 
 # ---------------------------------------------------------------------------

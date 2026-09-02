@@ -1,15 +1,20 @@
 """GUI-03R4-R1: Multi-layer Preview correctness.
 
+GUI-04.6 direction (corrected): a visual track appearing higher
+in the Timeline is a higher visual layer in Preview.
+
 P0 invariant: visual layer_index values are GLOBALLY UNIQUE across
 all visible (non-hidden) visual tracks. Tracks in the visual stack are
 ordered by KIND_RANK (text/video/audio) and within kind by natural-
-numeric suffix (v1 < v2 < v10).
+numeric suffix (v1 < v2 < v10). The layer_index assignment runs in
+REVERSE so the Timeline-top track (V1) gets the HIGHEST
+layer_index and the Timeline-bottom track (V10) gets 0.
 
 5 acceptance scenarios from the audit:
   1. V1 only → V1
   2. V2 only → V2
-  3. V1 + V2 → V2 over V1 (V2's layer_index > V1's layer_index)
-  4. V1 + V2 + V3 → V3 > V2 > V1
+  3. V1 + V2 → V1 over V2 (V1's layer_index > V2's layer_index)
+  4. V1 + V2 + V3 → V1 > V2 > V3
   5. V2 hidden → V1's layers still appear
   6. upper clip ends while lower remains → lower immediately visible
 """
@@ -100,30 +105,27 @@ def test_v2_only_layer(tmp_path):
 # Scenario 3: V1 + V2 → V2 layer_index > V1 layer_index
 # ---------------------------------------------------------------------------
 
-def test_v2_above_v1_layer_index(tmp_path):
-    """Two visual tracks. V1 has many clips (high per-track indices);
-    V2 has fewer. V2's clip must have a higher layer_index than ALL
-    of V1's clips so the V2 layer renders on top."""
+def test_v1_above_v2_layer_index(tmp_path):
+    """GUI-04.6: V1 (Timeline top) has the HIGHEST layer_index
+    even though V1 has more clips than V2. V1's clips render
+    on top of V2's clips regardless of per-track clip counts."""
     project_dir, core = _new_image_project(tmp_path, n=10)
     layer = CommandLayer(core, who=Actor.HUMAN)
     _add_track(layer, TrackKind.VIDEO, "v1")
     _add_track(layer, TrackKind.VIDEO, "v2")
-    # V1: 5 clips, large per-track layer indices under the OLD code.
     for i in range(5):
         layer.add_image_clip(f"img{i+1}", i * 60, 30)
-    # V2: 1 clip.
     layer.add_image_clip("img10", 0, 60)
     plan = build_preview_plan(core.project, timeline_id="main")
-    # Find layer_indices for v1 and v2 clips.
     v1_layers = [l for layers in plan.tracks for l in layers if l.track_id == "v1"]
     v2_layers = [l for layers in plan.tracks for l in layers if l.track_id == "v2"]
     assert len(v1_layers) == 5
     assert len(v2_layers) == 1
-    max_v1 = max(l.layer_index for l in v1_layers)
+    min_v1 = min(l.layer_index for l in v1_layers)
     v2_idx = v2_layers[0].layer_index
-    assert v2_idx > max_v1, (
-        f"V2 must render above V1; got v2.layer_index={v2_idx} "
-        f"<= max(v1.layer_index)={max_v1}"
+    assert v2_idx < min_v1, (
+        f"V1 (Timeline top) must render above V2; got "
+        f"v2.layer_index={v2_idx} >= min(v1.layer_index)={min_v1}"
     )
 
 
@@ -131,7 +133,9 @@ def test_v2_above_v1_layer_index(tmp_path):
 # Scenario 4: V1 + V2 + V3 → V3 > V2 > V1 (all layer_index monotonic)
 # ---------------------------------------------------------------------------
 
-def test_v3_above_v2_above_v1(tmp_path):
+def test_v1_above_v2_above_v3(tmp_path):
+    """GUI-04.6: V1 (Timeline top) > V2 > V3 (Timeline bottom)
+    in layer_index. Strictly monotonic decreasing."""
     project_dir, core = _new_image_project(tmp_path, n=3)
     layer = CommandLayer(core, who=Actor.HUMAN)
     _add_track(layer, TrackKind.VIDEO, "v1")
@@ -149,14 +153,16 @@ def test_v3_above_v2_above_v1(tmp_path):
     v1_idx = by_track["v1"][0].layer_index
     v2_idx = by_track["v2"][0].layer_index
     v3_idx = by_track["v3"][0].layer_index
-    assert v1_idx < v2_idx < v3_idx, (
-        f"V1 < V2 < V3 invariant broken: v1={v1_idx}, v2={v2_idx}, v3={v3_idx}"
+    assert v1_idx > v2_idx > v3_idx, (
+        f"V1 > V2 > V3 invariant broken: v1={v1_idx}, v2={v2_idx}, v3={v3_idx}"
     )
 
 
-def test_v10_above_v9_above_v2_natural_order(tmp_path):
-    """v10 must sort ABOVE v9 (natural numeric suffix, NOT lexical —
-    v10 > v2 lexicographically but v2 < v9 < v10 numerically)."""
+def test_v2_above_v9_above_v10_natural_order(tmp_path):
+    """GUI-04.6: V2 (smallest suffix = Timeline top) has the
+    HIGHEST layer_index; V10 (largest suffix = Timeline bottom)
+    has the LOWEST. Natural numeric suffix (NOT lexical)
+    sorts V2 < V9 < V10."""
     project_dir, core = _new_image_project(tmp_path, n=3)
     layer = CommandLayer(core, who=Actor.HUMAN)
     _add_track(layer, TrackKind.VIDEO, "v2")
@@ -168,8 +174,8 @@ def test_v10_above_v9_above_v2_natural_order(tmp_path):
     plan = build_preview_plan(core.project, timeline_id="main")
     indices = {tid: next(l for layers in plan.tracks for l in layers if l.track_id == tid).layer_index
                for tid in ("v2", "v9", "v10")}
-    assert indices["v2"] < indices["v9"] < indices["v10"], (
-        f"Natural numeric ordering broken: {indices}"
+    assert indices["v2"] > indices["v9"] > indices["v10"], (
+        f"V2 > V9 > V10 (Timeline top = highest layer_index) broken: {indices}"
     )
 
 

@@ -121,31 +121,37 @@ def _plan(c) -> dict:
 # ─────────────────────────────────────────────────────────────
 
 def test_v1_v2_v3_layer_index_order(v123_client):
-    """Canonical 3-track case: V1 < V2 < V3 layer_index.
+    """Canonical 3-track case (GUI-04.6 corrected direction).
 
-    Upper Timeline track (V3) → higher layer_index → paints on top
-    in the Preview composite.
+    Timeline renders V1 at top → V2 → V3 at bottom. Preview MUST
+    follow: V1 (Timeline top) has the HIGHEST layer_index,
+    V3 (Timeline bottom) has the LOWEST.
+
+    V1 highest layer_index → painted last → on top.
+    V3 lowest layer_index  → painted first → on bottom.
     """
     c, _ = v123_client
     pv = _at_frame(c, 450)
     by_track = {l["track_id"]: l["layer_index"] for l in pv["visual_layers"]}
-    assert by_track["v1"] < by_track["v2"] < by_track["v3"], (
-        f"V1 < V2 < V3 invariant broken: {by_track}"
+    assert by_track["v1"] > by_track["v2"] > by_track["v3"], (
+        f"V1 > V2 > V3 (layer_index) invariant broken: {by_track}"
     )
 
 
 def test_arbitrary_track_occupancy_layer_index_order(v1_to_v10_client):
     """10 visual tracks: V1..V10 each contribute one clip at the
-    same frame. layer_index must be strictly ascending through the
-    numeric suffix."""
+    same frame. Per GUI-04.6: layer_index MUST be strictly
+    DESCENDING through the numeric suffix (V1 highest, V10 lowest).
+    """
     c, _ = v1_to_v10_client
     pv = _at_frame(c, 450)
     by_track = {l["track_id"]: l["layer_index"] for l in pv["visual_layers"]}
     for n in range(1, 10):
         a, b = f"v{n}", f"v{n+1}"
-        assert by_track[a] < by_track[b], (
-            f"{a} should be strictly below {b}; got "
-            f"{a}={by_track[a]} {b}={by_track[b]}"
+        assert by_track[a] > by_track[b], (
+            f"{a} (Timeline higher) must have strictly greater "
+            f"layer_index than {b}; got {a}={by_track[a]}, "
+            f"{b}={by_track[b]}"
         )
 
 
@@ -236,23 +242,26 @@ def test_preview_layer_uses_explicit_zindex_not_dom_order(tmp_path: Path):
 # ─────────────────────────────────────────────────────────────
 
 def test_upper_track_higher_layer_index_so_occludes_lower(v1_to_v10_client):
-    """For ANY pair (V_k, V_m) where k > m (so V_k is "upper" in
-    the canonical Timeline sense), V_k's layer_index must be
-    strictly greater than V_m's. This is what makes V_k occlude
-    V_m when they overlap at the same frame.
+    """For ANY pair (V_k, V_m) where k < m (so V_k is the
+    Timeline-higher track), V_k's layer_index MUST be strictly
+    greater than V_m's. This is what makes V_k occlude V_m when
+    they overlap at the same frame.
 
     Without this property the GUI could not promise the user
     "upper track paints over lower track when they overlap".
+
+    GUI-04.6 direction: V_k (k smaller) is visually HIGHER in the
+    Timeline, so V_k MUST have HIGHER layer_index than V_m.
     """
     c, tracks = v1_to_v10_client
     pv = _at_frame(c, 450)
     by_track = {l["track_id"]: l["layer_index"] for l in pv["visual_layers"]}
     for n in range(1, 10):
-        lower, upper = f"v{n}", f"v{n + 1}"
-        assert by_track[lower] < by_track[upper], (
-            f"upper track {upper} must have strictly higher layer_index "
-            f"than lower track {lower}; got "
-            f"{lower}={by_track[lower]}, {upper}={by_track[upper]}"
+        upper, lower = f"v{n}", f"v{n + 1}"
+        assert by_track[upper] > by_track[lower], (
+            f"Timeline-higher track {upper} must have strictly "
+            f"greater layer_index than Timeline-lower track {lower}; "
+            f"got {upper}={by_track[upper]}, {lower}={by_track[lower]}"
         )
 
 
@@ -277,30 +286,29 @@ def test_hidden_track_excluded_from_z_order(tmp_path: Path):
         f"only V1 and V3 should remain; got {tracks_after}"
     )
 
-    # The relative order of V1 < V3 must still hold.
+    # The relative order of V1 > V3 (GUI-04.6 direction) must still hold.
     by_track = {l["track_id"]: l["layer_index"] for l in pv_after["visual_layers"]}
-    assert by_track["v1"] < by_track["v3"], by_track
+    assert by_track["v1"] > by_track["v3"], by_track
 
 
 def test_upper_overlapping_lower_upper_occludes_lower_at_frame(v123_client):
     """The user's semantic test: when two tracks' clips cover the
-    SAME frame, the upper-track clip is what the user sees at
-    that frame. This test pins the structure that delivers that
-    promise:
+    SAME frame, the upper-track (Timeline-top) clip is what the
+    user sees at that frame. GUI-04.6 direction:
 
       - V1, V2, V3 each have a clip at [300, 600] frames.
       - At frame 450 (midpoint), all three are active.
-      - V3 is highest layer_index (upper track) — it would be
-        rendered LAST and on top in the DOM.
-      - V1 is lowest layer_index (lower track) — it would be
-        rendered FIRST and at the bottom.
+      - V1 is the Timeline top (visually highest) → highest
+        layer_index → painted LAST → on top of V2 and V3.
+      - V3 is the Timeline bottom (visually lowest) → lowest
+        layer_index → painted FIRST → at the bottom.
 
-    The semantic guarantee "upper track occludes lower when they
-    overlap" follows from:
+    The semantic guarantee "Timeline-higher track occludes
+    Timeline-lower when they overlap" follows from:
       (a) zOrderedLayers orders ascending by layer_index,
       (b) PreviewPlayer sets zIndex = layer_index per layer, and
-      (c) the paint order in the React tree matches the sort
-          order so V3's DOM element comes AFTER V1's.
+      (c) the React tree paint order matches the sort order so
+          V1's DOM element comes AFTER V3's.
 
     Tests (a) and (b) are pinned above; here we pin the
     structural premise (c): every active visual layer is present
@@ -317,14 +325,15 @@ def test_upper_overlapping_lower_upper_occludes_lower_at_frame(v123_client):
         f"visual_layers must be ordered by ascending layer_index; "
         f"got {indices}"
     )
-    # (iii) V3 is the last (top-painted) layer.
-    assert layers[-1]["track_id"] == "v3", (
-        f"V3 must be the topmost layer (highest layer_index = last "
-        f"painted); got top={layers[-1]['track_id']}"
+    # (iii) V1 (Timeline top) is the last (top-painted) layer.
+    assert layers[-1]["track_id"] == "v1", (
+        f"V1 (Timeline top) must be the topmost layer (highest "
+        f"layer_index = last painted); got top={layers[-1]['track_id']}"
     )
-    # (iv) V1 is the first (bottom-painted) layer.
-    assert layers[0]["track_id"] == "v1", (
-        f"V1 must be the bottom layer; got bottom={layers[0]['track_id']}"
+    # (iv) V3 (Timeline bottom) is the first (bottom-painted) layer.
+    assert layers[0]["track_id"] == "v3", (
+        f"V3 (Timeline bottom) must be the bottom layer; got "
+        f"bottom={layers[0]['track_id']}"
     )
 
 

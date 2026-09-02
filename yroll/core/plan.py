@@ -179,9 +179,25 @@ def build_preview_plan(project: Project, timeline_id: str = "main",
          and t.kind == TrackKind.VIDEO),
         key=_track_sort_key,
     )
+    # GUI-04.6: layer_index INVARIANT.
+    #
+    #   "A visual track appearing higher in the Timeline is a
+    #    higher visual layer in Preview."
+    #
+    # Timeline.tsx renders visibleTracks top-to-bottom from the
+    # SAME ascending _track_sort_key order, so array index 0 = top
+    # of the Timeline (V1, then V2, ..., then V9). The Preview
+    # must therefore assign the HIGHEST layer_index to V1 and the
+    # LOWEST to V9.
+    #
+    # Implementation: iterate visual_track_order in REVERSE so V9
+    # gets base 0 (Preview bottom) and V1 gets the highest base
+    # (Preview top). Within a single track, sub-indices still
+    # ascend by timeline_start_frame so within-track ordering is
+    # unchanged (no overlap = no visual difference within track).
     track_layer_base: dict[str, int] = {}
     running = 0
-    for t in visual_track_order:
+    for t in reversed(visual_track_order):
         n = _count_visual_layers(t, project, fps)
         track_layer_base[t.track_id] = running
         running += n
