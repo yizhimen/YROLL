@@ -36,8 +36,8 @@ import {
   readdirSync,
   statSync,
   readFileSync,
-  createHash,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
